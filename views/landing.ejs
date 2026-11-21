@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#173e35" />
+    <meta
+      name="description"
+      content="Welcome to UniMatch PH — explore Metro Manila universities and degree programs, or sign in to continue your college search."
+    />
+    <meta property="og:title" content="UniMatch PH — Your next chapter starts here" />
+    <meta
+      property="og:description"
+      content="Explore Metro Manila colleges, compare universities, discover degree programs, and find weighted university matches with UniMatch PH."
+    />
+    <title>UniMatch PH — Your next chapter starts here</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/landing.css" />
+    <link rel="stylesheet" href="/static/theme-dark.css" />
+    <script src="/static/theme.js"></script>
+  </head>
+  <body class="welcome-page">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <%- include('_icons') %>
+
+    <header class="welcome-header">
+      <nav class="welcome-nav" aria-label="Main navigation">
+        <a class="welcome-brand" href="/" aria-label="UniMatch PH home">
+          <span class="welcome-brand-mark" aria-hidden="true">
+            <svg class="brand-logo"><use href="#i-logo" /></svg>
+          </span>
+          <span>UniMatch<span class="brand-ph">PH</span></span>
+        </a>
+        <div class="welcome-nav-actions">
+          <%- include('_theme_toggle') %>
+          <% if (currentUser) { %>
+            <a class="welcome-text-link" href="/profile">My profile</a>
+            <a class="welcome-pill" href="/explore">Continue exploring</a>
+          <% } else { %>
+            <a class="welcome-text-link" href="/login?next=%2Fexplore">Log in</a>
+            <a class="welcome-pill" href="/register?next=%2Fexplore">Sign up</a>
+          <% } %>
+        </div>
+      </nav>
+    </header>
+
+    <main class="welcome-main" id="main" tabindex="-1">
+      <section class="welcome-hero" aria-labelledby="welcome-title">
+        <div class="welcome-copy">
+          <span class="eyebrow"><span class="little-line"></span>BIG DREAMS, LOCAL POSSIBILITIES</span>
+
+          <% if (currentUser) { %>
+            <h1 id="welcome-title">Welcome back,<br /><em><%= accountName() %>.</em></h1>
+            <p>
+              Your shortlist, comparisons, and degree-program search are ready
+              whenever you are. Pick up where you left off.
+            </p>
+            <div class="welcome-actions">
+              <a class="button primary welcome-primary" href="/explore">
+                Continue to the directory<svg class="icon"><use href="#i-arrow" /></svg>
+              </a>
+              <a class="button secondary welcome-secondary" href="/profile">
+                My profile
+              </a>
+            </div>
+          <% } else { %>
+            <h1 id="welcome-title">Your next chapter<br />starts <em>here.</em></h1>
+            <p>
+              Find a college that feels like you. Explore Metro Manila’s
+              universities and the programs that could shape your future.
+            </p>
+            <div class="welcome-actions">
+              <a class="button primary welcome-primary" href="/register?next=%2Fexplore">
+                Create your free account<svg class="icon"><use href="#i-arrow" /></svg>
+              </a>
+              <a class="button secondary welcome-secondary" href="/login?next=%2Fexplore">
+                Log in
+              </a>
+            </div>
+            <div class="welcome-footnote">
+              <span class="welcome-location">
+                <svg class="icon"><use href="#i-pin" /></svg>Made for your Metro Manila
+                college search
+              </span>
+              <a class="welcome-guest" href="/explore">
+                Just browsing? Explore the directory<svg class="icon"><use href="#i-arrow" /></svg>
+              </a>
+            </div>
+          <% } %>
+        </div>
+
+        <div class="welcome-art">
+          <img
+            src="/static/campus.svg"
+            alt="Illustration of a university building among green trees"
+            width="430"
+            height="330"
+          />
+          <div class="welcome-art-caption">
+            <span class="caption-dot"></span>A world of possibilities, closer to home.
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="welcome-footer">
+      <div class="welcome-footer-inner">
+        <div class="welcome-footer-brand">
+          <a class="welcome-brand" href="/" aria-label="UniMatch PH home">
+            <span class="welcome-brand-mark" aria-hidden="true">
+              <svg class="brand-logo"><use href="#i-logo" /></svg>
+            </span>
+            <span>UniMatch<span class="brand-ph">PH</span></span>
+          </a>
+          <p>A calm starting point for your Metro Manila college search.</p>
+        </div>
+        <nav class="welcome-footer-links" aria-label="Footer links">
+          <a href="/explore">Explore the directory</a>
+          <a href="/explore?notes=1">About the data</a>
+          <a href="/api/collection/status">Collection status</a>
+        </nav>
+      </div>
+      <div class="welcome-footer-bottom">
+        <span>UniMatch PH · A college admissions research prototype</span>
+        <span>Verify dates, fees, and eligibility with each university.</span>
+      </div>
+    </footer>
+  </body>
+</html>

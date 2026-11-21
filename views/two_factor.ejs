@@ -1,0 +1,14 @@
+<%- include('_account_header') %>
+  <section class="account-card account-card-narrow">
+    <span class="account-eyebrow">TWO-FACTOR CHECK</span>
+    <h1>Enter your authentication code</h1>
+    <p class="account-lead">Open your authenticator app and enter the current six-digit code. You can also use one of your recovery codes.</p>
+    <form method="post" action="/login/2fa" class="account-form" novalidate>
+      <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+      <label for="two-factor-code">Code</label>
+      <input id="two-factor-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="32" required autofocus />
+      <button class="button primary" type="submit">Verify</button>
+    </form>
+    <p class="account-switch"><a href="/login">Back to log in</a></p>
+  </section>
+<%- include('_account_footer') %>

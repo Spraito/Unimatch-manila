@@ -1,0 +1,204 @@
+<%- include('_account_header') %>
+  <section class="account-intro">
+    <div>
+      <span class="account-eyebrow">YOUR MATCH PROFILE</span>
+      <h1>Hello, <%= profile ? profile.display_name : accountName() %>.</h1>
+      <p class="account-lead">Keep your preferences current. The recommendation engine is re-run whenever you save them.</p>
+    </div>
+    <form method="post" action="/logout" class="account-logout">
+      <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+      <button class="button secondary" type="submit">Log out</button>
+    </form>
+  </section>
+
+  <% if (profile) { %>
+    <div class="account-grid">
+      <section class="account-card">
+        <span class="account-eyebrow">ACCOUNT</span>
+        <h2>Profile details</h2>
+        <form method="post" action="/profile" class="account-form" novalidate>
+          <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+          <input type="hidden" name="form_name" value="profile" />
+          <label for="profile-name">Display name</label>
+          <input id="profile-name" name="display_name" type="text" value="<%= profile.display_name %>" maxlength="80" autocomplete="nickname" required />
+          <label for="profile-email">Email address</label>
+          <input id="profile-email" name="email" type="email" value="<%= profile.email %>" maxlength="254" autocomplete="email" required />
+          <p class="account-help">Changing your email changes the address used to log in. Your password is never displayed.</p>
+          <button class="button primary" type="submit">Save profile</button>
+        </form>
+        <dl class="account-meta">
+          <div><dt>Member since</dt><dd><%= profile.created_at.slice(0, 10) %></dd></div>
+          <div><dt>Last login</dt><dd><%= profile.last_login_at ? profile.last_login_at.slice(0, 10) : 'First session' %></dd></div>
+        </dl>
+      </section>
+
+      <section class="account-card">
+        <span class="account-eyebrow">PASSWORD</span>
+        <h2>Change password</h2>
+        <form method="post" action="/profile" class="account-form" novalidate>
+          <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+          <input type="hidden" name="form_name" value="password" />
+          <label for="current-password">Current password</label>
+          <input id="current-password" name="current_password" type="password" maxlength="128" autocomplete="current-password" required />
+          <label for="new-password">New password</label>
+          <input id="new-password" name="new_password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required />
+          <label for="confirm-password">Confirm new password</label>
+          <input id="confirm-password" name="password_confirm" type="password" minlength="10" maxlength="128" autocomplete="new-password" required />
+          <% if (totp.enabled) { %>
+            <label for="password-code">Authenticator or recovery code</label>
+            <input id="password-code" name="code" type="text" maxlength="32" autocomplete="one-time-code" required />
+            <p class="account-help">Two-factor authentication is enabled, so confirm a code with your password change.</p>
+          <% } %>
+          <p class="account-help">Changing your password signs out other browsers and devices.</p>
+          <button class="button primary" type="submit">Update password</button>
+        </form>
+      </section>
+
+      <section class="account-card">
+        <span class="account-eyebrow">SECURITY</span>
+        <h2>Two-factor authentication</h2>
+        <% if (totp.enabled) { %>
+          <p class="account-help">Enabled. You have <%= totp.recovery_remaining %> recovery code<%= totp.recovery_remaining === 1 ? '' : 's' %> left.</p>
+          <form method="post" action="/profile" class="account-form" novalidate>
+            <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+            <input type="hidden" name="form_name" value="2fa_disable" />
+            <label for="disable-password">Current password</label>
+            <input id="disable-password" name="password" type="password" maxlength="128" autocomplete="current-password" required />
+            <label for="disable-code">Authenticator or recovery code</label>
+            <input id="disable-code" name="code" type="text" maxlength="32" autocomplete="one-time-code" required />
+            <button class="button secondary" type="submit">Disable two-factor</button>
+          </form>
+        <% } else if (totp_setup) { %>
+          <p class="account-help">Add this secret to your authenticator app, then enter the six-digit code it shows.</p>
+          <p class="account-secret"><%= totp_setup.secret %></p>
+          <p class="account-help">Manual setup URI: <code class="account-uri"><%= totp_setup.uri %></code></p>
+          <form method="post" action="/profile" class="account-form" novalidate>
+            <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+            <input type="hidden" name="form_name" value="2fa_enable" />
+            <label for="enable-code">Six-digit code</label>
+            <input id="enable-code" name="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required />
+            <button class="button primary" type="submit">Enable two-factor</button>
+          </form>
+          <form method="post" action="/profile" class="account-form">
+            <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+            <input type="hidden" name="form_name" value="2fa_cancel" />
+            <button class="button secondary" type="submit">Cancel setup</button>
+          </form>
+        <% } else { %>
+          <p class="account-help">Require a six-digit code from an authenticator app in addition to your password.</p>
+          <form method="post" action="/profile" class="account-form">
+            <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+            <input type="hidden" name="form_name" value="2fa_start" />
+            <button class="button primary" type="submit">Set up two-factor</button>
+          </form>
+        <% } %>
+        <% if (recovery_codes && recovery_codes.length) { %>
+          <div class="account-recovery">
+            <h3>Save these recovery codes</h3>
+            <p class="account-help">Each code works once if you lose access to your authenticator. Store them somewhere safe; they will not be shown again.</p>
+            <ul class="account-code-list">
+              <% for (const code of recovery_codes) { %><li><%= code %></li><% } %>
+            </ul>
+          </div>
+        <% } %>
+      </section>
+
+      <section class="account-card">
+        <span class="account-eyebrow">MATCH PREFERENCES</span>
+        <h2>What matters to you</h2>
+        <form method="post" action="/profile" class="account-form" novalidate>
+          <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+          <input type="hidden" name="form_name" value="preferences" />
+          <label for="pref-program">Preferred degree program</label>
+          <input id="pref-program" name="program" type="text" value="<%= preferences.program %>" maxlength="200" placeholder="e.g. Computer Science" />
+          <label for="pref-city">Preferred city</label>
+          <input id="pref-city" name="city" type="text" value="<%= preferences.city %>" maxlength="200" placeholder="e.g. Manila" />
+          <label for="pref-sector">University type</label>
+          <select id="pref-sector" name="sector">
+            <option value="" <%= !preferences.sector ? 'selected' : '' %>>No preference</option>
+            <option value="Public" <%= preferences.sector === 'Public' ? 'selected' : '' %>>Public</option>
+            <option value="Private" <%= preferences.sector === 'Private' ? 'selected' : '' %>>Private</option>
+          </select>
+          <div class="account-split">
+            <div>
+              <label for="pref-budget">Budget (PHP)</label>
+              <input id="pref-budget" name="budget" type="number" min="0" max="10000000" step="1000" value="<%= preferences.budget !== null ? preferences.budget : '' %>" placeholder="e.g. 60000" />
+            </div>
+            <div>
+              <label for="pref-basis">Budget basis</label>
+              <select id="pref-basis" name="budget_basis">
+                <% for (const basis of ['semester', 'trimester', 'year', 'unit']) { %>
+                  <option value="<%= basis %>" <%= preferences.budget_basis === basis ? 'selected' : '' %>><%= basis.charAt(0).toUpperCase() + basis.slice(1) %></option>
+                <% } %>
+              </select>
+            </div>
+          </div>
+          <fieldset class="account-weights">
+            <legend>Criteria weights (%)</legend>
+            <p class="account-help">Weights are normalized automatically. Missing university data scores zero, never a match.</p>
+            <div class="account-split account-split-four">
+              <% for (const criterion of ['program', 'location', 'budget', 'sector']) { %>
+                <div>
+                  <label for="weight-<%= criterion %>"><%= criterion.charAt(0).toUpperCase() + criterion.slice(1) %></label>
+                  <input id="weight-<%= criterion %>" name="weight_<%= criterion %>" type="number" min="0" max="100" step="1" value="<%= Math.round(preferences.weights[criterion] * 100) %>" />
+                </div>
+              <% } %>
+            </div>
+          </fieldset>
+          <button class="button primary" type="submit">Save preferences</button>
+        </form>
+      </section>
+    </div>
+
+    <section class="account-results" aria-labelledby="matches-title">
+      <div class="account-section-heading">
+        <div>
+          <span class="account-eyebrow">WEIGHTED MATCHES</span>
+          <h2 id="matches-title">Your personalised recommendations</h2>
+        </div>
+        <% if (recommendations) { %>
+          <span class="account-pill"><%= recommendations.total %> scored matches</span>
+        <% } %>
+      </div>
+      <% if (recommendations) { %>
+        <p class="account-help">Grouped by university and ranked with the custom stable merge sort. Scores measure fit against your saved preferences, not admission chances.</p>
+        <div class="account-match-groups">
+          <% for (const group of recommendation_groups) { %>
+            <section class="account-match-group">
+              <header class="account-match-group-head">
+                <div>
+                  <h3><%= group.university_name %></h3>
+                  <p><%= group.campus_location || 'Campus not available' %></p>
+                </div>
+                <span class="account-pill"><%= group.items.length %> program<%= group.items.length === 1 ? '' : 's' %></span>
+              </header>
+              <ol class="account-match-list">
+                <% for (const item of group.items) { %>
+                  <li class="account-match">
+                    <div class="account-match-head">
+                      <div>
+                        <h4><%= item.program_name || 'All collected programs at this university' %></h4>
+                        <p>#<%= item.rank %> overall<% if (item.topic) { %> · <%= item.topic %><% } %></p>
+                      </div>
+                      <strong class="account-score"><%= item.score %><span>/100</span></strong>
+                    </div>
+                    <details>
+                      <summary>Why this match?</summary>
+                      <ul>
+                        <% for (const explanation of item.explanations) { %>
+                          <li><strong><%= explanation.label %>:</strong> <%= explanation.reason %> <span class="account-status"><%= explanation.status.replace(/_/g, ' ') %></span></li>
+                        <% } %>
+                      </ul>
+                    </details>
+                  </li>
+                <% } %>
+              </ol>
+            </section>
+          <% } %>
+        </div>
+      <% } else { %>
+        <p class="account-empty">Save at least one preference — program, city, budget or university type — to see personalised matches.</p>
+      <% } %>
+    </section>
+  <% } %>
+<%- include('_account_footer') %>

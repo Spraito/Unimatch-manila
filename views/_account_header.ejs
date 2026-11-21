@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#173e35" />
+    <meta name="description" content="Manage your UniMatch PH student account and saved college preferences." />
+    <title><%= title || 'Your account' %> — UniMatch PH</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/account.css" />
+    <link rel="stylesheet" href="/static/theme-dark.css" />
+    <script src="/static/theme.js"></script>
+  </head>
+  <body class="account-page">
+    <a class="skip-link" href="#account-main">Skip to content</a>
+    <%- include('_icons') %>
+    <header class="account-header">
+      <a class="account-brand" href="/" aria-label="UniMatch PH home">
+        <span class="account-brand-mark"><svg class="brand-logo"><use href="#i-logo" /></svg></span>
+        <span>UniMatch<span class="brand-ph">PH</span></span>
+      </a>
+      <nav class="account-nav" aria-label="Account navigation">
+        <%- include('_theme_toggle') %>
+        <a href="/explore">Explore colleges</a>
+        <% if (currentUser) { %>
+          <a href="/profile" aria-current="page">My profile</a>
+        <% } else { %>
+          <a href="/login">Log in</a>
+          <a class="account-nav-cta" href="/register">Create account</a>
+        <% } %>
+      </nav>
+    </header>
+    <main class="account-main" id="account-main" tabindex="-1">
+      <% if (typeof flashes !== 'undefined' && flashes && flashes.length) { %>
+        <div class="account-flashes" aria-live="polite">
+          <% for (const flash of flashes) { %>
+            <p class="account-alert <%= flash.category === 'success' ? 'success' : 'error' %>"><%= flash.message %></p>
+          <% } %>
+        </div>
+      <% } %>
+      <% if (typeof error !== 'undefined' && error) { %>
+        <p class="account-alert error" role="alert"><%= error %></p>
+      <% } %>

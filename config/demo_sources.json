@@ -1,0 +1,19 @@
+[
+  {
+    "name": "Example University (synthetic fixture)",
+    "campus_location": "Example City, Metro Manila",
+    "approved_domains": ["example.test"],
+    "source_notes": [
+      "Synthetic offline fixture used to demonstrate the collection and extraction pipeline. It is not a real university and must not be treated as admissions advice."
+    ],
+    "pages": [
+      {
+        "url": "https://example.test/admissions",
+        "fields": ["programs", "tuition_estimates", "admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status"],
+        "program_item_selector": ".program",
+        "program_name_selector": ".name",
+        "program_alignment_selector": ".alignment"
+      }
+    ]
+  }
+]

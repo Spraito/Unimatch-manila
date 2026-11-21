@@ -1,0 +1,19 @@
+<%- include('_account_header') %>
+  <section class="account-card account-card-narrow">
+    <span class="account-eyebrow">WELCOME BACK</span>
+    <h1>Log in to your profile</h1>
+    <p class="account-lead">Your saved preferences stay private and are used only to rank your matches.</p>
+    <form method="post" action="/login" class="account-form" novalidate>
+      <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+      <input type="hidden" name="next" value="<%= next_url %>" />
+      <label for="login-email">Email address</label>
+      <input id="login-email" name="email" type="email" value="<%= email || '' %>" maxlength="254" autocomplete="email" required />
+      <label for="login-password">Password</label>
+      <input id="login-password" name="password" type="password" maxlength="128" autocomplete="current-password" required />
+      <button class="button primary" type="submit">Log in</button>
+    </form>
+    <p class="account-switch"><a href="/forgot-password">Forgot your password?</a></p>
+    <p class="account-switch">New here? <a href="/register?next=<%= encodeURIComponent(next_url) %>">Create a student account</a>.</p>
+    <p class="account-note">Accounts are optional. Browsing and comparing universities remain available without logging in.</p>
+  </section>
+<%- include('_account_footer') %>

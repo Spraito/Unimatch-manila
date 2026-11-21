@@ -1,0 +1,28 @@
+{
+  "contact": "",
+  "min_delay_seconds": 2,
+  "max_delay_seconds": 5,
+  "timeout_seconds": 25,
+  "approved_domains": [
+    "upm.edu.ph",
+    "ust.edu.ph",
+    "dlsu.edu.ph",
+    "adamson.edu.ph",
+    "pup.edu.ph",
+    "ue.edu.ph",
+    "feu.edu.ph",
+    "sanbeda.edu.ph",
+    "mapua.edu.ph",
+    "lpu.edu.ph",
+    "ceu.edu.ph",
+    "tup.edu.ph",
+    "pnu.edu.ph",
+    "plm.edu.ph",
+    "spumanila.edu.ph",
+    "example.test"
+  ],
+  "schedule": {
+    "enabled": true,
+    "interval_hours": 168
+  }
+}

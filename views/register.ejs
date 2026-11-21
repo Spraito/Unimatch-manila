@@ -1,0 +1,23 @@
+<%- include('_account_header') %>
+  <section class="account-card account-card-narrow">
+    <span class="account-eyebrow">YOUR OWN STARTING POINT</span>
+    <h1>Create a student account</h1>
+    <p class="account-lead">Save your program, location, budget and university-type preferences. We only ask for what the profile needs.</p>
+    <form method="post" action="/register" class="account-form" novalidate>
+      <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+      <input type="hidden" name="next" value="<%= next_url %>" />
+      <label for="register-name">Display name</label>
+      <input id="register-name" name="display_name" type="text" value="<%= display_name || '' %>" maxlength="80" autocomplete="nickname" required />
+      <label for="register-email">Email address</label>
+      <input id="register-email" name="email" type="email" value="<%= email || '' %>" maxlength="254" autocomplete="email" required />
+      <label for="register-password">Password</label>
+      <input id="register-password" name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" required />
+      <p class="account-help">Use at least 10 characters. Passwords are hashed, never stored as plain text.</p>
+      <label for="register-confirm">Confirm password</label>
+      <input id="register-confirm" name="password_confirm" type="password" minlength="10" maxlength="128" autocomplete="new-password" required />
+      <button class="button primary" type="submit">Create account</button>
+    </form>
+    <p class="account-switch">Already registered? <a href="/login?next=<%= encodeURIComponent(next_url) %>">Log in</a>.</p>
+    <p class="account-note">We do not ask for your address, phone number, student number or other unnecessary personal information.</p>
+  </section>
+<%- include('_account_footer') %>

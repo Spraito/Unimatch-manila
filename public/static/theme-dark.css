@@ -1,0 +1,858 @@
+/* Dark theme.
+ *
+ * Loaded after style.css, landing.css and account.css, so it only has to
+ * restate colour values. Layout, spacing and motion are untouched.
+ *
+ * The palette keeps the forest-green identity: deep green-black paper,
+ * slightly lifted green surfaces, sage accents and the same muted gold.
+ */
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e4ece2;
+  --muted: #a3b3a1;
+  --green: #8fcaa4;
+  --green-dark: #b7dfc4;
+  --paper: #0d1512;
+  --line: #2a3a31;
+  --sidebar: #0a120f;
+  --white: #151f1a;
+  --gold: #e7c575;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] a {
+  color: var(--green);
+}
+
+:root[data-theme="dark"] .skip-link {
+  background: #1b2822;
+  color: var(--ink);
+}
+
+/* Theme toggle ----------------------------------------------------------- */
+:root[data-theme="dark"] .theme-toggle {
+  background: #1a2620;
+  border-color: #33453a;
+  color: var(--gold);
+}
+
+:root[data-theme="dark"] .theme-toggle:hover {
+  background: #22332a;
+}
+
+:root[data-theme="dark"] .theme-toggle .theme-icon-sun {
+  display: block;
+}
+
+:root[data-theme="dark"] .theme-toggle .theme-icon-moon {
+  display: none;
+}
+
+/* Sidebar ---------------------------------------------------------------- */
+:root[data-theme="dark"] .nav-item:hover {
+  background: #1b3328;
+}
+
+:root[data-theme="dark"] .sidebar-note {
+  background: #142a20;
+  border-color: #2f4c3b;
+}
+
+:root[data-theme="dark"] .sidebar-footer {
+  border-top-color: #263d31;
+}
+
+:root[data-theme="dark"] .guest-avatar {
+  background: #244134;
+  color: #dfe8cf;
+}
+
+/* Top bar ---------------------------------------------------------------- */
+:root[data-theme="dark"] .topbar {
+  background: #111b16;
+  border-bottom-color: var(--line);
+}
+
+:root[data-theme="dark"] .breadcrumb {
+  color: #93a191;
+}
+
+:root[data-theme="dark"] .breadcrumb strong {
+  color: #dfe9dd;
+}
+
+:root[data-theme="dark"] .breadcrumb-slash {
+  color: #4e6055;
+}
+
+:root[data-theme="dark"] .prototype-pill {
+  background: #17241d;
+  border-color: #2c3d33;
+  color: #b3c6a8;
+}
+
+:root[data-theme="dark"] .prototype-pill span {
+  background: #8fae6b;
+}
+
+:root[data-theme="dark"] .icon-button:hover {
+  background: #1e2c25;
+}
+
+:root[data-theme="dark"] .topbar-account {
+  color: #cfe6d6;
+}
+
+/* Hero ------------------------------------------------------------------- */
+:root[data-theme="dark"] .hero {
+  background: #152219;
+  border-color: #27392e;
+}
+
+:root[data-theme="dark"] .hero h1 {
+  color: #edf4ea;
+}
+
+:root[data-theme="dark"] .hero h1 em {
+  color: #9ed09a;
+}
+
+:root[data-theme="dark"] .hero-copy > p {
+  color: #b3c4b0;
+}
+
+:root[data-theme="dark"] .eyebrow {
+  color: #9db79a;
+}
+
+:root[data-theme="dark"] .little-line {
+  background: #6f9a72;
+}
+
+:root[data-theme="dark"] .art-caption {
+  color: #a9bca6;
+}
+
+:root[data-theme="dark"] .caption-dot {
+  background: #8fbf86;
+}
+
+:root[data-theme="dark"] .hero-art img {
+  filter: saturate(0.85) brightness(0.92);
+}
+
+/* Buttons ---------------------------------------------------------------- */
+:root[data-theme="dark"] .button {
+  background: #1b2822;
+  border-color: #33453a;
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .button.primary {
+  background: #2f6f52;
+  border-color: #3a7f5f;
+  color: #fff;
+}
+
+:root[data-theme="dark"] .button.primary:hover {
+  background: #38815f;
+}
+
+:root[data-theme="dark"] .button.secondary {
+  background: #1e2c25;
+  border-color: #36483c;
+  color: #d8e8d9;
+}
+
+:root[data-theme="dark"] .button.secondary:hover {
+  background: #243a2f;
+  border-color: #45604d;
+}
+
+/* School colour accents -------------------------------------------------- */
+:root[data-theme="dark"] .green {
+  --school-color: #93d3ae;
+  --school-bg: #1c3327;
+}
+
+:root[data-theme="dark"] .gold {
+  --school-color: #e7c575;
+  --school-bg: #332a17;
+}
+
+:root[data-theme="dark"] .maroon {
+  --school-color: #e0a3ab;
+  --school-bg: #332025;
+}
+
+:root[data-theme="dark"] .rust {
+  --school-color: #e6a58d;
+  --school-bg: #33251d;
+}
+
+:root[data-theme="dark"] .lilac {
+  --school-color: #bcb2e0;
+  --school-bg: #282438;
+}
+
+/* Section headings and filters ------------------------------------------- */
+:root[data-theme="dark"] .section-eyebrow,
+:root[data-theme="dark"] .section-heading p {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .scope-pill {
+  background: #1a2a21;
+  border-color: #2f4436;
+  color: #b8cdaa;
+}
+
+:root[data-theme="dark"] .filter-bar {
+  background: #131e18;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .search-box {
+  color: #93a58f;
+}
+
+:root[data-theme="dark"] .search-box input {
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .search-box input::placeholder {
+  color: #7f9180;
+}
+
+:root[data-theme="dark"] .search-shortcut {
+  color: #9db09a;
+  border-color: #33453a;
+}
+
+:root[data-theme="dark"] .select-label select {
+  background: #17241d;
+  border-color: #33453a;
+  color: #cfe0cf;
+}
+
+:root[data-theme="dark"] .sort-label {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .sort-label select {
+  color: #cfdecd;
+}
+
+:root[data-theme="dark"] .results-meta {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .results-meta strong {
+  color: #dbe7d8;
+}
+
+/* University and program cards ------------------------------------------- */
+:root[data-theme="dark"] .school-card {
+  border-color: #2b3c32;
+}
+
+:root[data-theme="dark"] .school-card:hover {
+  box-shadow: 0 7px 18px #00000055;
+}
+
+:root[data-theme="dark"] .save-button {
+  color: #93a68f;
+}
+
+:root[data-theme="dark"] .save-button[aria-pressed="true"] {
+  background: #20362a;
+  color: #9fd3b0;
+}
+
+:root[data-theme="dark"] .save-button[aria-pressed="true"] .icon {
+  fill: #2f5c44;
+}
+
+:root[data-theme="dark"] .card-location {
+  color: #a3b3a1;
+}
+
+:root[data-theme="dark"] .tag {
+  background: #1c2a22;
+  color: #adc0aa;
+}
+
+:root[data-theme="dark"] .tag.amber {
+  background: #2e2617;
+  color: #e2c07a;
+}
+
+:root[data-theme="dark"] .tag.neutral {
+  background: #202b25;
+  color: #a9b8a7;
+}
+
+:root[data-theme="dark"] .card-metrics {
+  border-top-color: #26362d;
+  border-bottom-color: #26362d;
+}
+
+:root[data-theme="dark"] .card-metrics > div + div {
+  border-left-color: #26362d;
+}
+
+:root[data-theme="dark"] .metric-label {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .metric-value {
+  color: #c8dcc6;
+}
+
+:root[data-theme="dark"] .metric-value strong {
+  color: #e4f0e2;
+}
+
+:root[data-theme="dark"] .text-button {
+  color: #9fd3b0;
+}
+
+:root[data-theme="dark"] .compare-button {
+  color: #9fb09d;
+}
+
+:root[data-theme="dark"] .compare-check {
+  border-color: #4a5f50;
+}
+
+:root[data-theme="dark"] .compare-button[aria-pressed="true"] {
+  color: #a9dcb8;
+}
+
+:root[data-theme="dark"] .compare-button[aria-pressed="true"] .compare-check {
+  background: #24402f;
+  border-color: #4f7a5e;
+}
+
+:root[data-theme="dark"] .program-card {
+  background: var(--white);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .program-school {
+  color: #a9bca6;
+}
+
+:root[data-theme="dark"] .program-disclaimer {
+  color: var(--muted);
+}
+
+/* Data notice and empty states ------------------------------------------- */
+:root[data-theme="dark"] .data-notice {
+  background: #16261c;
+  border-color: #2c4234;
+}
+
+:root[data-theme="dark"] .notice-icon {
+  background: #1f3527;
+  color: #9cc79b;
+}
+
+:root[data-theme="dark"] .data-notice strong {
+  color: #c3d8b9;
+}
+
+:root[data-theme="dark"] .data-notice p {
+  color: #a2b4a0;
+}
+
+:root[data-theme="dark"] .data-notice button {
+  color: #b6d29f;
+}
+
+:root[data-theme="dark"] .page-footer {
+  color: #8a9c8b;
+  border-top-color: var(--line);
+}
+
+:root[data-theme="dark"] .loading-state,
+:root[data-theme="dark"] .empty-state,
+:root[data-theme="dark"] .error-state {
+  background: #121d17;
+  border-color: #2f4335;
+  color: #a8b9a5;
+}
+
+:root[data-theme="dark"] .empty-state .empty-icon {
+  background: #1d3024;
+  color: #9cc79b;
+}
+
+:root[data-theme="dark"] .empty-state h3 {
+  color: #cfe3c8;
+}
+
+:root[data-theme="dark"] .error-state {
+  background: #2a1b19;
+  color: #efb8ad;
+}
+
+:root[data-theme="dark"] .pagination {
+  color: #a5b7a2;
+}
+
+:root[data-theme="dark"] .pagination button {
+  background: #1a2620;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/* Comparison table ------------------------------------------------------- */
+:root[data-theme="dark"] .compare-scroll {
+  background: var(--white);
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .compare-table th,
+:root[data-theme="dark"] .compare-table td {
+  border-bottom-color: #26362d;
+}
+
+:root[data-theme="dark"] .compare-table th {
+  background: #131e18;
+  color: #a9baa6;
+}
+
+:root[data-theme="dark"] .compare-table .compare-school {
+  background: var(--white);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .compare-table .compare-remove {
+  color: #93a58f;
+}
+
+:root[data-theme="dark"] .comparison-note {
+  color: #a3b4a0;
+}
+
+/* University detail dialog ----------------------------------------------- */
+:root[data-theme="dark"] .detail-dialog {
+  background: #151f1a;
+  border-color: #2f4436;
+  color: var(--ink);
+  box-shadow: 0 28px 90px #00000099;
+}
+
+:root[data-theme="dark"] .detail-dialog::backdrop {
+  background: #040a0799;
+}
+
+:root[data-theme="dark"] .dialog-close {
+  background: #1b2822;
+}
+
+:root[data-theme="dark"] .detail-head {
+  background: #18261e;
+  border-bottom-color: var(--line);
+}
+
+:root[data-theme="dark"] .detail-tabs {
+  border-bottom-color: var(--line);
+}
+
+:root[data-theme="dark"] .detail-tabs button {
+  color: #a6b7a3;
+}
+
+:root[data-theme="dark"] .detail-tabs button[aria-selected="true"] {
+  background: #1f3327;
+  color: #cfe8d3;
+}
+
+:root[data-theme="dark"] .detail-panel p {
+  color: #b0c0ad;
+}
+
+:root[data-theme="dark"] .detail-facts div {
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .detail-facts dt {
+  color: #9fb19c;
+}
+
+:root[data-theme="dark"] .evidence-note {
+  background: #2a2417;
+  border-color: #4a3d22;
+}
+
+:root[data-theme="dark"] .evidence-note p {
+  color: #e0c795;
+}
+
+:root[data-theme="dark"] .evidence-list li {
+  border-bottom-color: #26362d;
+}
+
+:root[data-theme="dark"] .evidence-list a,
+:root[data-theme="dark"] .source-list a {
+  color: #a9d8b6;
+}
+
+:root[data-theme="dark"] .context {
+  background: #18241d;
+  color: #a8b8a4 !important;
+}
+
+:root[data-theme="dark"] .detail-program-list li {
+  border-bottom-color: #26362d;
+}
+
+:root[data-theme="dark"] .detail-search {
+  background: #121d17;
+  border-color: #33453a;
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .program-review-notes {
+  color: #b3c6a8;
+}
+
+/* Recommendations -------------------------------------------------------- */
+:root[data-theme="dark"] .recommend-field {
+  color: #c3d4c0;
+}
+
+:root[data-theme="dark"] .recommend-field input,
+:root[data-theme="dark"] .recommend-field select {
+  background: #121d17;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .weight-panel {
+  background: #131f19;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .weight-field {
+  color: #c3d4c0;
+}
+
+:root[data-theme="dark"] .weight-field input {
+  background: #121d17;
+  border-color: #33453a;
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .weight-chip,
+:root[data-theme="dark"] .meta-chip {
+  background: #1d3126;
+  border-color: #2f4a39;
+  color: #c4dcc0;
+}
+
+:root[data-theme="dark"] .match-rank {
+  background: #2f6f52;
+  color: #fff;
+}
+
+:root[data-theme="dark"] .match-score strong {
+  color: #b7dfc4;
+}
+
+:root[data-theme="dark"] .score-track {
+  background: #22322a;
+}
+
+:root[data-theme="dark"] .explain-row {
+  background: #15221b;
+}
+
+:root[data-theme="dark"] .explain-status {
+  color: #a9b8a6;
+}
+
+:root[data-theme="dark"] .explain-row.matched .explain-status {
+  color: #93d3a7;
+}
+
+:root[data-theme="dark"] .explain-row.partial .explain-status {
+  color: #e0c07a;
+}
+
+:root[data-theme="dark"] .explain-row.not_matched .explain-status {
+  color: #e6a49a;
+}
+
+:root[data-theme="dark"] .explain-points {
+  color: #c0d0bd;
+}
+
+:root[data-theme="dark"] .explain-row p {
+  color: #a9b9a7;
+}
+
+:root[data-theme="dark"] .structured-list li {
+  background: #15221b;
+}
+
+:root[data-theme="dark"] .not-available {
+  color: #93a191;
+}
+
+/* Welcome page ----------------------------------------------------------- */
+:root[data-theme="dark"] .welcome-page {
+  --welcome-ivory: #0d1512;
+  --welcome-sage: #15231b;
+  --welcome-border: #2a3b31;
+  --welcome-ink: #e4ece2;
+  --welcome-muted: #a3b3a2;
+  --welcome-green: #9ed0b2;
+}
+
+:root[data-theme="dark"] .welcome-header {
+  background: var(--welcome-ivory);
+  border-bottom-color: rgba(42, 59, 49, 0.9);
+}
+
+:root[data-theme="dark"] .welcome-brand {
+  color: #e6efe4;
+}
+
+:root[data-theme="dark"] .welcome-brand .brand-ph {
+  color: #9fb59a;
+}
+
+:root[data-theme="dark"] .welcome-brand-mark {
+  background: #14251c;
+  color: var(--gold);
+}
+
+:root[data-theme="dark"] .welcome-text-link {
+  color: #cfe4d3;
+}
+
+:root[data-theme="dark"] .welcome-pill {
+  background: #2f6f52;
+}
+
+:root[data-theme="dark"] .welcome-pill:hover,
+:root[data-theme="dark"] .welcome-pill:focus-visible {
+  background: #3a7f5f;
+}
+
+:root[data-theme="dark"] .welcome-copy h1 {
+  color: #eef5ec;
+}
+
+:root[data-theme="dark"] .welcome-copy h1 em {
+  color: #9ed09a;
+}
+
+:root[data-theme="dark"] .welcome-copy > p {
+  color: #b6c6b3;
+}
+
+:root[data-theme="dark"] .welcome-page .eyebrow {
+  color: #9db79a;
+}
+
+:root[data-theme="dark"] .welcome-page .little-line {
+  background: #6f9a72;
+}
+
+:root[data-theme="dark"] .welcome-page .button.primary {
+  background: #2f6f52;
+  border-color: #3a7f5f;
+}
+
+:root[data-theme="dark"] .welcome-page .button.primary:hover {
+  background: #3a7f5f;
+}
+
+:root[data-theme="dark"] .welcome-secondary {
+  background: #1c2b23;
+  border-color: #33483a;
+  color: #d7e8d8;
+}
+
+:root[data-theme="dark"] .welcome-secondary:hover {
+  background: #233a2e;
+  border-color: #42604d;
+}
+
+:root[data-theme="dark"] .welcome-footnote {
+  border-top-color: #2c4034;
+  color: #a7b8a3;
+}
+
+:root[data-theme="dark"] .welcome-location .icon {
+  color: #9db79a;
+}
+
+:root[data-theme="dark"] .welcome-guest {
+  color: #9ed0b2;
+}
+
+:root[data-theme="dark"] .welcome-page .caption-dot {
+  background: #8fbf86;
+}
+
+:root[data-theme="dark"] .welcome-art-caption {
+  color: #a9bca6;
+}
+
+:root[data-theme="dark"] .welcome-art img {
+  filter: saturate(0.85) brightness(0.92);
+}
+
+:root[data-theme="dark"] .welcome-footer {
+  background: #08100c;
+  color: #dce7d5;
+}
+
+:root[data-theme="dark"] .welcome-footer-brand p {
+  color: #a9bba5;
+}
+
+:root[data-theme="dark"] .welcome-footer-links a {
+  color: #dbe7d3;
+}
+
+:root[data-theme="dark"] .welcome-footer-bottom {
+  border-top-color: #22362b;
+  color: #93a691;
+}
+
+:root[data-theme="dark"] .welcome-footer .welcome-brand {
+  color: #fff;
+}
+
+:root[data-theme="dark"] .welcome-footer .welcome-brand-mark {
+  background: #e1e8bc;
+  color: #0d1512;
+}
+
+/* Account pages ---------------------------------------------------------- */
+:root[data-theme="dark"] .account-page {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(143, 202, 164, 0.1), transparent 28rem),
+    var(--paper);
+}
+
+:root[data-theme="dark"] .account-brand {
+  color: #e6efe4;
+}
+
+:root[data-theme="dark"] .account-brand-mark {
+  background: #223c2f;
+  border: 1px solid #33523f;
+  color: var(--gold);
+}
+
+:root[data-theme="dark"] .account-nav-cta {
+  background: #2f6f52;
+  color: #fff !important;
+}
+
+:root[data-theme="dark"] .account-eyebrow {
+  color: #9db79a;
+}
+
+:root[data-theme="dark"] .account-card {
+  background: rgba(22, 33, 27, 0.92);
+  border-color: var(--line);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme="dark"] .account-form label,
+:root[data-theme="dark"] .account-weights legend {
+  color: #c3d4c0;
+}
+
+:root[data-theme="dark"] .account-form input,
+:root[data-theme="dark"] .account-form select {
+  background: #121d17;
+  border-color: #33453a;
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .account-alert {
+  background: #18291e;
+  border-color: #2f4a39;
+  color: #bfe0c4;
+}
+
+:root[data-theme="dark"] .account-alert.error {
+  background: #2c1c19;
+  border-color: #5a3330;
+  color: #f0b8ae;
+}
+
+:root[data-theme="dark"] .account-results {
+  background: #141f19;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .account-pill {
+  background: #1e3327;
+  color: #b7dfc4;
+}
+
+:root[data-theme="dark"] .account-match {
+  background: #121d17;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .account-match details {
+  color: #b4c6b1;
+}
+
+:root[data-theme="dark"] .account-status {
+  background: #1e2c25;
+  color: #b3c6ae;
+}
+
+:root[data-theme="dark"] .account-empty {
+  background: #141f19;
+}
+
+:root[data-theme="dark"] .account-footer {
+  border-top-color: var(--line);
+  color: var(--muted);
+}
+
+/* Small corrections for focus rings on dark surfaces --------------------- */
+:root[data-theme="dark"] button:focus-visible,
+:root[data-theme="dark"] a:focus-visible,
+:root[data-theme="dark"] input:focus-visible,
+:root[data-theme="dark"] select:focus-visible {
+  outline-color: #d8b563;
+}
+
+/* Security settings and grouped match results ---------------------------- */
+:root[data-theme="dark"] .account-secret,
+:root[data-theme="dark"] .account-code-list li {
+  background: #1c2a24;
+}
+
+:root[data-theme="dark"] .account-match-group {
+  background: #16211d;
+}
+
+:root[data-theme="dark"] .match-group {
+  background: #16211d;
+}
