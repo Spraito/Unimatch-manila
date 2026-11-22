@@ -3,6 +3,18 @@
     <span class="account-eyebrow">WELCOME BACK</span>
     <h1>Log in to your profile</h1>
     <p class="account-lead">Your saved preferences stay private and are used only to rank your matches.</p>
+    <p class="account-alert" data-firebase-auth-error role="alert" hidden></p>
+    <div class="account-form">
+      <button
+        class="button secondary google-signin-button"
+        type="button"
+        data-firebase-google-signin
+        data-next="<%= next_url === '/profile' ? '/cloud-profile' : next_url %>"
+      >
+        Continue with Google (cloud sync)
+      </button>
+    </div>
+    <p class="account-divider" aria-hidden="true"><span>or use email and password</span></p>
     <form method="post" action="/login" class="account-form" novalidate>
       <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
       <input type="hidden" name="next" value="<%= next_url %>" />

@@ -1,0 +1,169 @@
+<%- include('_account_header') %>
+  <p class="account-alert" data-firebase-auth-error role="alert" hidden></p>
+  <p class="account-help" id="cloud-loading">Checking your cloud account session…</p>
+
+  <section class="account-card account-card-narrow" id="cloud-signed-out" hidden>
+    <span class="account-eyebrow">PERSISTENT CLOUD ACCOUNT</span>
+    <h1>Sign in with Google</h1>
+    <p class="account-lead">
+      Save your profile, match preferences, and university shortlist securely across devices and sessions.
+    </p>
+    <div class="account-form">
+      <button
+        class="button primary google-signin-button"
+        type="button"
+        data-firebase-google-signin
+        data-next="/cloud-profile"
+      >
+        Continue with Google
+      </button>
+    </div>
+    <p class="account-switch">
+      Prefer email and password for this session? <a href="/login">Use standard login</a>.
+    </p>
+    <p class="account-note">
+      Your email and preferences are stored privately under your own account and are never visible to other students.
+    </p>
+  </section>
+
+  <div id="cloud-signed-in" hidden>
+    <section class="account-intro">
+      <div>
+        <span class="account-eyebrow">YOUR CLOUD MATCH PROFILE</span>
+        <h1>Hello, <span id="cloud-greeting-name">Student</span>.</h1>
+        <p class="account-lead">
+          Your preferences and saved schools stay synced to your private cloud account across visits.
+        </p>
+      </div>
+      <div class="account-logout">
+        <button class="button secondary" id="cloud-signout-btn" type="button">Sign out</button>
+      </div>
+    </section>
+
+    <div class="account-grid">
+      <section class="account-card">
+        <span class="account-eyebrow">CLOUD ACCOUNT</span>
+        <h2>Profile details</h2>
+        <form id="cloud-profile-form" class="account-form" novalidate>
+          <label for="cloud-display-name">Display name</label>
+          <input
+            id="cloud-display-name"
+            name="display_name"
+            type="text"
+            maxlength="80"
+            autocomplete="nickname"
+            required
+          />
+          <label for="cloud-email">Verified Google email</label>
+          <input id="cloud-email" name="email" type="email" readonly />
+          <p class="account-help">
+            Your email is verified through Google Sign-In. Access to your saved profile is restricted strictly to your account.
+          </p>
+          <button class="button primary" type="submit">Save profile</button>
+        </form>
+        <dl class="account-meta">
+          <div>
+            <dt>Saved schools synced</dt>
+            <dd><a href="/explore#saved"><span id="cloud-saved-count">0</span> saved</a></dd>
+          </div>
+          <div>
+            <dt>Compare list synced</dt>
+            <dd><a href="/explore#compare"><span id="cloud-compare-count">0</span> selected</a></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="account-card">
+        <span class="account-eyebrow">MATCH PREFERENCES</span>
+        <h2>What matters to you</h2>
+        <form id="cloud-preferences-form" class="account-form" novalidate>
+          <label for="cloud-pref-program">Preferred degree program</label>
+          <input
+            id="cloud-pref-program"
+            name="program"
+            type="text"
+            maxlength="200"
+            placeholder="e.g. Computer Science"
+          />
+          <label for="cloud-pref-city">Preferred city</label>
+          <input
+            id="cloud-pref-city"
+            name="city"
+            type="text"
+            maxlength="200"
+            placeholder="e.g. Manila"
+          />
+          <label for="cloud-pref-sector">University type</label>
+          <select id="cloud-pref-sector" name="sector">
+            <option value="">No preference</option>
+            <option value="Public">Public</option>
+            <option value="Private">Private</option>
+          </select>
+          <div class="account-split">
+            <div>
+              <label for="cloud-pref-budget">Budget (PHP)</label>
+              <input
+                id="cloud-pref-budget"
+                name="budget"
+                type="number"
+                min="0"
+                max="10000000"
+                step="1000"
+                placeholder="e.g. 60000"
+              />
+            </div>
+            <div>
+              <label for="cloud-pref-basis">Budget basis</label>
+              <select id="cloud-pref-basis" name="budget_basis">
+                <option value="semester">Semester</option>
+                <option value="trimester">Trimester</option>
+                <option value="year">Year</option>
+                <option value="unit">Unit</option>
+              </select>
+            </div>
+          </div>
+          <fieldset class="account-weights">
+            <legend>Criteria weights (%)</legend>
+            <p class="account-help">
+              Weights are normalized automatically. Missing university data scores zero, never a match.
+            </p>
+            <div class="account-split account-split-four">
+              <div>
+                <label for="cloud-weight-program">Program</label>
+                <input id="cloud-weight-program" type="number" min="0" max="100" step="1" value="45" />
+              </div>
+              <div>
+                <label for="cloud-weight-location">Location</label>
+                <input id="cloud-weight-location" type="number" min="0" max="100" step="1" value="20" />
+              </div>
+              <div>
+                <label for="cloud-weight-budget">Budget</label>
+                <input id="cloud-weight-budget" type="number" min="0" max="100" step="1" value="20" />
+              </div>
+              <div>
+                <label for="cloud-weight-sector">Sector</label>
+                <input id="cloud-weight-sector" type="number" min="0" max="100" step="1" value="15" />
+              </div>
+            </div>
+          </fieldset>
+          <button class="button primary" type="submit">Save preferences</button>
+        </form>
+      </section>
+    </div>
+
+    <section class="account-results" aria-labelledby="cloud-matches-title">
+      <div class="account-section-heading">
+        <div>
+          <span class="account-eyebrow">WEIGHTED MATCHES</span>
+          <h2 id="cloud-matches-title">Your personalised recommendations</h2>
+        </div>
+        <span class="account-pill" id="cloud-match-count" hidden>0 scored matches</span>
+      </div>
+      <div id="cloud-match-results">
+        <p class="account-empty">
+          Save at least one preference — program, city, budget or university type — to see personalised matches.
+        </p>
+      </div>
+    </section>
+  </div>
+<%- include('_account_footer') %>

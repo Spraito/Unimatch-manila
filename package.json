@@ -5,19 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
-    "lint": "tsc --noEmit",
+    "build": "tsc && esbuild client/firebaseClient.ts --bundle --format=esm --target=es2022 --outfile=public/static/firebase-client.js",
+    "lint": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit && eslint firestore.rules",
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.19.0",
     "@types/node": "^26.6.6",
     "bcryptjs": "^3.0.3",
+    "cheerio": "^1.2.0",
     "ejs": "^7.0.2",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.15.0",
     "express": "^5.3.0",
     "express-session": "^1.19.0",
+    "firebase": "^13.4.0",
+    "firebase-admin": "^14.5.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

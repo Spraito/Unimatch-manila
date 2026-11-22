@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="/static/theme-dark.css" />
     <script src="/static/theme.js"></script>
     <script type="module" src="/static/app.js"></script>
+    <script type="module" src="/static/firebase-client.js"></script>
   </head>
   <body data-account="<%= currentUser ? currentUser.id : 'guest' %>">
     <a class="skip-link" href="#main">Skip to content</a>
@@ -35,8 +36,7 @@
           ><svg class="brand-logo"><use href="#i-logo" /></svg></span
         ><span>UniMatch<span class="brand-ph">PH</span></span></a
       >
-      <div class="sidebar-label">YOUR COLLEGE JOURNEY</div>
-      <nav class="navigation">
+      <nav class="navigation" aria-label="Directory sections">
         <button
           class="nav-item active"
           data-view="universities"
@@ -51,43 +51,47 @@
           <svg class="icon"><use href="#i-spark" /></svg>Find my match
         </button>
         <button class="nav-item" data-view="compare">
-          <svg class="icon"><use href="#i-compare" /></svg>Compare schools<span
+          <svg class="icon"><use href="#i-compare" /></svg>Compare<span
             class="nav-count"
             id="compare-count"
             >0</span
           >
         </button>
         <button class="nav-item" data-view="saved">
-          <svg class="icon"><use href="#i-save" /></svg>Saved schools<span
+          <svg class="icon"><use href="#i-save" /></svg>Saved<span
             class="nav-count"
             id="saved-count"
             >0</span
           >
         </button>
       </nav>
-      <div class="sidebar-note">
-        <span class="tiny-star">✳</span>
-        <h3>A big decision.<br />A clearer starting point.</h3>
-        <p>
-          Explore your options, keep your favorites, and take the next step.
-        </p>
-        <button data-action="notes">
-          About the data <span aria-hidden="true">↗</span>
+
+      <div class="sidebar-bottom">
+        <button class="sidebar-about-link" data-action="notes">
+          <svg class="icon"><use href="#i-info" /></svg>About the data
         </button>
-      </div>
-      <div class="sidebar-footer">
-        <span class="guest-avatar">U</span>
-        <div>
-          <% if (currentUser) { %>
-            <strong><%= accountName() %></strong>
-            <a href="/profile">My profile</a>
-          <% } else { %>
-            <strong>Your exploration space</strong>
-            <span><a href="/login">Log in</a> · <a href="/register">Register</a></span>
-          <% } %>
+        <div class="sidebar-footer">
+          <span class="guest-avatar" data-cloud-avatar aria-hidden="true"><%= currentUser ? accountInitial() : 'G' %></span>
+          <div class="sidebar-account-info">
+            <% if (currentUser) { %>
+              <strong><%= accountName() %></strong>
+              <a href="/profile">My profile</a>
+            <% } else { %>
+              <strong data-cloud-signed-in data-cloud-display-name hidden>Student</strong>
+              <span class="sidebar-account-links" data-cloud-signed-in hidden>
+                <a href="/cloud-profile">Profile</a>
+                <a href="/admin" data-cloud-admin-only hidden> · Admin</a>
+              </span>
+              <strong data-cloud-signed-out>Guest mode</strong>
+              <span class="sidebar-account-links" data-cloud-signed-out>
+                <a href="/login">Log in</a> · <a href="/register">Sign up</a>
+              </span>
+            <% } %>
+          </div>
         </div>
       </div>
     </aside>
+
     <div class="app-shell">
       <header class="topbar">
         <div class="breadcrumb">
@@ -99,78 +103,55 @@
             aria-expanded="false"
           >
             <svg class="icon"><use href="#i-menu" /></svg></button
-          ><span>UniMatch PH</span><span class="breadcrumb-slash">/</span
           ><strong id="breadcrumb-view">Explore colleges</strong>
         </div>
         <div class="topbar-right">
           <% if (currentUser) { %>
-            <a class="topbar-account" href="/profile">Hello, <%= accountName() %></a>
+            <a class="topbar-account" href="/profile"><%= accountName() %></a>
           <% } else { %>
-            <a class="topbar-account" href="/login">Log in</a>
+            <a class="topbar-account" href="/admin" data-cloud-admin-only hidden>Manage catalog</a>
+            <a class="topbar-account" href="/cloud-profile" data-cloud-signed-in hidden><span data-cloud-display-name>Student</span></a>
+            <a class="topbar-account" href="/login" data-cloud-signed-out>Log in</a>
           <% } %>
-          <span class="prototype-pill"><span></span>Research prototype</span
-          ><button
-            class="icon-button"
-            data-action="notes"
-            aria-label="About this dataset"
-          >
-            <svg class="icon"><use href="#i-info" /></svg>
-          </button>
           <%- include('_theme_toggle') %>
         </div>
       </header>
+
       <main id="main" tabindex="-1">
         <section class="hero" id="hero" aria-labelledby="hero-title">
           <div class="hero-copy">
-            <span class="eyebrow"
-              ><span class="little-line"></span> BIG DREAMS, LOCAL
-              POSSIBILITIES</span
-            >
-            <h1 id="hero-title">
-              Your next chapter<br />starts <em>here.</em>
-            </h1>
+            <h1 id="hero-title">Find your college in <em>Metro Manila.</em></h1>
             <p>
-              Find a college that feels like you. Explore Metro Manila’s
-              universities and the programs that could shape your future.
+              Compare 15 universities, browse 637 degree programs, and check
+              official entrance exams and requirements in one place.
             </p>
-            <button class="button primary" data-view="programs">
-              Discover degree programs<svg class="icon">
-                <use href="#i-arrow" />
-              </svg>
-            </button>
-            <div class="hero-footnote">
-              <svg class="icon"><use href="#i-pin" /></svg>Made for your Metro
-              Manila college search
+            <div class="hero-actions">
+              <button class="button primary" data-view="recommend">
+                Find my match<svg class="icon"><use href="#i-arrow" /></svg>
+              </button>
+              <button class="button secondary" data-view="programs">
+                Browse degree programs
+              </button>
             </div>
           </div>
-          <div class="hero-art">
+          <div class="hero-art" aria-hidden="true">
             <img
               src="/static/campus.svg"
               alt=""
-              width="430"
-              height="330"
+              width="380"
+              height="280"
             />
-            <div class="art-caption">
-              <span class="caption-dot"></span> A world of possibilities, closer
-              to home.
-            </div>
           </div>
         </section>
+
         <section class="explorer" aria-labelledby="section-title">
-          <div class="section-heading">
+          <div class="section-heading" id="section-heading" hidden>
             <div>
-              <span class="eyebrow section-eyebrow" id="section-eyebrow"
-                >A PLACE TO BEGIN</span
-              >
               <h2 id="section-title">Explore universities</h2>
-              <p id="section-description">
-                Different paths. New possibilities. Find your starting point.
-              </p>
+              <p id="section-description"></p>
             </div>
-            <span class="scope-pill"
-              ><svg class="icon"><use href="#i-pin" /></svg>Metro Manila</span
-            >
           </div>
+
           <div class="filter-bar" id="filter-bar">
             <label class="search-box"
               ><svg class="icon"><use href="#i-search" /></svg
@@ -180,20 +161,18 @@
                 id="search"
                 aria-labelledby="search-label"
                 type="search"
-                placeholder="Search a university or program…"
+                placeholder="Search a university, degree, or entrance exam…"
                 maxlength="200"
                 autocomplete="off"
-              /><span class="search-shortcut" aria-hidden="true"
-                >⌘ / Ctrl K</span
-              ></label
+              /><span class="search-shortcut" aria-hidden="true">⌘K</span></label
             >
-            <label class="select-label" id="city-wrap"
+            <label class="select-label" id="city-wrap" hidden
               ><span class="sr-only">City</span
               ><select id="city">
                 <option value="">All locations</option>
               </select></label
             >
-            <label class="select-label" id="sector-wrap"
+            <label class="select-label" id="sector-wrap" hidden
               ><span class="sr-only">University type</span
               ><select id="sector">
                 <option value="">All types</option>
@@ -214,51 +193,39 @@
               </select></label
             >
           </div>
+
+          <div class="quick-filters" id="quick-filters" role="group" aria-label="Quick filters"></div>
+
           <div class="results-meta" id="results-meta">
             <span id="results-count" role="status" aria-live="polite"
-              >Loading your possibilities…</span
+              >Loading universities…</span
             ><label class="sort-label" id="sort-wrap"
-              >Sort by
+              >Sort
               <select id="sort" aria-label="Sort universities">
-                <option value="featured">Data coverage</option>
+                <option value="featured">Most programs</option>
                 <option value="name">Name, A–Z</option>
               </select></label
             >
           </div>
+
           <div id="results" aria-busy="true">
             <div class="loading-state">Loading universities…</div>
           </div>
           <div id="pagination" class="pagination" hidden></div>
         </section>
-        <aside class="data-notice">
-          <span class="notice-icon"
-            ><svg class="icon"><use href="#i-info" /></svg
-          ></span>
-          <div>
-            <strong>A starting point, with sources you can check.</strong>
-            <p>
-              Admissions can change. Collected information needs review; confirm
-              dates, fees, and eligibility with each university.
-            </p>
-          </div>
-          <button data-action="notes">
-            Read data notes<svg class="icon"><use href="#i-arrow" /></svg>
-          </button>
-        </aside>
+
         <footer class="page-footer">
-          <span
-            >UniMatch PH <span class="footer-dot">·</span> A college admissions
-            research prototype</span
-          ><span>Made for the next chapter.</span>
+          <span>UniMatch PH · Confirm current dates and fees on each university’s official site.</span>
+          <button class="footer-link-btn" data-action="notes">About the data</button>
         </footer>
         <noscript
           ><p class="error-state">
-            Enable JavaScript to search universities and view collected
-            admissions evidence.
+            Enable JavaScript to explore universities and degree programs.
           </p></noscript
         >
       </main>
     </div>
+
     <dialog
       id="school-dialog"
       class="detail-dialog"

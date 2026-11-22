@@ -154,23 +154,39 @@ const CANONICAL_CAMPUSES: Record<string, string> = {
 };
 
 const TOPICS: Record<string, string[]> = {
-  Computing: ["computer", "information technology"],
+  Computing: [
+    "computer",
+    "information technology",
+    "information systems",
+    "data science",
+    "multimedia computing",
+    "esports",
+  ],
   Engineering: [
     "engineering",
     "architecture",
     "environmental planning",
     "interior design",
+    "industrial design",
+    "geology",
+    "chemical process technology",
   ],
-  Education: ["education", "library"],
+  Education: ["education", "library", "for teachers"],
   Business: [
     "business",
     "accountancy",
     "accounting",
+    "auditing",
     "entrepreneur",
     "office",
     "tourism",
     "hospitality",
     "transportation",
+    "customs",
+    "supply chain",
+    "legal management",
+    "government management",
+    "economics",
   ],
   "Science & health": [
     "science",
@@ -178,9 +194,26 @@ const TOPICS: Record<string, string[]> = {
     "statistics",
     "biology",
     "chemistry",
+    "biochemistry",
+    "microbiology",
     "physics",
     "nutrition",
     "psychology",
+    "nursing",
+    "pharmacy",
+    "pharmaceutical",
+    "medical",
+    "dental",
+    "optometry",
+    "physical therapy",
+    "occupational therapy",
+    "speech-language",
+    "radiologic",
+    "public health",
+    "cosmetic",
+    "food technology",
+    "laboratory technology",
+    "sports science",
   ],
 };
 
@@ -675,6 +708,21 @@ export function initStore(): void {
     }
   }
 
+  const baselinePath = path.join(ROOT, "data", "baseline_universities.json");
+  let baselineSupplements: Record<string, Record<string, unknown>> = {};
+  if (fs.existsSync(baselinePath)) {
+    const parsed = JSON.parse(fs.readFileSync(baselinePath, "utf8")) as {
+      records?: Array<Record<string, unknown>>;
+      supplements?: Record<string, Record<string, unknown>>;
+    };
+    if (Array.isArray(parsed.records) && parsed.records.length > 0) {
+      importRecords(parsed.records);
+    }
+    if (parsed.supplements && typeof parsed.supplements === "object") {
+      baselineSupplements = parsed.supplements;
+    }
+  }
+
   for (const folder of ["pup", "dlsu"]) {
     const samplePath = path.join(
       ROOT,
@@ -687,6 +735,74 @@ export function initStore(): void {
         fs.readFileSync(samplePath, "utf8"),
       ) as Array<Record<string, unknown>>;
       importRecords(records);
+    }
+  }
+
+  // Merge verified supplements (e.g., DCAT/PUPCET, official links, RA 10931 for PUP)
+  // without altering pre-collected raw JSON files or discarding existing programs/fees.
+  for (const [schoolId, supplement] of Object.entries(baselineSupplements)) {
+    const school = universities.get(schoolId);
+    if (!school) continue;
+    const structured = structureRecord({
+      university_name: school.name,
+      campus_location: school.campus_location,
+      retrieved_at_utc: school.collected_at ?? "2026-11-21T00:00:00Z",
+      ...supplement,
+    });
+    const verifiedAt = school.last_verified_at ?? "2026-11-21T00:00:00Z";
+
+    if ((requirementsByUniversity.get(schoolId)?.length ?? 0) === 0 && structured.admission_requirements.length > 0) {
+      requirementsByUniversity.set(
+        schoolId,
+        structured.admission_requirements.map((r) => ({ ...r, last_verified_at: verifiedAt })),
+      );
+      if (!Array.isArray(school.evidence.admission_requirements) || school.evidence.admission_requirements.length === 0) {
+        school.evidence.admission_requirements = Array.isArray(supplement.admission_requirements)
+          ? supplement.admission_requirements
+          : [];
+      }
+    }
+    if ((examsByUniversity.get(schoolId)?.length ?? 0) === 0 && structured.entrance_examinations.length > 0) {
+      examsByUniversity.set(
+        schoolId,
+        structured.entrance_examinations.map((e) => ({ ...e, last_verified_at: verifiedAt })),
+      );
+      if (!Array.isArray(school.evidence.entrance_exam_coverage) || school.evidence.entrance_exam_coverage.length === 0) {
+        school.evidence.entrance_exam_coverage = Array.isArray(supplement.entrance_exam_coverage)
+          ? supplement.entrance_exam_coverage
+          : [];
+      }
+    }
+    if ((feesByUniversity.get(schoolId)?.length ?? 0) === 0 && structured.tuition_fees.length > 0) {
+      feesByUniversity.set(
+        schoolId,
+        structured.tuition_fees.map((f) => ({ ...f, last_verified_at: verifiedAt })),
+      );
+      if (!Array.isArray(school.evidence.tuition_estimates) || school.evidence.tuition_estimates.length === 0) {
+        school.evidence.tuition_estimates = Array.isArray(supplement.tuition_estimates)
+          ? supplement.tuition_estimates
+          : [];
+      }
+    }
+    if ((linksByUniversity.get(schoolId)?.length ?? 0) === 0 && structured.application_links.length > 0) {
+      linksByUniversity.set(
+        schoolId,
+        structured.application_links
+          .filter((l) => safeUrl(l.url) !== null)
+          .map((l) => ({
+            label: cleanText(l.label) || "Application page",
+            url: safeUrl(l.url)!,
+            source_url: safeUrl(l.source_url),
+            last_verified_at: verifiedAt,
+          })),
+      );
+    }
+    if (Array.isArray(supplement.source_notes)) {
+      const existingNotes = Array.isArray(school.evidence.source_notes)
+        ? (school.evidence.source_notes as string[])
+        : [];
+      const extraNotes = supplement.source_notes.filter((n): n is string => typeof n === "string");
+      school.evidence.source_notes = Array.from(new Set([...existingNotes, ...extraNotes]));
     }
   }
 }
@@ -730,6 +846,26 @@ export function loadStructured(schoolId: string) {
 
 export function serializeSchool(school: UniversityRecord, detail = false) {
   const programCount = (programsByUniversity.get(school.id) ?? []).length;
+  const structuredFees = feesByUniversity.get(school.id) ?? [];
+  const structuredExams = examsByUniversity.get(school.id) ?? [];
+  const structuredFeeAmountCount = structuredFees.filter(
+    (f) => typeof f.amount_min === "number" || typeof f.amount_max === "number",
+  ).length;
+  const freeTuition = structuredFees.some(
+    (f) => f.amount_min === 0 && f.amount_max === 0,
+  );
+  const firstExam = structuredExams[0];
+  let examSummary: string | null = null;
+  if (firstExam) {
+    const cov = String(firstExam.coverage || "");
+    if (/waived/i.test(cov) && !/except/i.test(cov)) {
+      examSummary = "Exam waived";
+    } else if (/waived/i.test(cov) && /except/i.test(cov)) {
+      examSummary = firstExam.exam_name ? `${firstExam.exam_name} (mostly waived)` : "Mostly waived";
+    } else {
+      examSummary = firstExam.exam_name || "Required";
+    }
+  }
   const base: Record<string, unknown> = {
     id: school.id,
     name: school.name,
@@ -746,10 +882,18 @@ export function serializeSchool(school: UniversityRecord, detail = false) {
     last_verified_at: school.last_verified_at,
     program_count: programCount,
     review_required: true,
-    tuition_evidence_count: Array.isArray(school.evidence.tuition_estimates)
-      ? school.evidence.tuition_estimates.length
-      : 0,
-    tuition_amount_count: tuitionAmountCount(school.evidence.tuition_estimates),
+    tuition_evidence_count: Math.max(
+      Array.isArray(school.evidence.tuition_estimates)
+        ? school.evidence.tuition_estimates.length
+        : 0,
+      structuredFees.length,
+    ),
+    tuition_amount_count: Math.max(
+      tuitionAmountCount(school.evidence.tuition_estimates),
+      structuredFeeAmountCount,
+    ),
+    free_tuition: freeTuition,
+    exam_summary: examSummary,
   };
 
   if (detail) {

@@ -1,0 +1,402 @@
+<%- include('_account_header') %>
+  <p class="account-alert" id="admin-feedback" role="alert" hidden></p>
+  <p class="account-help" id="admin-loading">Checking catalog manager permissions…</p>
+
+  <section class="account-card account-card-narrow" id="admin-gate-signed-out" hidden>
+    <span class="account-eyebrow">CATALOG ADMINISTRATION</span>
+    <h1>Admin sign-in required</h1>
+    <p class="account-lead">
+      Sign in with your authorized Google account to manage Metro Manila universities, run polite admissions collections, or import collector snapshots.
+    </p>
+    <div class="account-form">
+      <button
+        class="button primary google-signin-button"
+        type="button"
+        data-firebase-google-signin
+        data-next="/admin"
+      >
+        Continue with Google
+      </button>
+    </div>
+    <p class="account-switch">
+      Looking for colleges as a student? <a href="/explore">Return to explorer</a>.
+    </p>
+  </section>
+
+  <section class="account-card account-card-narrow" id="admin-gate-denied" hidden>
+    <span class="account-eyebrow">ACCESS RESTRICTED</span>
+    <h1>Catalog manager access required</h1>
+    <p class="account-lead">
+      Your signed-in account does not have permission to edit the university catalog.
+    </p>
+    <p class="account-switch">
+      <a href="/cloud-profile">Go to your student profile</a> · <a href="/explore">Explore colleges</a>
+    </p>
+  </section>
+
+  <div id="admin-workspace" hidden>
+    <section class="account-intro">
+      <div>
+        <span class="account-eyebrow">CATALOG MANAGEMENT</span>
+        <h1>UniMatch PH Catalog Manager</h1>
+        <p class="account-lead">
+          Keep Metro Manila universities, degree programs, tuition brackets, and admissions dates accurate through baseline syncing, polite official collection, JSON snapshot imports, or direct edits.
+        </p>
+      </div>
+      <div class="admin-header-meta">
+        <span class="account-pill" id="admin-account-email">Admin</span>
+        <a class="button secondary" href="/explore">View public explorer</a>
+      </div>
+    </section>
+
+    <div class="admin-tabs" role="tablist" aria-label="Catalog manager sections">
+      <button type="button" class="admin-tab active" role="tab" aria-selected="true" data-admin-tab="catalog">
+        Universities
+      </button>
+      <button type="button" class="admin-tab" role="tab" aria-selected="false" data-admin-tab="editor">
+        University editor
+      </button>
+      <button type="button" class="admin-tab" role="tab" aria-selected="false" data-admin-tab="collector">
+        Polite web collector
+      </button>
+      <button type="button" class="admin-tab" role="tab" aria-selected="false" data-admin-tab="import">
+        JSON import &amp; history
+      </button>
+    </div>
+
+    <!-- Tab 1: Universities directory & baseline seeding -->
+    <section class="account-card admin-panel" data-admin-panel="catalog">
+      <div class="admin-toolbar">
+        <div>
+          <span class="account-eyebrow">PUBLISHED DIRECTORY</span>
+          <h2>Metro Manila Universities</h2>
+          <p class="account-help" id="admin-catalog-summary">Loading catalog…</p>
+        </div>
+        <div class="admin-toolbar-actions">
+          <label class="admin-checkbox">
+            <input type="checkbox" id="admin-seed-overwrite" />
+            <span>Overwrite existing</span>
+          </label>
+          <button type="button" class="button secondary" data-admin-action="seed-baseline">
+            Seed baseline (15 schools)
+          </button>
+          <button type="button" class="button primary" data-admin-action="new-university">
+            Add university
+          </button>
+        </div>
+      </div>
+
+      <div class="account-form admin-search-row">
+        <label for="admin-catalog-search" class="sr-only">Filter universities</label>
+        <input
+          id="admin-catalog-search"
+          type="search"
+          maxlength="120"
+          placeholder="Search by university name, short name, city, or slug…"
+        />
+      </div>
+
+      <div id="admin-university-list">
+        <p class="account-help">Loading universities…</p>
+      </div>
+    </section>
+
+    <!-- Tab 2: Structured university & admissions editor -->
+    <section class="account-card admin-panel" data-admin-panel="editor" hidden>
+      <span class="account-eyebrow">CATALOG RECORD</span>
+      <h2 id="admin-editor-heading">Add a new university</h2>
+      <form id="admin-editor-form" class="account-form" novalidate>
+        <div class="account-split">
+          <div>
+            <label for="ed-id">Slug ID (letters, numbers, hyphens)</label>
+            <input id="ed-id" type="text" maxlength="128" placeholder="e.g. dlsu-manila" required />
+          </div>
+          <div>
+            <label for="ed-short-name">Short name</label>
+            <input id="ed-short-name" type="text" maxlength="60" placeholder="e.g. DLSU" required />
+          </div>
+        </div>
+
+        <label for="ed-name">Full university name</label>
+        <input id="ed-name" type="text" maxlength="200" placeholder="e.g. De La Salle University" required />
+
+        <div class="account-split">
+          <div>
+            <label for="ed-city">City</label>
+            <input id="ed-city" type="text" maxlength="100" value="Manila" required />
+          </div>
+          <div>
+            <label for="ed-sector">Sector</label>
+            <select id="ed-sector">
+              <option value="Private">Private</option>
+              <option value="Public">Public</option>
+            </select>
+          </div>
+        </div>
+
+        <label for="ed-campus">Campus address</label>
+        <input id="ed-campus" type="text" maxlength="300" placeholder="Street, district, city, Metro Manila" required />
+
+        <div class="account-split">
+          <div>
+            <label for="ed-official-url">Official HTTPS URL</label>
+            <input id="ed-official-url" type="url" maxlength="500" placeholder="https://www.example.edu.ph/" />
+          </div>
+          <div>
+            <label for="ed-academic-year">Academic year</label>
+            <input id="ed-academic-year" type="text" maxlength="40" placeholder="e.g. 2026-2027" />
+          </div>
+        </div>
+
+        <div class="account-split">
+          <div>
+            <label for="ed-status">Verification status</label>
+            <select id="ed-status">
+              <option value="verified">Verified</option>
+              <option value="partial">Partial (needs review)</option>
+              <option value="pending">Pending collection</option>
+            </select>
+          </div>
+          <div>
+            <label for="ed-color">Badge accent</label>
+            <select id="ed-color">
+              <option value="green">Green</option>
+              <option value="maroon">Maroon</option>
+              <option value="gold">Gold</option>
+              <option value="rust">Rust</option>
+              <option value="lilac">Lilac</option>
+            </select>
+          </div>
+        </div>
+
+        <label class="admin-checkbox admin-checkbox-block">
+          <input type="checkbox" id="ed-published" checked />
+          <span>Published in public student explorer</span>
+        </label>
+
+        <label for="ed-source-notes">Review &amp; provenance notes (one per line)</label>
+        <textarea id="ed-source-notes" rows="3" maxlength="2500" placeholder="Optional context or verification caveats…"></textarea>
+
+        <!-- Degree programs -->
+        <fieldset class="admin-fieldset">
+          <legend>Degree programs</legend>
+          <div id="ed-programs-list"></div>
+          <div class="admin-inline-grid">
+            <input id="add-prog-name" type="text" maxlength="200" placeholder="Program name (e.g. BS Computer Science)" />
+            <select id="add-prog-topic" aria-label="Program topic">
+              <option value="Computing">Computing</option>
+              <option value="Engineering">Engineering</option>
+              <option value="Business">Business</option>
+              <option value="Science & health">Science &amp; health</option>
+              <option value="Education">Education</option>
+              <option value="Arts, humanities & social sciences">Arts, humanities &amp; social sciences</option>
+            </select>
+            <input id="add-prog-strand" type="text" maxlength="120" placeholder="Strand note (optional)" />
+            <input id="add-prog-url" type="url" maxlength="500" placeholder="Source HTTPS URL (optional)" />
+            <button type="button" class="button secondary admin-btn-sm" data-admin-action="add-program">Add program</button>
+          </div>
+        </fieldset>
+
+        <!-- Tuition fees -->
+        <fieldset class="admin-fieldset">
+          <legend>Tuition fees</legend>
+          <div id="ed-fees-list"></div>
+          <div class="admin-inline-grid">
+            <input id="add-fee-min" type="number" min="0" max="5000000" step="500" placeholder="Min PHP" />
+            <input id="add-fee-max" type="number" min="0" max="5000000" step="500" placeholder="Max PHP" />
+            <select id="add-fee-basis" aria-label="Fee basis">
+              <option value="semester">Per semester</option>
+              <option value="trimester">Per trimester</option>
+              <option value="year">Per year</option>
+              <option value="unit">Per unit</option>
+              <option value="unspecified">Unspecified</option>
+            </select>
+            <input id="add-fee-note" type="text" maxlength="400" placeholder="Source statement or fee note" />
+            <button type="button" class="button secondary admin-btn-sm" data-admin-action="add-fee">Add fee</button>
+          </div>
+        </fieldset>
+
+        <!-- Application deadlines -->
+        <fieldset class="admin-fieldset">
+          <legend>Application deadlines</legend>
+          <div id="ed-deadlines-list"></div>
+          <div class="admin-inline-grid">
+            <input id="add-dead-label" type="text" maxlength="120" placeholder="Label (e.g. Freshmen deadline)" />
+            <input id="add-dead-date" type="date" aria-label="Deadline date" />
+            <input id="add-dead-note" type="text" maxlength="400" placeholder="Details or intake note" />
+            <button type="button" class="button secondary admin-btn-sm" data-admin-action="add-deadline">Add deadline</button>
+          </div>
+        </fieldset>
+
+        <!-- Admission requirements -->
+        <fieldset class="admin-fieldset">
+          <legend>Admission requirements</legend>
+          <div id="ed-reqs-list"></div>
+          <div class="admin-inline-grid">
+            <select id="add-req-cat" aria-label="Requirement category">
+              <option value="document">Document</option>
+              <option value="eligibility">Eligibility</option>
+              <option value="entrance_exam">Entrance exam</option>
+              <option value="general">General</option>
+            </select>
+            <input id="add-req-text" type="text" maxlength="500" placeholder="Requirement statement" />
+            <button type="button" class="button secondary admin-btn-sm" data-admin-action="add-req">Add requirement</button>
+          </div>
+        </fieldset>
+
+        <!-- Entrance examinations -->
+        <fieldset class="admin-fieldset">
+          <legend>Entrance examinations</legend>
+          <div id="ed-exams-list"></div>
+          <div class="admin-inline-grid">
+            <input id="add-exam-name" type="text" maxlength="120" placeholder="Exam name (e.g. DCAT, UPCAT)" />
+            <input id="add-exam-coverage" type="text" maxlength="500" placeholder="Exam coverage or subtests" />
+            <button type="button" class="button secondary admin-btn-sm" data-admin-action="add-exam">Add exam</button>
+          </div>
+        </fieldset>
+
+        <!-- Official application links -->
+        <fieldset class="admin-fieldset">
+          <legend>Official application links</legend>
+          <div id="ed-links-list"></div>
+          <div class="admin-inline-grid">
+            <input id="add-link-label" type="text" maxlength="120" placeholder="Link label (e.g. Admissions portal)" />
+            <input id="add-link-url" type="url" maxlength="500" placeholder="https://admissions.example.edu.ph/" />
+            <button type="button" class="button secondary admin-btn-sm" data-admin-action="add-link">Add link</button>
+          </div>
+        </fieldset>
+
+        <div class="admin-form-footer">
+          <button type="submit" class="button primary">Save to catalog</button>
+          <button type="button" class="button secondary" data-admin-tab="catalog">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Tab 3: Polite web collector -->
+    <section class="account-card admin-panel" data-admin-panel="collector" hidden>
+      <span class="account-eyebrow">RESPECTFUL AUTOMATED COLLECTION</span>
+      <h2>Polite official website collector</h2>
+      <p class="account-lead">
+        Fetches public admissions pages only when you trigger it, strictly within approved official <code>.edu.ph</code> domains. Every run inspects <code>robots.txt</code> first, pauses between requests, stops on access blocks, and structures evidence with Algorithm 1.
+      </p>
+
+      <div class="admin-policy-box">
+        <strong>Active politeness safeguards</strong>
+        <p class="account-help" id="collector-policy-summary">Loading collector policy…</p>
+        <div class="admin-domain-list" id="collector-approved-domains"></div>
+      </div>
+
+      <div class="account-form">
+        <label for="collector-university-select">Configured university</label>
+        <select id="collector-university-select">
+          <option value="">Loading configured universities…</option>
+        </select>
+
+        <div class="admin-pages-box">
+          <div class="admin-pages-head">
+            <div>
+              <strong id="collector-pages-heading">Pre-filled official pages</strong>
+              <p class="account-help" id="collector-pages-sub">
+                Select which configured official <code>.edu.ph</code> pages to include in this run.
+              </p>
+            </div>
+            <div class="admin-pages-actions">
+              <button
+                type="button"
+                class="button secondary admin-btn-sm"
+                data-admin-action="collector-select-all"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                class="button secondary admin-btn-sm"
+                data-admin-action="collector-clear-pages"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div
+            id="collector-pages-checklist"
+            class="admin-pages-list"
+            role="group"
+            aria-labelledby="collector-pages-heading"
+          >
+            <p class="account-help">Loading official pages…</p>
+          </div>
+        </div>
+
+        <label for="collector-extra-urls">
+          Additional official <code>.edu.ph</code> URLs for this school (optional, one per line)
+        </label>
+        <textarea
+          id="collector-extra-urls"
+          rows="4"
+          placeholder="Paste extra official college, department, program catalog, or tuition pages (one https://...edu.ph URL per line)"
+        ></textarea>
+        <div
+          id="collector-url-status"
+          class="admin-url-status"
+          aria-live="polite"
+        ></div>
+
+        <label class="admin-checkbox-label">
+          <input type="checkbox" id="collector-discover-subpages" checked />
+          <span>Politely follow linked official subpages for degree programs, requirements, deadlines, and tuition (same <code>.edu.ph</code> domain, max 12 pages total, <code>robots.txt</code> checked on every link)</span>
+        </label>
+
+        <div class="admin-form-footer">
+          <button
+            type="button"
+            class="button primary"
+            id="collector-run-btn"
+            data-admin-action="run-collect"
+          >
+            Run polite collection
+          </button>
+        </div>
+      </div>
+
+      <div id="collector-preview-box"></div>
+    </section>
+
+    <!-- Tab 4: JSON snapshot import & collection audit history -->
+    <section class="account-card admin-panel" data-admin-panel="import" hidden>
+      <span class="account-eyebrow">OFFLINE SNAPSHOTS &amp; AUDIT LOG</span>
+      <h2>Import collector JSON snapshot</h2>
+      <p class="account-lead">
+        When a university site blocks automated requests, renders via heavy JavaScript, or posts fees in PDFs, upload or paste an offline <code>unimatch_ph_raw_data.json</code> export here to structure it with Algorithm 1 and publish it to the catalog.
+      </p>
+
+      <div class="account-form">
+        <label for="import-json-file">Upload JSON snapshot file (max 2 MB)</label>
+        <input id="import-json-file" type="file" accept=".json,application/json" />
+
+        <label for="import-json-text">Or paste collector JSON</label>
+        <textarea
+          id="import-json-text"
+          rows="8"
+          placeholder='{"university_name": "De La Salle University", "campus_location": "Taft Avenue, Manila", ...}'
+        ></textarea>
+
+        <div class="admin-form-footer">
+          <button type="button" class="button primary" data-admin-action="parse-import">
+            Parse &amp; validate snapshot
+          </button>
+        </div>
+      </div>
+
+      <div id="import-preview-box"></div>
+
+      <div class="admin-history-section">
+        <span class="account-eyebrow">AUDIT TRAIL</span>
+        <h3>Recent seeds, polite collections &amp; edits</h3>
+        <div id="admin-run-history">
+          <p class="account-help">Loading run history…</p>
+        </div>
+      </div>
+    </section>
+  </div>
+<%- include('_account_footer') %>

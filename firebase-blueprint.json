@@ -1,0 +1,432 @@
+{
+  "entities": {
+    "UserPrivateProfile": {
+      "title": "UserPrivateProfile",
+      "description": "Private student account profile containing PII, strictly restricted to the owning verified user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owning Firebase Auth UID."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Student display name."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Verified account email address."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated."
+        }
+      },
+      "required": ["uid", "displayName", "email", "createdAt", "updatedAt"]
+    },
+    "UserPreferences": {
+      "title": "UserPreferences",
+      "description": "Saved college matching preferences and criterion weights for Algorithm 2.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owning Firebase Auth UID."
+        },
+        "program": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Preferred degree program keyword."
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Preferred campus city."
+        },
+        "sector": {
+          "type": "string",
+          "enum": ["", "Public", "Private"],
+          "maxLength": 20,
+          "description": "Preferred university sector."
+        },
+        "budget": {
+          "type": "number",
+          "description": "Optional tuition budget in PHP (0 to 10000000) or null."
+        },
+        "budgetBasis": {
+          "type": "string",
+          "enum": ["semester", "trimester", "year", "unit"],
+          "maxLength": 20,
+          "description": "Tuition basis matching budget."
+        },
+        "weights": {
+          "type": "object",
+          "description": "Normalized criteria weights map (program, location, budget, sector)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the last preference update."
+        }
+      },
+      "required": ["uid", "program", "city", "sector", "budgetBasis", "weights", "updatedAt"]
+    },
+    "UserShortlist": {
+      "title": "UserShortlist",
+      "description": "Persisted saved universities and comparison selection for the owning student.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owning Firebase Auth UID."
+        },
+        "savedIds": {
+          "type": "array",
+          "description": "Up to 50 saved university IDs."
+        },
+        "compareIds": {
+          "type": "array",
+          "description": "Up to 3 compared university IDs."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the last shortlist update."
+        }
+      },
+      "required": ["uid", "savedIds", "compareIds", "updatedAt"]
+    },
+    "AdminMember": {
+      "title": "AdminMember",
+      "description": "Admin role registry record granting catalog management privileges.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the admin."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Verified email address of the admin."
+        },
+        "grantedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the admin who granted access."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when admin access was recorded."
+        }
+      },
+      "required": ["uid", "email", "grantedByUid", "createdAt"]
+    },
+    "CatalogUniversity": {
+      "title": "CatalogUniversity",
+      "description": "Published Metro Manila university profile with structured admissions evidence and degree programs.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Canonical slug identifier for the university."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Official university name."
+        },
+        "shortName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Short display label or acronym."
+        },
+        "city": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Metro Manila city."
+        },
+        "campusLocation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Full campus street address."
+        },
+        "sector": {
+          "type": "string",
+          "enum": ["Public", "Private"],
+          "maxLength": 20,
+          "description": "Institutional sector."
+        },
+        "color": {
+          "type": "string",
+          "enum": ["green", "maroon", "gold", "rust", "lilac"],
+          "maxLength": 20,
+          "description": "Card accent badge color token."
+        },
+        "officialUrl": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Official HTTPS admissions or university URL."
+        },
+        "collectionStatus": {
+          "type": "string",
+          "enum": ["pending", "partial", "verified"],
+          "maxLength": 20,
+          "description": "Verification status of collected records."
+        },
+        "academicYear": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Primary academic year (e.g. 2026-2027) or empty string."
+        },
+        "academicYears": {
+          "type": "array",
+          "description": "Up to 10 detected academic years."
+        },
+        "isPublished": {
+          "type": "boolean",
+          "description": "Whether the university appears in the public student catalog."
+        },
+        "programs": {
+          "type": "array",
+          "description": "Up to 400 degree program entries."
+        },
+        "admissionRequirements": {
+          "type": "array",
+          "description": "Up to 100 structured admission requirement rows."
+        },
+        "applicationDeadlines": {
+          "type": "array",
+          "description": "Up to 50 structured application deadline rows."
+        },
+        "entranceExaminations": {
+          "type": "array",
+          "description": "Up to 30 structured entrance exam rows."
+        },
+        "tuitionFees": {
+          "type": "array",
+          "description": "Up to 50 structured tuition fee rows."
+        },
+        "applicationLinks": {
+          "type": "array",
+          "description": "Up to 50 official application link rows."
+        },
+        "declaredConflicts": {
+          "type": "array",
+          "description": "Up to 50 preserved source conflict rows."
+        },
+        "sourceUrls": {
+          "type": "array",
+          "description": "Up to 50 official source URLs."
+        },
+        "sourceNotes": {
+          "type": "array",
+          "description": "Up to 30 review or provenance notes."
+        },
+        "collectedAt": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "ISO timestamp of latest data collection or empty string."
+        },
+        "lastVerifiedAt": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "ISO timestamp of latest verification or empty string."
+        },
+        "updatedByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Admin UID that performed the last write."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when catalog entry was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when catalog entry was last updated."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "shortName",
+        "city",
+        "campusLocation",
+        "sector",
+        "color",
+        "officialUrl",
+        "collectionStatus",
+        "academicYear",
+        "academicYears",
+        "isPublished",
+        "programs",
+        "admissionRequirements",
+        "applicationDeadlines",
+        "entranceExaminations",
+        "tuitionFees",
+        "applicationLinks",
+        "declaredConflicts",
+        "sourceUrls",
+        "sourceNotes",
+        "collectedAt",
+        "lastVerifiedAt",
+        "updatedByUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CollectionRun": {
+      "title": "CollectionRun",
+      "description": "Immutable admin audit record of a polite web collection, JSON snapshot import, baseline seed, or manual edit.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique run identifier."
+        },
+        "universityId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Target university slug or 'all-baseline'."
+        },
+        "universityName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Human-readable target label."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["polite-web", "json-import", "baseline-seed", "manual-edit"],
+          "maxLength": 30,
+          "description": "How the data update was produced."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["completed", "partial", "blocked_by_robots", "failed"],
+          "maxLength": 30,
+          "description": "Outcome of the collection or import run."
+        },
+        "fetchedUrlCount": {
+          "type": "number",
+          "description": "Count of fetched or processed source URLs (0..200)."
+        },
+        "programCount": {
+          "type": "number",
+          "description": "Count of structured degree programs processed (0..5000)."
+        },
+        "conflictCount": {
+          "type": "number",
+          "description": "Count of conflicting source statements flagged (0..500)."
+        },
+        "robotsSummary": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Summary of robots.txt and polite rate-limit compliance."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Audit summary notes."
+        },
+        "createdByUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Admin UID who initiated the run."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the run."
+        }
+      },
+      "required": [
+        "id",
+        "universityId",
+        "universityName",
+        "mode",
+        "status",
+        "fetchedUrlCount",
+        "programCount",
+        "conflictCount",
+        "robotsSummary",
+        "notes",
+        "createdByUid",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/private/profile": {
+      "schema": { "$ref": "#/entities/UserPrivateProfile" },
+      "description": "Private student profile with PII (email, display name), accessible only to the owning verified user."
+    },
+    "/users/{userId}/preferences/match": {
+      "schema": { "$ref": "#/entities/UserPreferences" },
+      "description": "Student's persisted recommendation preferences and weights."
+    },
+    "/users/{userId}/shortlist/state": {
+      "schema": { "$ref": "#/entities/UserShortlist" },
+      "description": "Student's persisted saved schools and compare list."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminMember" },
+      "description": "Admin registry granting catalog management rights; strictly admin-only."
+    },
+    "/catalogUniversities/{universityId}": {
+      "schema": { "$ref": "#/entities/CatalogUniversity" },
+      "description": "Publicly readable Metro Manila university catalog with structured admissions records; strictly admin-writable."
+    },
+    "/collectionRuns/{runId}": {
+      "schema": { "$ref": "#/entities/CollectionRun" },
+      "description": "Immutable admin audit log of polite web collections, JSON imports, and baseline seeds."
+    }
+  }
+}

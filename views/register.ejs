@@ -3,6 +3,18 @@
     <span class="account-eyebrow">YOUR OWN STARTING POINT</span>
     <h1>Create a student account</h1>
     <p class="account-lead">Save your program, location, budget and university-type preferences. We only ask for what the profile needs.</p>
+    <p class="account-alert" data-firebase-auth-error role="alert" hidden></p>
+    <div class="account-form">
+      <button
+        class="button secondary google-signin-button"
+        type="button"
+        data-firebase-google-signin
+        data-next="<%= next_url === '/profile' ? '/cloud-profile' : next_url %>"
+      >
+        Continue with Google (cloud sync)
+      </button>
+    </div>
+    <p class="account-divider" aria-hidden="true"><span>or create a session account with email</span></p>
     <form method="post" action="/register" class="account-form" novalidate>
       <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
       <input type="hidden" name="next" value="<%= next_url %>" />

@@ -47,6 +47,7 @@ const state = {
   stats: null,
   detail: null,
   tab: "overview",
+  detailTopic: "",
   recommend: {
     program: "",
     city: "",
@@ -69,7 +70,136 @@ let renderVersion = 0,
   toastTimer,
   detailVersion = 0;
 
+function liveCatalogApi(path, params = {}) {
+  const live = window.__unimatchLiveCatalog;
+  if (!live || !Array.isArray(live.records) || live.records.length === 0) {
+    return null;
+  }
+  const allDetails = [...live.detailsById.values()];
+
+  if (path === "/api/stats") {
+    const cities = [...new Set(allDetails.map((u) => u.city).filter(Boolean))].sort();
+    const topics = [
+      ...new Set(
+        allDetails.flatMap((u) => (u.programs || []).map((p) => p.topic).filter(Boolean)),
+      ),
+    ].sort();
+    const collected = allDetails.filter((u) => u.collection_status !== "pending").length;
+    const latest = allDetails
+      .map((u) => u.collected_at || u.last_verified_at)
+      .filter(Boolean)
+      .sort()
+      .pop() || null;
+    return {
+      universities: allDetails.length,
+      collected_universities: collected,
+      cities,
+      topics,
+      latest_collection: latest,
+    };
+  }
+
+  if (path === "/api/universities") {
+    const q = String(params.search || "").trim().toLowerCase();
+    const city = String(params.city || "").trim();
+    const sector = String(params.sector || "").trim();
+    const sort = String(params.sort || "featured").trim();
+    const matched = allDetails.filter((u) => {
+      if (city && u.city !== city) return false;
+      if (sector && u.sector !== sector) return false;
+      if (q) {
+        const hay = `${u.name} ${u.short_name} ${u.campus_location}`.toLowerCase();
+        if (
+          !hay.includes(q) &&
+          !(u.programs || []).some((p) => p.name.toLowerCase().includes(q))
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+    matched.sort((a, b) => {
+      if (sort === "name") return a.name.localeCompare(b.name);
+      if (b.program_count !== a.program_count) return b.program_count - a.program_count;
+      return a.name.localeCompare(b.name);
+    });
+    return { items: matched, total: matched.length };
+  }
+
+  if (path.startsWith("/api/universities/")) {
+    const schoolId = decodeURIComponent(path.slice("/api/universities/".length));
+    const found = live.detailsById.get(schoolId);
+    if (found) return found;
+    return null;
+  }
+
+  if (path === "/api/programs") {
+    const q = String(params.search || "").trim().toLowerCase();
+    const schoolId = String(params.university_id || "").trim();
+    const topic = String(params.topic || "").trim();
+    const page = Math.max(1, Number(params.page || 1));
+    const limit = Math.max(1, Math.min(100, Number(params.limit || 12)));
+    const joined = [];
+    for (const u of allDetails) {
+      if (schoolId && u.id !== schoolId) continue;
+      for (const p of u.programs || []) {
+        if (topic && p.topic !== topic) continue;
+        if (q) {
+          const hay = `${p.name} ${u.name} ${u.short_name}`.toLowerCase();
+          if (!hay.includes(q)) continue;
+        }
+        joined.push(p);
+      }
+    }
+    joined.sort(
+      (a, b) => a.name.localeCompare(b.name) || String(a.id).localeCompare(String(b.id)),
+    );
+    const start = (page - 1) * limit;
+    return {
+      items: joined.slice(start, start + limit),
+      total: joined.length,
+      page,
+      limit,
+    };
+  }
+
+  if (path === "/api/compare") {
+    const ids = String(params.ids || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const items = ids.map((id) => live.detailsById.get(id)).filter(Boolean);
+    return items.length ? { items } : null;
+  }
+
+  if (path === "/api/recommendations") {
+    const budget =
+      params.budget !== undefined && params.budget !== "" && params.budget !== null
+        ? Number(params.budget)
+        : null;
+    const validBudget = budget !== null && Number.isFinite(budget) ? budget : null;
+    return live.scoreRecommendations(
+      live.records,
+      {
+        program: String(params.program || ""),
+        city: String(params.city || ""),
+        sector: String(params.sector || ""),
+        budget: validBudget,
+        budget_basis: validBudget !== null ? String(params.budget_basis || "semester") : null,
+      },
+      params.weights ? String(params.weights) : null,
+      Number(params.limit || 20),
+    );
+  }
+
+  return null;
+}
+
 async function api(path, params = {}) {
+  const liveResult = liveCatalogApi(path, params);
+  if (liveResult !== null) {
+    return liveResult;
+  }
   const url = new URL(path, location.origin);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== "" && value != null) url.searchParams.set(key, value);
@@ -87,7 +217,7 @@ async function api(path, params = {}) {
   return response.json();
 }
 
-function persist() {
+function persist(syncCloud = true) {
   try {
     localStorage.setItem(storageKey("saved"), JSON.stringify(state.saved));
     localStorage.setItem(storageKey("compare"), JSON.stringify(state.compare));
@@ -98,6 +228,13 @@ function persist() {
   }
   $("#saved-count").textContent = state.saved.length;
   $("#compare-count").textContent = state.compare.length;
+  if (syncCloud) {
+    window.dispatchEvent(
+      new CustomEvent("unimatch:shortlist-changed", {
+        detail: { saved: [...state.saved], compare: [...state.compare] },
+      }),
+    );
+  }
 }
 
 function toast(message) {
@@ -138,34 +275,83 @@ function sourceLink(value, label = "View official source") {
     : "";
 }
 
+function shortLocation(campusLocation, city) {
+  const raw = String(campusLocation || city || "Manila").trim();
+  const parts = raw
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p && !/^metro manila$/i.test(p));
+  if (parts.length >= 2) {
+    return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+  }
+  return parts[0] || city || "Manila";
+}
+
 function schoolMark(school, small = false) {
-  const mark = String(school.short_name || "").startsWith("UP") ? "UP" : school.short_name;
-  return `<span class="school-mark ${e(school.color)} ${small ? "small" : ""}" aria-hidden="true">${e(mark)}</span>`;
+  const raw = String(school.short_name || "").trim();
+  const mark = raw.startsWith("UP") ? "UP" : raw;
+  const wide = mark.length > 4 ? "wide" : "";
+  return `<span class="school-mark ${e(school.color)} ${small ? "small" : ""} ${wide}" aria-hidden="true">${e(mark)}</span>`;
 }
 
 function statusTag(school) {
   return school.collection_status === "pending"
-    ? '<span class="tag neutral"><span class="tag-dot"></span>Awaiting collection</span>'
-    : '<span class="tag amber"><span class="tag-dot"></span>Partial data · needs review</span>';
+    ? '<span class="meta-status">Pending</span>'
+    : "";
+}
+
+function shortExamLabel(raw) {
+  if (!raw) return "Check portal";
+  return String(raw)
+    .replace(/College Entrance Examination/i, "Entrance Exam")
+    .trim();
 }
 
 function schoolCard(school) {
   const saved = state.saved.includes(school.id),
     compared = state.compare.includes(school.id);
+  const examLabel = shortExamLabel(school.exam_summary);
+  const tuitionLabel = school.free_tuition
+    ? "Free (RA 10931)"
+    : school.tuition_amount_count
+      ? "See fee guide"
+      : "Check portal";
+  const tuitionClass = school.free_tuition ? "metric-value is-free" : "metric-value";
   return `<article class="school-card ${e(school.color)}" data-school-card="${e(school.id)}">
-    <div class="card-top">${schoolMark(school)}<button class="icon-button save-button" data-action="save" data-school="${e(school.id)}" aria-pressed="${saved}" aria-label="${saved ? "Unsave" : "Save"} ${e(school.short_name)}">${icon("save")}</button></div>
-    <h3>${e(school.name)}</h3><p class="card-location">${icon("pin")}${e(school.campus_location)}</p>
-    <div class="card-tags"><span class="tag">${e(school.sector)} university</span>${statusTag(school)}</div>
-    <div class="card-metrics"><div><span class="metric-label">PROGRAM ENTRIES COLLECTED</span><span class="metric-value">${school.program_count ? `<strong>${school.program_count}</strong> entries` : "Not yet indexed"}</span></div><div><span class="metric-label">TUITION INFORMATION</span><span class="metric-value">${school.tuition_amount_count ? "See fee evidence" : "Amount not available"}</span></div></div>
-    <div class="card-footer"><button class="text-button" data-action="details" data-school="${e(school.id)}">View university ${icon("arrow")}</button><button class="compare-button" data-action="compare" data-school="${e(school.id)}" aria-pressed="${compared}" aria-label="${compared ? "Remove" : "Add"} ${e(school.short_name)} ${compared ? "from" : "to"} comparison"><span class="compare-check">${icon("check")}</span>Compare</button></div>
+    <div class="card-top">
+      ${schoolMark(school)}
+      <button class="icon-button save-button" data-action="save" data-school="${e(school.id)}" aria-pressed="${saved}" aria-label="${saved ? "Unsave" : "Save"} ${e(school.short_name)}">${icon("save")}</button>
+    </div>
+    <h3><button class="card-title-btn" data-action="details" data-school="${e(school.id)}">${e(school.name)}</button></h3>
+    <p class="card-meta"><span>${e(school.sector)}</span><span aria-hidden="true">·</span><span>${e(shortLocation(school.campus_location, school.city))}</span></p>
+    <div class="card-stats">
+      <div>
+        <span class="metric-label">Programs</span>
+        <span class="metric-value"><strong>${school.program_count || 0}</strong> degrees</span>
+      </div>
+      <div>
+        <span class="metric-label">Entrance exam</span>
+        <span class="metric-value">${e(examLabel)}</span>
+      </div>
+      <div>
+        <span class="metric-label">Tuition</span>
+        <span class="${tuitionClass}">${e(tuitionLabel)}</span>
+      </div>
+    </div>
+    <div class="card-footer">
+      <button class="text-button" data-action="details" data-school="${e(school.id)}">Explore school ${icon("arrow")}</button>
+      <button class="compare-button" data-action="compare" data-school="${e(school.id)}" aria-pressed="${compared}" aria-label="${compared ? "Remove" : "Add"} ${e(school.short_name)} ${compared ? "from" : "to"} comparison"><span class="compare-check">${icon("check")}</span>Compare</button>
+    </div>
   </article>`;
 }
 
 function programCard(program) {
-  return `<article class="program-card"><div class="program-school">${schoolMark(program, true)}<span>${e(program.short_name)} <span aria-hidden="true">·</span> ${e(program.city)}</span></div>
-    <h3>${e(program.name)}</h3><span class="tag">${e(program.topic)}</span>
-    <p class="program-disclaimer">${program.strand_alignment ? `Published strand note: ${e(program.strand_alignment)}` : "Strand eligibility has not been published in this record."}</p>
-    <button class="text-button" data-action="details" data-school="${e(program.university_id)}" data-tab="programs">View source university ${icon("arrow")}</button></article>`;
+  return `<article class="program-card">
+    <div class="program-school">${schoolMark(program, true)}<span>${e(program.short_name)}</span><span aria-hidden="true">·</span><span>${e(program.topic)}</span></div>
+    <h3>${e(program.name)}</h3>
+    ${program.strand_alignment ? `<p class="program-strand">Strand note: ${e(program.strand_alignment)}</p>` : ""}
+    <button class="text-button" data-action="details" data-school="${e(program.university_id)}" data-tab="programs">View university ${icon("arrow")}</button>
+  </article>`;
 }
 
 function emptyState(
@@ -178,53 +364,85 @@ function emptyState(
   return `<div class="empty-state"><div class="empty-icon">${icon(symbol)}</div><h3>${e(title)}</h3><p>${e(description)}</p><button class="button secondary" data-action="${action}">${e(label)} ${icon("arrow")}</button></div>`;
 }
 
+function renderQuickFilters() {
+  const container = $("#quick-filters");
+  if (!container) return;
+  if (state.view === "universities") {
+    const total = state.schools.length || 15;
+    const pub = state.schools.filter((s) => s.sector === "Public").length || 5;
+    const priv = state.schools.filter((s) => s.sector === "Private").length || 10;
+    const buttons = [
+      ["", `All (${total})`],
+      ["Public", `Public · Free tuition (${pub})`],
+      ["Private", `Private (${priv})`],
+    ];
+    container.hidden = false;
+    container.innerHTML = buttons
+      .map(
+        ([val, label]) =>
+          `<button type="button" class="filter-chip" data-action="quick-sector" data-value="${e(val)}" aria-pressed="${state.sector === val}">${e(label)}</button>`,
+      )
+      .join("");
+    return;
+  }
+  if (state.view === "programs") {
+    const topics = state.stats?.topics || [];
+    const buttons = [["", "All topics"], ...topics.map((t) => [t, t])];
+    container.hidden = false;
+    container.innerHTML = buttons
+      .map(
+        ([val, label]) =>
+          `<button type="button" class="filter-chip" data-action="quick-topic" data-value="${e(val)}" aria-pressed="${state.topic === val}">${e(label)}</button>`,
+      )
+      .join("");
+    return;
+  }
+  container.hidden = true;
+  container.innerHTML = "";
+}
+
 function controls() {
-  const programs = state.view === "programs",
+  const universitiesView = state.view === "universities",
+    programs = state.view === "programs",
     compare = state.view === "compare",
     recommend = state.view === "recommend";
-  $("#hero").hidden = state.view !== "universities";
+  $("#hero").hidden = !universitiesView;
+  $("#section-heading").hidden = universitiesView;
   $("#filter-bar").hidden = compare || recommend;
   $("#results-meta").hidden = compare || recommend;
-  $("#city-wrap").hidden = programs || recommend;
-  $("#sector-wrap").hidden = programs || recommend;
+  const multiCity = (state.stats?.cities?.length || 0) > 1;
+  $("#city-wrap").hidden = !multiCity || programs || recommend;
+  $("#sector-wrap").hidden = universitiesView || programs || recommend;
   $("#school-wrap").hidden = !programs;
-  $("#topic-wrap").hidden = !programs;
+  $("#topic-wrap").hidden = true;
   $("#sort-wrap").hidden = programs || recommend;
   $("#search").placeholder = programs
-    ? "Search a degree, subject, or university…"
-    : "Search a university or program…";
+    ? "Search a degree or subject (e.g. Nursing, Computer Science)…"
+    : "Search a university, degree, or exam (e.g. USTET, Nursing)…";
   const descriptions = {
     universities: [
-      "A PLACE TO BEGIN",
       "Explore universities",
-      "Different paths. New possibilities. Find your starting point.",
+      "Browse 15 Metro Manila universities with verified programs and admissions info.",
     ],
     programs: [
-      "FOLLOW YOUR CURIOSITY",
-      "Discover degree programs",
-      "Explore collected program entries. Topics are browsing aids, not eligibility advice.",
+      "Degree programs",
+      "Search undergraduate degrees across all 15 Metro Manila universities.",
     ],
     saved: [
-      "YOUR NEXT-CHAPTER SHORTLIST",
       "Saved schools",
-      "A little collection of possibilities, saved in this browser.",
+      "Your personal shortlist for quick access and comparison.",
     ],
     compare: [
-      "SEE THE POSSIBILITIES SIDE BY SIDE",
-      "Compare your schools",
-      "Choose up to three universities. Missing information stays visible.",
+      "Compare schools",
+      "Review up to three universities side by side.",
     ],
     recommend: [
-      "A MATCH BUILT AROUND YOU",
       "Find my match",
-      "Tell us what matters. We score collected records with weighted criteria and explain every match.",
+      "Tell us your preferred program, budget, or school type to see ranked matches.",
     ],
   };
-  ["#section-eyebrow", "#section-title", "#section-description"].forEach(
-    (id, index) => {
-      $(id).textContent = descriptions[state.view][index];
-    },
-  );
+  $("#section-title").textContent = descriptions[state.view][0];
+  $("#section-description").textContent = descriptions[state.view][1];
   $("#breadcrumb-view").textContent = viewTitles[state.view];
   document.querySelectorAll(".nav-item").forEach((button) => {
     const selected = button.dataset.view === state.view;
@@ -232,6 +450,7 @@ function controls() {
     if (selected) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
+  renderQuickFilters();
 }
 
 function closeMenu() {
@@ -354,103 +573,64 @@ async function render() {
 }
 
 function renderComparison(schools) {
-  const field = (school, key) => {
-    const entries = school.evidence?.[key] || [];
-    return entries.length
-      ? entries
-          .map(
-            (entry) =>
-              `<p>${e(entry.text || "See source evidence")}</p>${(entry.source_context || []).map((text) => `<p class="context">${e(text)}</p>`).join("")}`,
-          )
-          .join("")
-      : '<span class="muted">Not available</span>';
-  };
-  const structuredField = (school, key, render) => {
+  const structuredField = (school, key, render, emptyText = "Check official portal") => {
     const rows = school.structured?.[key] || [];
     return rows.length
       ? rows.map(render).join("")
-      : '<span class="muted">Not available</span>';
+      : `<span class="muted">${e(emptyText)}</span>`;
   };
-  const feeText = (fee) =>
-    typeof fee.amount_min === "number" && typeof fee.amount_max === "number"
-      ? `<p>PHP ${Number(fee.amount_min).toLocaleString("en-PH")}${
-          fee.amount_max === fee.amount_min
-            ? ""
-            : `–${Number(fee.amount_max).toLocaleString("en-PH")}`
-        } per ${e(fee.basis || "unspecified")}</p>`
-      : '<p class="muted">Published amount not available</p>';
+  const feeText = (fee) => {
+    if (fee.amount_min === 0 && fee.amount_max === 0) {
+      return '<p class="is-free-text"><strong>Free tuition (RA 10931)</strong></p>';
+    }
+    if (typeof fee.amount_min === "number" && typeof fee.amount_max === "number") {
+      return `<p>PHP ${Number(fee.amount_min).toLocaleString("en-PH")}${
+        fee.amount_max === fee.amount_min
+          ? ""
+          : `–${Number(fee.amount_max).toLocaleString("en-PH")}`
+      } per ${e(fee.basis || "term")}</p>`;
+    }
+    return '<p class="muted">Not published yet</p>';
+  };
   const rows = [
-    [
-      "Academic year",
-      (school) => e(structuredYear(school.structured)),
-    ],
     ["Campus", (school) => e(school.campus_location)],
-    ["University type", (school) => e(school.sector)],
+    ["Type", (school) => e(`${school.sector} university`)],
     [
-      "Program entries",
+      "Degree programs",
       (school) =>
         school.program_count
-          ? `${school.program_count} collected; verify campus availability`
-          : "Not yet indexed",
+          ? `<strong>${school.program_count}</strong> listed degrees`
+          : "Not listed yet",
     ],
     [
-      "Admission requirements",
-      (school) =>
-        structuredField(
-          school,
-          "admission_requirements",
-          (row) => `<p>${e(row.text)}</p>`,
-        ),
-    ],
-    [
-      "Application deadlines",
-      (school) =>
-        structuredField(
-          school,
-          "application_deadlines",
-          (row) =>
-            `<p><strong>${e(row.label || "Date")}</strong>${row.date_iso ? ` — ${e(dateLabel(row.date_iso))}` : ""}</p>`,
-        ),
-    ],
-    [
-      "Entrance examination",
+      "Entrance exam",
       (school) =>
         structuredField(
           school,
           "entrance_examinations",
-          (row) => `<p>${e(row.exam_name || row.coverage)}</p>`,
+          (row) => `<p><strong>${e(row.exam_name || "Entrance exam")}</strong>${row.coverage ? `<br><span class="muted">${e(row.coverage)}</span>` : ""}</p>`,
         ),
     ],
     [
-      "Tuition fees",
-      (school) => structuredField(school, "tuition_fees", feeText),
+      "Tuition",
+      (school) => structuredField(school, "tuition_fees", feeText, "Not published yet"),
     ],
     [
-      "Application link",
+      "Requirements",
+      (school) => {
+        const reqs = school.structured?.admission_requirements || [];
+        return reqs.length
+          ? `<ul class="compare-list">${reqs.map((r) => `<li>${e(r.text)}</li>`).join("")}</ul>`
+          : '<span class="muted">Check official portal</span>';
+      },
+    ],
+    [
+      "Official links",
       (school) => applicationLinkList(school.structured),
-    ],
-    [
-      "Last verified",
-      (school) => e(dateLabel(school.structured?.last_verified_at)),
-    ],
-    ["Tuition evidence", (school) => field(school, "tuition_estimates")],
-    ["Exam coverage", (school) => field(school, "entrance_exam_coverage")],
-    [
-      "Published application notice",
-      (school) => field(school, "application_status"),
-    ],
-    ["Dated deadlines", (school) => field(school, "application_deadlines")],
-    ["Collected", (school) => e(dateLabel(school.collected_at))],
-    [
-      "Review notes",
-      (school) =>
-        (school.evidence?.source_notes || [])
-          .map((note) => `<p>${e(note)}</p>`)
-          .join("") || "Confirm details with official admissions sources.",
     ],
   ];
   $("#results").innerHTML =
-    `<div class="compare-scroll" role="region" aria-label="University comparison" tabindex="0"><table class="compare-table"><thead><tr><th scope="col">Your possibilities</th>${schools.map((school) => `<th scope="col" class="compare-school">${schoolMark(school)}<h3>${e(school.name)}</h3>${statusTag(school)}<br><button class="text-button" data-action="details" data-school="${e(school.id)}">View details ${icon("arrow")}</button><button class="compare-remove" data-action="compare" data-school="${e(school.id)}" aria-label="Remove ${e(school.short_name)} from comparison">Remove</button></th>`).join("")}</tr></thead><tbody>${rows.map(([label, value]) => `<tr><th scope="row">${e(label)}</th>${schools.map((school) => `<td>${value(school)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><p class="comparison-note">Program counts describe this dataset’s coverage, not the university’s complete offerings or its quality. Published notices may refer to an earlier intake.</p><button class="button secondary" data-action="browse">Add another school ${icon("arrow")}</button>`;
+    `<div class="compare-scroll" role="region" aria-label="University comparison" tabindex="0"><table class="compare-table"><thead><tr><th scope="col">Criteria</th>${schools.map((school) => `<th scope="col" class="compare-school">${schoolMark(school)}<h3>${e(school.name)}</h3><div class="compare-head-actions"><button class="text-button" data-action="details" data-school="${e(school.id)}">View details ${icon("arrow")}</button><button class="compare-remove" data-action="compare" data-school="${e(school.id)}" aria-label="Remove ${e(school.short_name)} from comparison">Remove</button></div></th>`).join("")}</tr></thead><tbody>${rows.map(([label, value]) => `<tr><th scope="row">${e(label)}</th>${schools.map((school) => `<td>${value(school)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="compare-footer-action"><button class="button secondary" data-action="browse">Add another school ${icon("arrow")}</button></div>`;
 }
 
 const EXPLANATION_STATUS = {
@@ -503,7 +683,7 @@ function recommendationRow(item, rank) {
           <strong>${e(item.score)}</strong><span>match score</span>
         </div>
       </div>
-      <div class="score-track" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(item.score) || 0))}%"></span></div>
+      <progress class="score-track" max="100" value="${Math.max(0, Math.min(100, Number(item.score) || 0))}" aria-hidden="true"></progress>
       <ul class="explain-list">${explanations}</ul>
       <div class="match-actions">
         <button class="text-button" data-action="details" data-school="${e(item.university_id)}">View university ${icon("arrow")}</button>
@@ -535,36 +715,39 @@ function recommendationGroup(group) {
 
 function recommendationOutput(result, error, loading) {
   if (loading) {
-    return '<div class="loading-state recommend-loading">Scoring collected records and ranking them with merge sort…</div>';
+    return '<div class="loading-state recommend-loading">Finding your best university matches…</div>';
   }
   if (error) {
     return `<div class="error-state"><p>${e(error)}</p><p>Adjust a preference or try again.</p></div>`;
   }
   if (!result) {
-    return `<div class="empty-state recommend-placeholder"><div class="empty-icon">${icon("spark")}</div><h3>Your match list will appear here</h3><p>Add a program, location, budget, or university type. Each score explains which preferences matched and which source data is unknown.</p></div>`;
+    const picks = ["Computer Science", "Nursing", "Accountancy", "Architecture", "Psychology"];
+    return `<div class="empty-state recommend-placeholder">
+      <div class="empty-icon">${icon("spark")}</div>
+      <h3>See which universities fit you best</h3>
+      <p>Enter a degree, budget, or school type — or try a popular program below.</p>
+      <div class="match-quick-picks">
+        ${picks.map((p) => `<button type="button" class="filter-chip" data-action="quick-match" data-value="${e(p)}">${e(p)}</button>`).join("")}
+      </div>
+    </div>`;
   }
   if (!result.items?.length) {
     return emptyState(
-      "No scored match yet",
-      "The collected records did not produce a ranked match. Try a broader program keyword or another location.",
+      "No matches found",
+      "Try a broader degree keyword or clear one of your filters.",
       "reset",
-      "Start over",
+      "Reset filters",
       "spark",
     );
   }
-  const weights = Object.entries(result.weights || {})
-    .map(
-      ([name, value]) =>
-        `<span class="weight-chip">${e(result.criteria?.[name] || name)} ${Math.round(Number(value) * 100)}%</span>`,
-    )
-    .join("");
   const groups = groupRecommendations(result.items);
   return `<div class="recommend-summary">
-      <div><span class="eyebrow">WEIGHTED, EXPLAINED, RANKED</span><h3>${result.items.length} of ${result.total} scored matches across ${groups.length} universit${groups.length === 1 ? "y" : "ies"}</h3></div>
-      <div class="weight-chips">${weights}</div>
+      <h3>${result.items.length} matches across ${groups.length} universit${groups.length === 1 ? "y" : "ies"}</h3>
+      <details class="score-info-toggle">
+        <summary>How scores work</summary>
+        <p>${e(result.unknown_policy || "Missing source data scores 0 and is labeled unknown.")}</p>
+      </details>
     </div>
-    <p class="recommend-formula">${e(result.formula || "")}</p>
-    <p class="recommend-policy">${e(result.unknown_policy || "")} Ranking algorithm: ${e(result.algorithm || "stable merge sort")}.</p>
     <div class="match-list">${groups.map(recommendationGroup).join("")}</div>`;
 }
 
@@ -575,29 +758,27 @@ function renderRecommend() {
   $("#results").innerHTML = `<div class="recommend-layout">
     <form class="recommend-form" id="recommend-form" novalidate>
       <div class="recommend-form-head">
-        <span class="eyebrow">YOUR PREFERENCES</span>
-        <h3>What matters most?</h3>
-        <p>At least one preference is required. Blank fields are simply not scored.</p>
+        <h3>Your preferences</h3>
+        <p>Fill in at least one field. Leave anything blank if it doesn’t matter.</p>
       </div>
-      <label class="recommend-field"><span>Preferred program</span><input id="rec-program" type="search" maxlength="200" autocomplete="off" placeholder="e.g. Computer Science" value="${e(rec.program)}"></label>
-      <label class="recommend-field"><span>Preferred location</span><select id="rec-city"><option value="">Any location</option>${cities.map((city) => `<option value="${e(city)}" ${city === rec.city ? "selected" : ""}>${e(city)}</option>`).join("")}</select></label>
-      <label class="recommend-field"><span>University type</span><select id="rec-sector"><option value="">Any type</option><option ${rec.sector === "Public" ? "selected" : ""}>Public</option><option ${rec.sector === "Private" ? "selected" : ""}>Private</option></select></label>
+      <label class="recommend-field"><span>Preferred degree or field</span><input id="rec-program" type="search" maxlength="200" autocomplete="off" placeholder="e.g. Computer Science, Nursing" value="${e(rec.program)}"></label>
+      ${cities.length > 1 ? `<label class="recommend-field"><span>Location</span><select id="rec-city"><option value="">Any location</option>${cities.map((city) => `<option value="${e(city)}" ${city === rec.city ? "selected" : ""}>${e(city)}</option>`).join("")}</select></label>` : `<input id="rec-city" type="hidden" value="">`}
+      <label class="recommend-field"><span>University type</span><select id="rec-sector"><option value="">Public or Private</option><option value="Public" ${rec.sector === "Public" ? "selected" : ""}>Public (Free tuition via RA 10931)</option><option value="Private" ${rec.sector === "Private" ? "selected" : ""}>Private</option></select></label>
       <div class="recommend-budget">
         <label class="recommend-field"><span>Budget (PHP)</span><input id="rec-budget" type="number" min="0" max="10000000" step="1000" inputmode="numeric" placeholder="Optional" value="${e(rec.budget)}"></label>
-        <label class="recommend-field"><span>Budget basis</span><select id="rec-basis">${["semester", "trimester", "year", "unit"].map((basis) => `<option value="${basis}" ${basis === rec.budgetBasis ? "selected" : ""}>${basis}</option>`).join("")}</select></label>
+        <label class="recommend-field"><span>Per</span><select id="rec-basis">${["semester", "trimester", "year", "unit"].map((basis) => `<option value="${basis}" ${basis === rec.budgetBasis ? "selected" : ""}>${basis}</option>`).join("")}</select></label>
       </div>
-      <details class="weight-panel" ${rec.result ? "open" : ""}>
-        <summary>Adjust criteria weights</summary>
-        <p>Weights are normalised to 100%. Setting a weight to zero ignores that criterion.</p>
+      <details class="weight-panel">
+        <summary>Customize priority weights</summary>
+        <p>Adjust how much each factor counts toward your match score.</p>
         <div class="weight-grid">
-          ${weightInput("program", "Preferred program")}
-          ${weightInput("location", "Preferred location")}
-          ${weightInput("budget", "Budget fit")}
-          ${weightInput("sector", "University type")}
+          ${weightInput("program", "Program")}
+          ${weightInput("location", "Location")}
+          ${weightInput("budget", "Budget")}
+          ${weightInput("sector", "School type")}
         </div>
       </details>
       <button class="button primary recommend-submit" type="submit" ${rec.loading ? "disabled" : ""}>${icon("spark")}Find my matches</button>
-      <p class="recommend-hint">Missing source information scores 0 for that criterion and is labelled unknown. It is never treated as a match.</p>
     </form>
     <div class="recommend-output" aria-live="polite">${recommendationOutput(rec.result, rec.error, rec.loading)}</div>
   </div>`;
@@ -700,61 +881,108 @@ function structuredSection(title, body) {
   return `<section class="profile-section"><h3>${e(title)}</h3>${body}</section>`;
 }
 
+function formatFeeRow(row) {
+  if (row.amount_min === 0 && row.amount_max === 0) {
+    return "Free Tuition (RA 10931)";
+  }
+  if (typeof row.amount_min === "number" && typeof row.amount_max === "number") {
+    return `PHP ${Number(row.amount_min).toLocaleString("en-PH")}${
+      row.amount_max === row.amount_min
+        ? ""
+        : `–${Number(row.amount_max).toLocaleString("en-PH")}`
+    } per ${e(row.basis || "term")}`;
+  }
+  return "See official fee schedule";
+}
+
 function structuredAdmissions(structured) {
   if (!structured) {
-    return '<p class="not-available">Structured records are not available for this university. Review the source evidence below or check the official admissions page.</p>';
+    return '<p class="not-available">Admissions details are not available yet. Visit the university’s official website for current guidelines.</p>';
   }
-  const list = (rows, render) =>
-    rows?.length
-      ? `<ul class="structured-list">${rows.map(render).join("")}</ul>`
-      : '<p class="not-available">Not available in the collected sources.</p>';
 
-  const requirements = list(
-    structured.admission_requirements,
-    (row) =>
-      `<li><p>${e(row.text)}</p><span class="tag">${e(row.category || "general")}</span>${row.academic_year ? ` <span class="meta-chip">${e(row.academic_year)}</span>` : ""}${sourceLink(row.source_url)}</li>`,
-  );
-  const deadlines = list(
-    structured.application_deadlines,
-    (row) =>
-      `<li><p><strong>${e(row.label || "Application date")}</strong>${row.date_iso ? ` — ${e(dateLabel(row.date_iso))}` : " — date not stated"}</p>${row.raw_text ? `<p class="context">${e(row.raw_text)}</p>` : ""}${row.academic_year ? `<span class="meta-chip">${e(row.academic_year)}</span>` : ""}${sourceLink(row.source_url)}</li>`,
-  );
-  const examinations = list(
-    structured.entrance_examinations,
-    (row) =>
-      `<li><p><strong>${e(row.exam_name || "Entrance examination")}</strong></p><p>${e(row.coverage)}</p>${row.academic_year ? `<span class="meta-chip">${e(row.academic_year)}</span>` : ""}${sourceLink(row.source_url)}</li>`,
-  );
-  const fees = list(structured.tuition_fees, (row) => {
-    const amount =
-      typeof row.amount_min === "number" && typeof row.amount_max === "number"
-        ? `PHP ${Number(row.amount_min).toLocaleString("en-PH")}${
-            row.amount_max === row.amount_min
-              ? ""
-              : `–${Number(row.amount_max).toLocaleString("en-PH")}`
-          } per ${e(row.basis || "unspecified")}`
-        : '<span class="muted">Published amount not available</span>';
-    return `<li><p><strong>${amount}</strong></p>${row.raw_text ? `<p class="context">${e(row.raw_text)}</p>` : ""}${row.academic_year ? `<span class="meta-chip">${e(row.academic_year)}</span>` : ""}${sourceLink(row.source_url)}</li>`;
-  });
-  const links = list(
-    structured.application_links,
-    (row) =>
-      `<li>${sourceLink(row.url, row.label || "Application page")}${row.source_url ? `<p class="context">Found on ${sourceLink(row.source_url)}</p>` : ""}</li>`,
-  );
-  const sources = (structured.source_urls || []).length
-    ? `<ul class="source-list">${structured.source_urls.map((url) => `<li>${sourceLink(url, new URL(url).hostname + new URL(url).pathname)}</li>`).join("")}</ul>`
-    : '<p class="not-available">No source links recorded.</p>';
-  const conflicts = (state.detail?.declared_conflicts || []).length
-    ? `<div class="evidence-note conflict-note"><strong>Conflicting source statements</strong>${state.detail.declared_conflicts.map((row) => `<p>${e(row.field)}: kept “${e(row.kept_value)}”; discarded “${e(row.discarded_value)}”. ${e(row.reason || "")}</p>`).join("")}</div>`
+  const exams = structured.entrance_examinations || [];
+  const examSection = exams.length
+    ? `<section class="profile-section">
+        <h3>Entrance exam</h3>
+        <ul class="structured-list">${exams
+          .map(
+            (row) =>
+              `<li><p><strong>${e(row.exam_name || "Entrance examination")}</strong></p>${row.coverage ? `<p>${e(row.coverage)}</p>` : ""}${sourceLink(row.source_url, "Official exam info")}</li>`,
+          )
+          .join("")}</ul>
+      </section>`
     : "";
+
+  const allFees = structured.tuition_fees || [];
+  const verifiedFees = allFees.filter(
+    (row) => typeof row.amount_min === "number" || typeof row.amount_max === "number",
+  );
+  const feeFallbackUrl = allFees.map((r) => safeURL(r.source_url)).find(Boolean) || null;
+  const feeSection = `<section class="profile-section">
+    <h3>Tuition &amp; fees</h3>
+    ${
+      verifiedFees.length
+        ? `<ul class="structured-list">${verifiedFees
+            .map(
+              (row) =>
+                `<li><p><strong>${formatFeeRow(row)}</strong></p>${row.raw_text ? `<p>${e(row.raw_text)}</p>` : ""}${sourceLink(row.source_url, "Official fee page")}</li>`,
+            )
+            .join("")}</ul>`
+        : `<p class="muted-note">Tuition rates aren’t listed here yet so we don’t guess — check the official fee guide directly on the university’s site.${feeFallbackUrl ? ` ${sourceLink(feeFallbackUrl, "Official fee page")}` : ""}</p>`
+    }
+  </section>`;
+
+  const reqs = structured.admission_requirements || [];
+  const reqSection = reqs.length
+    ? `<section class="profile-section">
+        <h3>Freshman requirements</h3>
+        <ul class="req-checklist">${reqs
+          .map(
+            (row) =>
+              `<li><span>${e(row.text)}</span>${sourceLink(row.source_url, "Source")}</li>`,
+          )
+          .join("")}</ul>
+      </section>`
+    : "";
+
+  const deadlines = structured.application_deadlines || [];
+  const deadlineSection = deadlines.length
+    ? `<section class="profile-section">
+        <h3>Application dates</h3>
+        <ul class="structured-list">${deadlines
+          .map(
+            (row) =>
+              `<li><p><strong>${e(row.label || "Application date")}</strong>${row.date_iso ? ` — ${e(dateLabel(row.date_iso))}` : ""}</p>${row.raw_text ? `<p>${e(row.raw_text)}</p>` : ""}${sourceLink(row.source_url, "Official schedule")}</li>`,
+          )
+          .join("")}</ul>
+      </section>`
+    : "";
+
+  const links = (structured.application_links || []).filter((l) => safeURL(l.url));
+  const linkSection = links.length
+    ? `<section class="profile-section">
+        <h3>Official portals</h3>
+        <div class="portal-links">${links
+          .map(
+            (row) =>
+              `<a class="portal-link-card" href="${e(safeURL(row.url))}" target="_blank" rel="noopener noreferrer">${e(row.label || "Official admissions portal")} <span aria-hidden="true">↗</span></a>`,
+          )
+          .join("")}</div>
+      </section>`
+    : "";
+
+  const conflicts = (state.detail?.declared_conflicts || []).length
+    ? `<div class="evidence-note conflict-note"><strong>Source differences to verify</strong>${state.detail.declared_conflicts.map((row) => `<p>${e(row.field)}: kept “${e(row.kept_value)}” over “${e(row.discarded_value)}”.</p>`).join("")}</div>`
+    : "";
+
   return `<div class="structured-profile">
-    ${profileFacts(structured)}
-    ${structuredSection("Admission requirements", requirements)}
-    ${structuredSection("Application deadlines", deadlines)}
-    ${structuredSection("Entrance examination information", examinations)}
-    ${structuredSection("Tuition fees", fees)}
-    ${structuredSection("Official application links", links)}
+    ${examSection}
+    ${feeSection}
+    ${reqSection}
+    ${deadlineSection}
+    ${linkSection}
     ${conflicts}
-    ${structuredSection("Recorded source pages", sources)}
+    <p class="muted-note">Application windows change each year — confirm exact dates directly on the official portal above.</p>
   </div>`;
 }
 
@@ -763,8 +991,9 @@ async function openDetails(id, tab = "overview") {
   const dialog = $("#school-dialog");
   state.detail = null;
   state.tab = tab;
+  state.detailTopic = "";
   $("#detail-body").innerHTML =
-    '<div class="detail-panel"><h2 id="dialog-title">Loading university…</h2><p>Gathering the collected records and sources.</p></div>';
+    '<div class="detail-panel"><h2 id="dialog-title">Loading university…</h2><p>Fetching official programs and admissions details.</p></div>';
   if (!dialog.open) dialog.showModal();
   try {
     const school = await api("/api/universities/" + encodeURIComponent(id));
@@ -787,61 +1016,124 @@ function renderDetails() {
     ["admissions", "Admissions & fees"],
   ];
   const notes = school.evidence?.source_notes || [];
+  const examLabel =
+    school.exam_summary ||
+    school.structured?.entrance_examinations?.[0]?.exam_name ||
+    "Check official portal";
+  const tuitionLabel = school.free_tuition
+    ? "Free (RA 10931)"
+    : school.tuition_amount_count
+      ? "See Admissions & fees"
+      : "Check official portal";
+
   let content = "";
   if (state.tab === "overview") {
-    const sources = (school.sources || [])
-      .map((source) => safeURL(source.final_url || source.requested_url))
-      .filter(Boolean);
-    content = `<h3>A starting point for ${e(school.short_name)}</h3><p>${school.collection_status === "pending" ? "This university is included in the Metro Manila directory. Its admissions and program information has not yet been collected for this prototype." : "These entries were collected from official public pages. They remain source evidence requiring review, including confirmation of the campus, academic year and current availability."}</p>${profileFacts(school.structured)}<dl class="detail-facts"><div><dt>UNIVERSITY TYPE</dt><dd>${e(school.sector)}</dd></div><div><dt>PROGRAM ENTRIES</dt><dd>${school.program_count || "Not indexed"}</dd></div><div><dt>LAST COLLECTED</dt><dd>${e(dateLabel(school.collected_at))}</dd></div></dl>${notes.length ? `<div class="evidence-note">${notes.map((note) => `<p>${e(note)}</p>`).join("")}</div>` : ""}<h3>Official sources</h3><ul class="source-list">${[...new Set(sources)].map((url) => `<li>${sourceLink(url, new URL(url).hostname + new URL(url).pathname)}</li>`).join("") || "<li>No source links recorded.</li>"}</ul><p>Missing data does not mean a fee is zero or a program is unavailable. Verify details directly with admissions.</p>`;
+    const links = (school.structured?.application_links || []).filter((l) => safeURL(l.url));
+    content = `
+      <dl class="detail-facts">
+        <div><dt>Degree programs</dt><dd>${school.program_count || 0} listed</dd></div>
+        <div><dt>Entrance exam</dt><dd>${e(examLabel)}</dd></div>
+        <div><dt>Tuition</dt><dd class="${school.free_tuition ? "is-free-text" : ""}">${e(tuitionLabel)}</dd></div>
+      </dl>
+      ${
+        links.length
+          ? `<section class="profile-section">
+              <h3>Official links</h3>
+              <div class="portal-links">${links
+                .map(
+                  (l) =>
+                    `<a class="portal-link-card" href="${e(safeURL(l.url))}" target="_blank" rel="noopener noreferrer">${e(l.label || "Official page")} <span aria-hidden="true">↗</span></a>`,
+                )
+                .join("")}</div>
+            </section>`
+          : ""
+      }
+      ${
+        notes.length
+          ? `<section class="profile-section"><h3>About this record</h3><p class="overview-note">${e(notes[0])}</p></section>`
+          : ""
+      }
+      <p class="muted-note">Last checked ${e(dateLabel(school.structured?.last_verified_at || school.collected_at))}. Confirm current intake details directly with admissions.</p>`;
   } else if (state.tab === "programs") {
-    content = `<h3>Collected program entries</h3><p>Program names are quoted from the source listing. Topic labels help you browse; strand eligibility and campus availability need confirmation.</p>${notes.length ? `<details class="program-review-notes"><summary>Read collection and title review notes</summary><div class="evidence-note">${notes.map((note) => `<p>${e(note)}</p>`).join("")}</div></details>` : ""}${school.program_count ? `<label><span class="sr-only">Search this university's programs</span><input class="detail-search" id="detail-program-search" type="search" placeholder="Search these programs…" maxlength="200"></label><div id="detail-program-results">${detailPrograms(school.programs)}</div>` : "<p>No program entries have been collected for this university yet.</p>"}`;
+    const topics = [
+      ...new Set((school.programs || []).map((p) => p.topic).filter(Boolean)),
+    ].sort();
+    const topicBar =
+      topics.length > 1
+        ? `<div class="modal-topic-filters">${[["", "All"], ...topics.map((t) => [t, t])]
+            .map(
+              ([val, label]) =>
+                `<button type="button" class="filter-chip" data-action="detail-topic" data-value="${e(val)}" aria-pressed="${state.detailTopic === val}">${e(label)}</button>`,
+            )
+            .join("")}</div>`
+        : "";
+    const filtered = state.detailTopic
+      ? school.programs.filter((p) => p.topic === state.detailTopic)
+      : school.programs;
+    content = school.program_count
+      ? `<label><span class="sr-only">Search this university's programs</span><input class="detail-search" id="detail-program-search" type="search" placeholder="Filter ${school.program_count} programs…" maxlength="200"></label>${topicBar}<div id="detail-program-results">${detailPrograms(filtered)}</div>`
+      : "<p class=\"muted-note\">No programs are listed for this university yet.</p>";
   } else {
     content =
-      `<div class="evidence-note"><p>The organized profile below is extracted from approved sources and still requires human verification. Check the academic year and source before using it for an application.</p>${notes.map((note) => `<p>${e(note)}</p>`).join("")}</div>` +
       structuredAdmissions(school.structured) +
-      `<details class="raw-evidence" open><summary>Source evidence (unreviewed text)</summary><p class="context">These are the original extracted statements. They are kept for transparency and may repeat or predate the organized profile above.</p>` +
-      evidenceBlock(
-        school,
-        "admission_requirements",
-        "Admission requirements — source text",
-      ) +
-      evidenceBlock(
-        school,
-        "entrance_exam_coverage",
-        "Entrance exam coverage — source text",
-      ) +
-      evidenceBlock(
-        school,
-        "tuition_estimates",
-        "Tuition and cost evidence — source text",
-      ) +
-      evidenceBlock(
-        school,
-        "application_deadlines",
-        "Application dates — source text",
-      ) +
-      evidenceBlock(
-        school,
-        "application_status",
-        "Published application notice — source text",
-      ) +
+      `<details class="raw-evidence"><summary>View raw source excerpts</summary>` +
+      evidenceBlock(school, "admission_requirements", "Requirements excerpts") +
+      evidenceBlock(school, "entrance_exam_coverage", "Exam excerpts") +
+      evidenceBlock(school, "tuition_estimates", "Tuition excerpts") +
       `</details>`;
   }
+
   $("#detail-body").innerHTML =
-    `<header class="detail-head">${schoolMark(school)}<span class="eyebrow">YOUR NEXT CHAPTER, IN FOCUS</span><h2 id="dialog-title">${e(school.name)}</h2><p class="card-location">${icon("pin")}${e(school.campus_location)}</p>${statusTag(school)}</header><div class="detail-tabs" role="tablist" aria-label="University details">${tabs.map(([id, label]) => `<button id="tab-${id}" role="tab" data-action="tab" data-tab="${id}" aria-controls="detail-panel" aria-selected="${state.tab === id}" tabindex="${state.tab === id ? "0" : "-1"}">${e(label)}</button>`).join("")}</div><section class="detail-panel" id="detail-panel" role="tabpanel" aria-labelledby="tab-${state.tab}" tabindex="0">${content}<div class="dialog-actions"><button class="button secondary" data-action="save" data-school="${e(school.id)}" aria-pressed="${state.saved.includes(school.id)}">${icon("save")}${state.saved.includes(school.id) ? "Remove from saved" : "Save this school"}</button>${safeURL(school.official_url) ? `<a class="button primary" href="${e(safeURL(school.official_url))}" target="_blank" rel="noopener noreferrer">Official university page ${icon("external")}</a>` : ""}</div></section>`;
+    `<header class="detail-head">
+      <div class="detail-head-row">
+        ${schoolMark(school)}
+        <div>
+          <h2 id="dialog-title">${e(school.name)}</h2>
+          <p class="detail-meta">${e(school.sector)} university <span aria-hidden="true">·</span> ${e(school.campus_location)}</p>
+        </div>
+      </div>
+    </header>
+    <div class="detail-tabs" role="tablist" aria-label="University details">${tabs.map(([id, label]) => `<button id="tab-${id}" role="tab" data-action="tab" data-tab="${id}" aria-controls="detail-panel" aria-selected="${state.tab === id}" tabindex="${state.tab === id ? "0" : "-1"}">${e(label)}</button>`).join("")}</div>
+    <section class="detail-panel" id="detail-panel" role="tabpanel" aria-labelledby="tab-${state.tab}" tabindex="0">
+      ${content}
+      <div class="dialog-actions">
+        <button class="button secondary" data-action="save" data-school="${e(school.id)}" aria-pressed="${state.saved.includes(school.id)}">${icon("save")}${state.saved.includes(school.id) ? "Saved" : "Save school"}</button>
+        <button class="button secondary" data-action="compare" data-school="${e(school.id)}" aria-pressed="${state.compare.includes(school.id)}">${state.compare.includes(school.id) ? "In comparison" : "Compare"}</button>
+        ${safeURL(school.official_url) ? `<a class="button primary" href="${e(safeURL(school.official_url))}" target="_blank" rel="noopener noreferrer">Official website ${icon("external")}</a>` : ""}
+      </div>
+    </section>`;
 }
 
 function detailPrograms(programs) {
   return programs.length
-    ? `<ul class="detail-program-list">${programs.map((program) => `<li>${e(program.name)}<br><span class="tag">${e(program.topic)}</span>${program.strand_alignment ? `<p>${e(program.strand_alignment)}</p>` : ""}<br>${sourceLink(program.source_url)}</li>`).join("")}</ul>`
-    : "<p>No collected program entries match your search.</p>";
+    ? `<ul class="detail-program-list">${programs
+        .map(
+          (program) =>
+            `<li class="program-row">
+              <div class="program-row-main">
+                <strong>${e(program.name)}</strong>
+                <span class="program-row-meta">${e(program.topic)}${program.strand_alignment ? ` · ${e(program.strand_alignment)}` : ""}</span>
+              </div>
+              ${sourceLink(program.source_url, "Source")}
+            </li>`,
+        )
+        .join("")}</ul>`
+    : '<p class="muted-note">No programs match that filter.</p>';
 }
 
 function openNotes() {
   ++detailVersion;
   state.detail = null;
   $("#detail-body").innerHTML =
-    `<header class="detail-head"><span class="eyebrow">A LITTLE CONTEXT</span><h2 id="dialog-title">Clearer choices start with honest data.</h2></header><div class="detail-panel"><h3>What you’re exploring</h3><p>UniMatch PH is an undergraduate research prototype for discovering Metro Manila universities and degree programs. The directory currently includes ${e(state.stats?.universities ?? state.schools.length)} institutions, with collected records from ${e(state.stats?.collected_universities ?? 0)} schools. Browse each profile for its source links and collection notes.</p><h3>Evidence, with room for review</h3><p>The latest recorded collection date is ${e(dateLabel(state.stats?.latest_collection))}. Source records can include older academic years, legacy pages, combined program titles or multiple campuses. All collected information needs verification; quoted notices should not be treated as current admissions decisions.</p><h3>A few things to keep in mind</h3><p>Missing tuition does not mean free tuition. Missing strand alignment does not establish eligibility. Program counts show collection coverage, not rankings or complete university offerings. Topics are simple browsing categories, not academic recommendations.</p><h3>Your shortlist</h3><p>Saved schools and comparison choices stay in this browser’s local storage and are kept separate for each account. They are not synced across devices or shared between accounts. Accounts are optional, and this prototype does not accept application submissions.</p><h3>Respectful collection</h3><p>The separate collector checks robots.txt, spaces requests and stops on access blocks. Exploring this website reads saved records; it does not scrape university websites on each visit.</p></div>`;
+    `<header class="detail-head"><h2 id="dialog-title">About this data</h2><p class="detail-meta">Sourced from official Metro Manila university portals</p></header>
+    <div class="detail-panel">
+      <h3>What’s included</h3>
+      <p>UniMatch PH covers ${e(state.stats?.universities ?? state.schools.length)} Metro Manila universities with undergraduate programs, entrance exam policies, freshman requirements, and official portal links.</p>
+      <h3>Tuition honesty</h3>
+      <p>Public universities covered by Republic Act 10931 (Free Higher Education) are marked free for eligible Filipino undergraduates. Private university tuition is left blank unless verified on an official fee schedule.</p>
+      <h3>Always double-check dates</h3>
+      <p>Application periods and entrance exam schedules change every academic year. Use the official links on each university’s profile to confirm current deadlines.</p>
+    </div>`;
   if (!$("#school-dialog").open) $("#school-dialog").showModal();
 }
 
@@ -878,7 +1170,7 @@ document.addEventListener("click", (event) => {
             `${saved ? "Unsave" : "Save"} ${state.schools.find((s) => s.id === id)?.short_name || "school"}`,
           );
         else
-          item.innerHTML = `${icon("save")}${saved ? "Remove from saved" : "Save this school"}`;
+          item.innerHTML = `${icon("save")}${saved ? "Saved" : "Save school"}`;
       });
       if (state.view === "saved") render();
       break;
@@ -894,6 +1186,12 @@ document.addEventListener("click", (event) => {
       } else state.compare.push(id);
       persist();
       render();
+      document.querySelectorAll('#school-dialog [data-action="compare"]').forEach((item) => {
+        if (item.dataset.school !== id) return;
+        const compared = state.compare.includes(id);
+        item.setAttribute("aria-pressed", String(compared));
+        item.textContent = compared ? "In comparison" : "Compare";
+      });
       toast(
         index >= 0
           ? "School removed from comparison."
@@ -922,6 +1220,33 @@ document.addEventListener("click", (event) => {
     case "retry":
       render();
       break;
+    case "quick-sector":
+      state.sector = button.dataset.value || "";
+      $("#sector").value = state.sector;
+      state.page = 1;
+      renderQuickFilters();
+      render();
+      break;
+    case "quick-topic":
+      state.topic = button.dataset.value || "";
+      $("#topic").value = state.topic;
+      state.page = 1;
+      renderQuickFilters();
+      render();
+      break;
+    case "quick-match": {
+      const val = button.dataset.value || "";
+      const input = $("#rec-program");
+      if (input) input.value = val;
+      state.recommend.program = val;
+      runRecommendation();
+      break;
+    }
+    case "detail-topic": {
+      state.detailTopic = button.dataset.value || "";
+      renderDetails();
+      break;
+    }
     case "next":
       state.page++;
       render();
@@ -951,14 +1276,18 @@ $("#search").addEventListener("input", (event) => {
   $("#" + id).addEventListener("change", (event) => {
     state[id] = event.target.value;
     state.page = 1;
+    renderQuickFilters();
     render();
   }),
 );
 document.addEventListener("input", (event) => {
   if (event.target.id === "detail-program-search" && state.detail) {
     const query = event.target.value.trim().toLowerCase();
+    const base = state.detailTopic
+      ? state.detail.programs.filter((p) => p.topic === state.detailTopic)
+      : state.detail.programs;
     $("#detail-program-results").innerHTML = detailPrograms(
-      state.detail.programs.filter((p) => p.name.toLowerCase().includes(query)),
+      base.filter((p) => p.name.toLowerCase().includes(query)),
     );
   }
 });
@@ -1014,7 +1343,7 @@ async function initialize() {
     const ids = new Set(state.schools.map((s) => s.id));
     state.saved = state.saved.filter((id) => ids.has(id));
     state.compare = state.compare.filter((id) => ids.has(id));
-    persist();
+    persist(false);
     $("#city").innerHTML += stats.cities
       .map((city) => `<option>${e(city)}</option>`)
       .join("");
@@ -1058,4 +1387,80 @@ async function initialize() {
       `<div class="error-state"><p>${e(error.message)}</p><p>Refresh this page after the server is available.</p></div>`;
   }
 }
+
+window.addEventListener("unimatch:cloud-hydrate", (event) => {
+  const detail = event.detail || {};
+  const validIds = new Set(state.schools.map((s) => s.id));
+  const filterValid = (list, cap) =>
+    [...new Set((Array.isArray(list) ? list : []).filter((id) => validIds.size === 0 || validIds.has(id)))].slice(0, cap);
+
+  const cloudSaved = filterValid(detail.savedIds, 50);
+  const cloudCompare = filterValid(detail.compareIds, 3);
+  const mergedSaved = filterValid([...cloudSaved, ...state.saved], 50);
+  const mergedCompare = filterValid([...cloudCompare, ...state.compare], 3);
+  const changedFromCloud =
+    mergedSaved.length !== cloudSaved.length ||
+    mergedCompare.length !== cloudCompare.length;
+
+  state.saved = mergedSaved;
+  state.compare = mergedCompare;
+  persist(changedFromCloud);
+
+  if (detail.preferences && typeof detail.preferences === "object") {
+    const p = detail.preferences;
+    if (!state.recommend.program && p.program) state.recommend.program = String(p.program);
+    if (!state.recommend.city && p.city) state.recommend.city = String(p.city);
+    if (!state.recommend.sector && p.sector) state.recommend.sector = String(p.sector);
+    if (state.recommend.budget === "" && p.budget != null) {
+      state.recommend.budget = String(p.budget);
+    }
+    if (p.budgetBasis) state.recommend.budgetBasis = String(p.budgetBasis);
+    if (p.weights && typeof p.weights === "object") {
+      state.recommend.weights = { ...state.recommend.weights, ...p.weights };
+    }
+  }
+  render();
+});
+
+window.addEventListener("unimatch:catalog-updated", async (event) => {
+  const count = Number(event.detail?.count || 0);
+  if (count <= 0) return;
+  try {
+    const [stats, schools] = await Promise.all([
+      api("/api/stats"),
+      api("/api/universities"),
+    ]);
+    state.stats = stats;
+    state.schools = schools.items;
+    const resetSelect = (selector, defaultLabel, values) => {
+      const el = $(selector);
+      if (!el) return;
+      const prev = el.value;
+      el.innerHTML =
+        `<option value="">${e(defaultLabel)}</option>` +
+        values.map((v) => `<option value="${e(v.value)}">${e(v.label)}</option>`).join("");
+      el.value = prev;
+    };
+    resetSelect(
+      "#city",
+      "All locations",
+      stats.cities.map((c) => ({ value: c, label: c })),
+    );
+    resetSelect(
+      "#topic",
+      "All topics",
+      stats.topics.map((t) => ({ value: t, label: t })),
+    );
+    resetSelect(
+      "#school",
+      "All universities",
+      state.schools.map((s) => ({ value: s.id, label: s.short_name })),
+    );
+    renderQuickFilters();
+    render();
+  } catch {
+    // Keep existing rendered view on transient refresh issue
+  }
+});
+
 initialize();

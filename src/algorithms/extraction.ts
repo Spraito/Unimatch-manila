@@ -53,7 +53,8 @@ const DOCUMENT_WORDS =
 const ELIGIBILITY_WORDS =
   /\beligib(?:le|ility)\b|\bgrade\b|\bgpa\b|\bstrand\b|\brequired\s+subjects?\b|\bresidency\b|\bcitizen/i;
 
-const EXAM_WORDS = /\bexam(?:ination)?\b|\btest\b|\bupcat\b|\bpupcet\b/i;
+const EXAM_WORDS =
+  /\bexam(?:ination)?\b|\btest\b|\bupcat\b|\bpupcet\b|\bdcat\b|\bustet\b|\bfeucat\b|\bplmat\b|\bplmee\b|\btupstat\b|\btupcet\b|\bpnuat\b|\buecet\b|\bmpass\b|\baducet\b/i;
 
 const KNOWN_EXAMS = [
   "UPCAT",
@@ -64,10 +65,29 @@ const KNOWN_EXAMS = [
   "ACET",
   "BUCET",
   "SSCAT",
+  "TUPSTAT",
   "TUPCET",
+  "PLMAT",
   "PLMEE",
+  "FEUCAT",
+  "FEU-CAT",
+  "UECET",
+  "UE-CET",
+  "PNUAT",
+  "AdUCET",
+  "MPASS",
+  "LCET",
+  "SBCA",
+  "SBU College Entrance Examination",
   "UST Entrance Test",
   "DLSU College Admission Test",
+  "FEU College Admission Test",
+  "PLM Admission Test",
+  "PNU Admission Test",
+  "Mapúa Scholastic Aptitude Examination",
+  "CEU Admission Test",
+  "LPU Entrance Exam",
+  "SPUM Entrance Examination",
 ];
 
 function escapeRegExp(str: string): string {
@@ -91,8 +111,9 @@ const NUMBERED_REQUIREMENT_GLOBAL = /(?:^|\s)\d{1,2}[.)]\s+/g;
 const NUMBERED_REQUIREMENT_SPLIT = /(?:^|\s)\d{1,2}[.)]\s+/;
 
 const FEE_BASIS_PATTERNS: Array<[string, RegExp]> = [
-  ["semester", /per\s+semester|\/\s*semester|each\s+semester/i],
-  ["trimester", /per\s+trimester|\/\s*trimester/i],
+  ["semester", /per\s+sem(?:ester)?|\/\s*sem(?:ester)?|each\s+sem(?:ester)?/i],
+  ["trimester", /per\s+trimester|\/\s*trimester|per\s+term|\/\s*term/i],
+  ["quarter", /per\s+quarter|\/\s*quarter/i],
   ["unit", /per\s+unit|\/\s*unit/i],
   ["year", /per\s+(?:academic\s+)?year|annual|\/\s*year/i],
 ];
@@ -199,6 +220,21 @@ export function normalizedDates(text: string): string[] {
     }
   }
 
+  // Handle same-month ranges like "October 15 - 30, 2025" or "Oct. 1–15, 2026"
+  const sameMonthRangeRe = new RegExp(
+    `\\b(${MONTH_TOKEN})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:[-–—]|to)\\s*(\\d{1,2})(?:st|nd|rd|th)?\\s*,?\\s+(20\\d{2})\\b`,
+    "gi",
+  );
+  for (const match of text.matchAll(sameMonthRangeRe)) {
+    const month = monthFromToken(match[1]);
+    if (month) {
+      const startIso = makeIsoDate(Number(match[4]), month, Number(match[2]));
+      const endIso = makeIsoDate(Number(match[4]), month, Number(match[3]));
+      if (startIso) dates.add(startIso);
+      if (endIso) dates.add(endIso);
+    }
+  }
+
   return Array.from(dates).sort();
 }
 
@@ -299,10 +335,12 @@ function deadlineLabel(text: string): string {
   const patterns: Array<[RegExp, string]> = [
     [/late\s+documents?/i, "Late document submission"],
     [/submission\s+of\s+(?:documents|requirements)/i, "Document submission"],
-    [/exam(?:ination)?\s+(?:date|schedule)/i, "Entrance examination date"],
-    [/application\s+(?:period|window)/i, "Application period"],
-    [/deadline|due\s+date|closing\s+date|last\s+day/i, "Application deadline"],
-    [/opening|starts?/i, "Application opening"],
+    [/results?\s+(?:release|posting|announcement)|release\s+of\s+results/i, "Results release"],
+    [/confirmation\s+of\s+enrollment|enrollment\s+(?:period|schedule)/i, "Enrollment & confirmation"],
+    [/exam(?:ination)?\s+(?:date|schedule)|testing\s+(?:date|schedule)/i, "Entrance examination date"],
+    [/application\s+(?:period|window|schedule)/i, "Application period"],
+    [/deadline|due\s+date|closing\s+date|last\s+day|cut-?off/i, "Application deadline"],
+    [/opening|starts?|begins?/i, "Application opening"],
   ];
   for (const [pattern, label] of patterns) {
     if (pattern.test(text)) return label;
@@ -346,7 +384,7 @@ function feeBasis(text: string, fallback?: unknown): string {
   if (bases.length > 1) return "unspecified";
   if (
     typeof fallback === "string" &&
-    ["semester", "trimester", "unit", "year"].includes(fallback)
+    ["semester", "trimester", "quarter", "unit", "year"].includes(fallback)
   ) {
     return fallback;
   }
@@ -599,6 +637,24 @@ function buildFees(
           source_url: sourceUrl,
         });
       }
+    } else if (
+      /(?:free\s+tuition|free\s+higher\s+education|ra\s*10931|republic\s+act\s*(?:no\.?\s*)?10931|universal\s+access\s+to\s+quality\s+tertiary\s+education|no\s+tuition\s+fee)/i.test(
+        text,
+      )
+    ) {
+      const summary =
+        text.length <= 500
+          ? text
+          : focusNearKeyword(text, /free\s+tuition|free\s+higher|10931|tuition/i);
+      rows.push({
+        amount_min: 0,
+        amount_max: 0,
+        currency: "PHP",
+        basis: basis === "unspecified" ? "semester" : basis,
+        raw_text: summary,
+        academic_year: year,
+        source_url: sourceUrl,
+      });
     } else {
       const summary =
         text.length <= 500
@@ -908,6 +964,92 @@ export function structureRecord(
       ? record.retrieved_at_utc
       : null;
 
+  const crossPageConflicts: ConflictRow[] = [];
+
+  // 1. Flag mismatched academic years across fetched official pages
+  if (academicYears.length > 1) {
+    const sortedYears = [...academicYears].sort().reverse();
+    crossPageConflicts.push({
+      field: "academic_year",
+      kept_value: sortedYears[0],
+      discarded_value: sortedYears.slice(1).join(", "),
+      reason:
+        "Multiple academic years appeared across official pages; verify which intake applies.",
+    });
+  }
+
+  // 2. Flag cross-page disagreements on deadline dates for the same deadline label
+  const deadlineByLabel = new Map<string, DeadlineRow>();
+  for (const d of deadlines) {
+    if (!d.date_iso || d.label === "Application date (verify meaning)") continue;
+    const key = normalizeKey(d.label);
+    const prev = deadlineByLabel.get(key);
+    if (!prev) {
+      deadlineByLabel.set(key, d);
+    } else if (
+      prev.date_iso !== d.date_iso &&
+      prev.source_url &&
+      d.source_url &&
+      prev.source_url !== d.source_url
+    ) {
+      const prevPrio = priorityFor(prev, priorities);
+      const curPrio = priorityFor(d, priorities);
+      const [winner, loser] = curPrio < prevPrio ? [d, prev] : [prev, d];
+      deadlineByLabel.set(key, winner);
+      crossPageConflicts.push({
+        field: "application_deadlines",
+        kept_value: `${winner.label}: ${winner.date_iso} (${winner.source_url})`,
+        discarded_value: `${loser.label}: ${loser.date_iso} (${loser.source_url})`,
+        reason:
+          "Two official pages reported different dates for the same milestone; kept the higher-priority official page.",
+      });
+    }
+  }
+
+  // 3. Flag cross-page disagreements on numeric tuition amounts for the same billing basis
+  const feeByBasis = new Map<string, FeeRow>();
+  for (const f of fees) {
+    if (f.amount_min === null && f.amount_max === null) continue;
+    const key = normalizeKey(f.basis || "unspecified");
+    const prev = feeByBasis.get(key);
+    if (!prev) {
+      feeByBasis.set(key, f);
+    } else if (
+      (prev.amount_min !== f.amount_min || prev.amount_max !== f.amount_max) &&
+      prev.source_url &&
+      f.source_url &&
+      prev.source_url !== f.source_url
+    ) {
+      const prevPrio = priorityFor(prev, priorities);
+      const curPrio = priorityFor(f, priorities);
+      const [winner, loser] = curPrio < prevPrio ? [f, prev] : [prev, f];
+      feeByBasis.set(key, winner);
+      const fmt = (row: FeeRow) => {
+        const minStr = (row.amount_min ?? 0).toLocaleString("en-PH");
+        const maxStr =
+          row.amount_max && row.amount_max !== row.amount_min
+            ? `–${row.amount_max.toLocaleString("en-PH")}`
+            : "";
+        return `PHP ${minStr}${maxStr} / ${row.basis}`;
+      };
+      crossPageConflicts.push({
+        field: "tuition_fees",
+        kept_value: `${fmt(winner)} (${winner.source_url})`,
+        discarded_value: `${fmt(loser)} (${loser.source_url})`,
+        reason:
+          "Two official pages listed different fee amounts for the same billing basis; kept the higher-priority official page.",
+      });
+    }
+  }
+
+  // Order deadlines and fees so higher-priority official pages always appear first
+  const orderedDeadlines = [...deadlines].sort(
+    (a, b) => priorityFor(a, priorities) - priorityFor(b, priorities),
+  );
+  const orderedFees = [...fees].sort(
+    (a, b) => priorityFor(a, priorities) - priorityFor(b, priorities),
+  );
+
   return {
     algorithm: ALGORITHM_VERSION,
     university_name: cleanText(record.university_name ?? ""),
@@ -919,9 +1061,9 @@ export function structureRecord(
       Array.isArray(record.programs) ? record.programs : [],
     ),
     admission_requirements: requirements,
-    application_deadlines: deadlines,
+    application_deadlines: orderedDeadlines,
     entrance_examinations: exams,
-    tuition_fees: fees,
+    tuition_fees: orderedFees,
     application_links: cleanLinks,
     source_urls: sourceUrls,
     last_verified_at: verifiedAt,
@@ -930,6 +1072,7 @@ export function structureRecord(
       ...deadlineConflicts,
       ...examConflicts,
       ...feeConflicts,
+      ...crossPageConflicts,
     ],
     missing: {
       admission_requirements: requirements.length === 0,

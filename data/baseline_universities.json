@@ -1,0 +1,935 @@
+{
+  "generated_at_utc": "2026-11-21T00:00:00Z",
+  "records": [
+    {
+      "university_name": "University of the Philippines Manila",
+      "campus_location": "Padre Faura Street, Ermita, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.upm.edu.ph/admissions/",
+          "final_url": "https://www.upm.edu.ph/admissions/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage", "tuition_estimates"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.upm.edu.ph/academics/",
+          "final_url": "https://www.upm.edu.ph/academics/",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://upcat.up.edu.ph/",
+          "final_url": "https://upcat.up.edu.ph/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline programs, UPCAT policy, Return Service Agreement (RSA) requirement, and RA 10931 Free Higher Education status verified from official UP and UP Manila portals.",
+        "Annual UPCAT application windows and campus/program quotas vary per cycle; confirm exact dates on upcat.up.edu.ph."
+      ],
+      "programs": [
+        { "name": "Bachelor of Arts in Behavioral Sciences", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Organizational Communication", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Philippine Studies", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Political Science", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Social Sciences (Area Studies)", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Biochemistry", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Biology", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Chemistry", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Mathematics", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Physical Therapy", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Occupational Therapy", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Speech-Language Pathology", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Radiologic Technology", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Nursing", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Pharmacy", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Pharmaceutical Sciences", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Public Health", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Doctor of Dental Medicine", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Basic Medical Sciences (INTARMED)", "strand_alignment": null, "source_url": "https://www.upm.edu.ph/academics/" }
+      ],
+      "admission_requirements": [
+        { "text": "Must be a graduate of a DepEd-accredited high school or hold a valid Philippine Educational Placement Test (PEPT) certificate eligible for college admission.", "source_url": "https://www.upm.edu.ph/admissions/" },
+        { "text": "Qualification is determined by the University Predicted Grade (UPG), combining standardized UPCAT scores and the High School Weighted Average (Grades 8, 9, 10, and 11), subject to UP Manila campus and degree program quotas.", "source_url": "https://upcat.up.edu.ph/" },
+        { "text": "Complete UPCAT online application forms (including Form 1 and school-certified Form 2 high school records) through the UP Office of Admissions portal.", "source_url": "https://upcat.up.edu.ph/" },
+        { "text": "Qualifiers to UP Manila health sciences colleges (CAMP, Dentistry, Medicine/INTARMED, Nursing, Pharmacy, Public Health, School of Health Sciences) must sign the Return Service Agreement (RSA) committing to serve in the Philippines after graduation.", "source_url": "https://www.upm.edu.ph/admissions/" },
+        { "text": "Pass the medical and health clearance examination administered by the UP Manila University Health Service / Philippine General Hospital (PGH) prior to enrollment.", "source_url": "https://www.upm.edu.ph/admissions/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "UPCAT (UP College Admission Test): Covers Language Proficiency (English and Filipino), Reading Comprehension, Science, and Mathematics, combined with Grades 8–11 High School Weighted Average to compute the University Predicted Grade (UPG).", "source_url": "https://upcat.up.edu.ph/" }
+      ],
+      "tuition_estimates": [
+        { "text": "Free Tuition and covered other school fees under Republic Act No. 10931 (Universal Access to Quality Tertiary Education Act) for eligible Filipino first-time undergraduate students in State Universities and Colleges.", "amounts": [{ "min_php": 0, "max_php": 0 }], "basis": "semester", "source_url": "https://www.upm.edu.ph/admissions/" }
+      ],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "UP Manila Admissions Overview", "url": "https://www.upm.edu.ph/admissions/", "source_url": "https://www.upm.edu.ph/admissions/" },
+        { "label": "UPCAT Official Admissions Portal", "url": "https://upcat.up.edu.ph/", "source_url": "https://www.upm.edu.ph/admissions/" },
+        { "label": "UP Manila Academic Programs", "url": "https://www.upm.edu.ph/academics/", "source_url": "https://www.upm.edu.ph/academics/" }
+      ]
+    },
+    {
+      "university_name": "University of Santo Tomas",
+      "campus_location": "España Boulevard, Sampaloc, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://ofad.ust.edu.ph/",
+          "final_url": "https://ofad.ust.edu.ph/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.ust.edu.ph/academics/programs/",
+          "final_url": "https://www.ust.edu.ph/academics/programs/",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline undergraduate programs, USTET coverage, and OFAD freshman application requirements verified from official UST resources.",
+        "Tuition amounts are intentionally omitted until verified directly from the current official UST Tuition & Fees table; confirm annual USTET deadlines on ofad.ust.edu.ph."
+      ],
+      "programs": [
+        { "name": "Bachelor of Arts in Asian Studies", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in Behavioral Science", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in Communication", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in English Language Studies", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in History", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in Journalism", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in Legal Management", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in Literature", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in Philosophy", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in Political Science", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Arts in Sociology", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Accountancy", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Accounting Information System", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Architecture", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Interior Design", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Business Administration", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Entrepreneurship", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Chemical Engineering", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Civil Engineering", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Electrical Engineering", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Electronics Engineering", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Industrial Engineering", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Mechanical Engineering", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Information Systems", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Information Technology", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Applied Physics", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Biology", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Chemistry", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Mathematics", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Microbiology", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Psychology", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Nursing", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Pharmacy", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Biochemistry", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Industrial Pharmacy", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Physical Therapy", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Occupational Therapy", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Speech-Language Pathology", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in Sports Science", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Elementary Education", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Secondary Education", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Special Needs Education", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Physical Education", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Fine Arts in Advertising Arts", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Fine Arts in Industrial Design", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Fine Arts in Painting", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in International Hospitality Management", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Science in International Travel and Tourism Management", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "name": "Bachelor of Music", "strand_alignment": null, "source_url": "https://www.ust.edu.ph/academics/programs/" }
+      ],
+      "admission_requirements": [
+        { "text": "Current Grade 12 senior high school student graduating at the end of the current academic year (previous-year graduates, PEPT/ALS passers, and foreign-school applicants require prior clearance from the UST Office of the Registrar).", "source_url": "https://ofad.ust.edu.ph/" },
+        { "text": "Online registration via the UST Office for Admissions (OFAD) portal selecting a Priority Program and an Alternative Program.", "source_url": "https://ofad.ust.edu.ph/" },
+        { "text": "Accomplished USTET College Application Grades Form reflecting required high school academic performance.", "source_url": "https://ofad.ust.edu.ph/" },
+        { "text": "PSA Birth Certificate (or valid passport for foreign applicants) and recent 2x2 ID picture following OFAD guidelines.", "source_url": "https://ofad.ust.edu.ph/" },
+        { "text": "Pass the University of Santo Tomas Entrance Test (USTET); specialized programs (such as Architecture, Fine Arts, Music, and select health/arts degrees) may also require an interview, drawing test, or audition.", "source_url": "https://ofad.ust.edu.ph/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "USTET (University of Santo Tomas Entrance Test): Evaluates four core subtests — English, Mathematics, Science, and Mental Ability — plus program-specific drawing tests, interviews, or auditions where required.", "source_url": "https://ofad.ust.edu.ph/" }
+      ],
+      "tuition_estimates": [],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "UST Office for Admissions (OFAD)", "url": "https://ofad.ust.edu.ph/", "source_url": "https://ofad.ust.edu.ph/" },
+        { "label": "UST Academic Programs Directory", "url": "https://www.ust.edu.ph/academics/programs/", "source_url": "https://www.ust.edu.ph/academics/programs/" },
+        { "label": "UST Tuition & Fees Schedule", "url": "https://www.ust.edu.ph/tuition-fees/", "source_url": "https://www.ust.edu.ph/tuition-fees/" }
+      ]
+    },
+    {
+      "university_name": "Adamson University",
+      "campus_location": "900 San Marcelino Street, Ermita, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.adamson.edu.ph/v1/?page=admission",
+          "final_url": "https://www.adamson.edu.ph/v1/?page=admission",
+          "status": "fetched",
+          "fields": ["admission_requirements"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.adamson.edu.ph/v1/?page=academics",
+          "final_url": "https://www.adamson.edu.ph/v1/?page=academics",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline undergraduate programs and freshman evaluation/enrollment document checklist verified from Adamson University admissions references.",
+        "Tuition amounts and intake-specific dates are intentionally omitted; confirm current fee schedules and any entrance assessment policies directly on adamson.edu.ph."
+      ],
+      "programs": [
+        { "name": "Bachelor of Science in Accountancy", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Business Administration", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Customs Administration", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Hospitality Management", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Supply Chain Management", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Architecture", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Chemical Engineering", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Chemical Process Technology", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Civil Engineering", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Computer Engineering", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Electrical Engineering", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Electronics Engineering", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Geology", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Industrial Engineering", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Mechanical Engineering", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Mining Engineering", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Petroleum Engineering", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Information Systems", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Information Technology", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Biology", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Chemistry", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Psychology", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Pharmacy", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Science in Nursing", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Arts in Communication", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Arts in Philosophy", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Arts in Political Science", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Elementary Education", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Secondary Education", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" },
+        { "name": "Bachelor of Physical Education", "strand_alignment": null, "source_url": "https://www.adamson.edu.ph/v1/?page=academics" }
+      ],
+      "admission_requirements": [
+        { "text": "Online application submission with scanned back-to-back Grade 12 Report Card (Form 138) or initial Grade 12 grades (ALS/PEPT Certificate of Rating for equivalency passers).", "source_url": "https://www.adamson.edu.ph/v1/?page=admission" },
+        { "text": "Original Grade 12 Report Card (DepEd Form 138) signed by the school principal indicating eligibility for college admission upon enrollment.", "source_url": "https://www.adamson.edu.ph/v1/?page=admission" },
+        { "text": "Original Certificate of Good Moral Character bearing the school seal.", "source_url": "https://www.adamson.edu.ph/v1/?page=admission" },
+        { "text": "Clear copy of PSA Birth Certificate and two (2) recent 2x2 ID photos with white background.", "source_url": "https://www.adamson.edu.ph/v1/?page=admission" },
+        { "text": "Graduates from schools abroad must submit academic credentials authenticated or apostille-stamped by the Philippine Embassy or Consulate.", "source_url": "https://www.adamson.edu.ph/v1/?page=admission" }
+      ],
+      "entrance_exam_coverage": [],
+      "tuition_estimates": [],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "Adamson University Admissions", "url": "https://www.adamson.edu.ph/v1/?page=admission", "source_url": "https://www.adamson.edu.ph/v1/?page=admission" },
+        { "label": "Adamson Colleges & Degree Programs", "url": "https://www.adamson.edu.ph/v1/?page=academics", "source_url": "https://www.adamson.edu.ph/v1/?page=academics" }
+      ]
+    },
+    {
+      "university_name": "University of the East",
+      "campus_location": "2219 C.M. Recto Avenue, Sampaloc, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.ue.edu.ph/manila/admissions/",
+          "final_url": "https://www.ue.edu.ph/manila/admissions/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.ue.edu.ph/manila/academics/",
+          "final_url": "https://www.ue.edu.ph/manila/academics/",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline Manila campus undergraduate programs, UE-CET requirement, and freshman credentials verified from official ue.edu.ph pages.",
+        "Tuition amounts and current application cutoff dates are intentionally omitted; confirm latest fees on ue.edu.ph/manila/tuition-and-other-fees/."
+      ],
+      "programs": [
+        { "name": "Bachelor of Science in Accountancy", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Management Accounting", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in Business Economics", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in Business Management", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in Financial Management", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in Marketing Management", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Information Technology", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Information Systems", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Data Science", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Entertainment and Multimedia Computing", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Civil Engineering", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Computer Engineering", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Electrical Engineering", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Electronics Engineering", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Mechanical Engineering", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Biology", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Medical Technology", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Psychology", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Legal Management", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Hospitality Management", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Science in Tourism Management", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Arts in Broadcasting", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Arts in International Studies", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Arts in Political Science", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Elementary Education", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Secondary Education", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Bachelor of Special Needs Education", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" },
+        { "name": "Doctor of Dental Medicine", "strand_alignment": null, "source_url": "https://www.ue.edu.ph/manila/academics/" }
+      ],
+      "admission_requirements": [
+        { "text": "Accomplished UE Online Admission Application form submitted through the official UE online admissions portal.", "source_url": "https://www.ue.edu.ph/manila/admissions/" },
+        { "text": "Recent 2x2 full-color ID photo with white background.", "source_url": "https://www.ue.edu.ph/manila/admissions/" },
+        { "text": "Grade 12 Report Card for senior high school graduates, Grade 11 Report Card for current Grade 12 applicants, or PEPT/ALS rating certificate for equivalency qualifiers.", "source_url": "https://www.ue.edu.ph/manila/admissions/" },
+        { "text": "Proof of payment for the UE-CET application fee and passing the UE College Entrance Test (UE-CET) plus any college-specific screening requirements.", "source_url": "https://www.ue.edu.ph/manila/admissions/" },
+        { "text": "PSA-authenticated Birth Certificate and Certificate of Good Moral Character for enrollment credential verification.", "source_url": "https://www.ue.edu.ph/manila/admissions/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "UE-CET (University of the East College Entrance Test): Mandatory qualifying entrance examination for undergraduate admission to UE Manila, subject to additional screening criteria for specific colleges.", "source_url": "https://www.ue.edu.ph/manila/admissions/" }
+      ],
+      "tuition_estimates": [],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "UE Manila Admissions", "url": "https://www.ue.edu.ph/manila/admissions/", "source_url": "https://www.ue.edu.ph/manila/admissions/" },
+        { "label": "UE Online Admission Portal", "url": "https://apps.ue.edu.ph/onlineadmission", "source_url": "https://www.ue.edu.ph/manila/admissions/" },
+        { "label": "UE Manila Tuition & Other Fees", "url": "https://www.ue.edu.ph/manila/tuition-and-other-fees/", "source_url": "https://www.ue.edu.ph/manila/tuition-and-other-fees/" }
+      ]
+    },
+    {
+      "university_name": "Far Eastern University",
+      "campus_location": "Nicanor Reyes Street, Sampaloc, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.feu.edu.ph/admissions/",
+          "final_url": "https://www.feu.edu.ph/admissions/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.feu.edu.ph/academics/",
+          "final_url": "https://www.feu.edu.ph/academics/",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline FEU Manila institute degree programs and FEU-CAT admissions requirements verified from official feu.edu.ph pages.",
+        "Tuition amounts and cycle-specific exam schedules are intentionally omitted; confirm latest fees on feu.edu.ph/tuition-and-other-fees/."
+      ],
+      "programs": [
+        { "name": "Bachelor of Science in Accountancy", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Internal Auditing", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Business Administration", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Biology", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Psychology", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Communication", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in International Studies", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Political Science", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Architecture", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Fine Arts", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Elementary Education", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Physical Education", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Exercise and Sports Science", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Nursing", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Medical Technology", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in International Tourism Management", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Restaurant and Hospitality Management", "strand_alignment": null, "source_url": "https://www.feu.edu.ph/academics/" }
+      ],
+      "admission_requirements": [
+        { "text": "Satisfactory completion of Senior High School or DepEd-certified equivalent (PEPT or Non-Formal Equivalency Test).", "source_url": "https://www.feu.edu.ph/admissions/" },
+        { "text": "Register and submit an online freshman application through the official FEU admissions portal.", "source_url": "https://www.feu.edu.ph/admissions/" },
+        { "text": "Pay the FEU-CAT application fee and upload proof of payment (application fee may be waived for public school applicants belonging to the Top 10 of their Grade 11 batch with principal certification).", "source_url": "https://www.feu.edu.ph/admissions/" },
+        { "text": "Book an exam schedule through the FEU Admissions portal and pass the FEU College Admissions Test (FEU-CAT).", "source_url": "https://www.feu.edu.ph/admissions/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "FEU-CAT (FEU College Admissions Test): Required freshman qualifying examination booked online via the FEU Admissions portal.", "source_url": "https://www.feu.edu.ph/admissions/" }
+      ],
+      "tuition_estimates": [],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "FEU Admissions & FEU-CAT Portal", "url": "https://www.feu.edu.ph/admissions/", "source_url": "https://www.feu.edu.ph/admissions/" },
+        { "label": "FEU Institutes & Degree Programs", "url": "https://www.feu.edu.ph/academics/", "source_url": "https://www.feu.edu.ph/academics/" },
+        { "label": "FEU Tuition & Other Fees", "url": "https://www.feu.edu.ph/tuition-and-other-fees/", "source_url": "https://www.feu.edu.ph/tuition-and-other-fees/" }
+      ]
+    },
+    {
+      "university_name": "San Beda University",
+      "campus_location": "638 Mendiola Street, San Miguel, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.sanbeda.edu.ph/manila/admissions",
+          "final_url": "https://www.sanbeda.edu.ph/manila/admissions",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.sanbeda.edu.ph/manila/academics",
+          "final_url": "https://www.sanbeda.edu.ph/manila/academics",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline Manila campus undergraduate programs (College of Arts and Sciences, College of Accountancy and Business, and College of Nursing) and freshman academic grade/exam/interview standards verified from official sanbeda.edu.ph pages.",
+        "Tuition amounts and annual application dates are intentionally omitted; confirm current schedules directly on sanbeda.edu.ph."
+      ],
+      "programs": [
+        { "name": "Bachelor of Arts in English", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Arts in Literature", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Arts in Political Science", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Information Systems", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Information Technology", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Economics and Public Policy", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Environmental Science", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Human Biology", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Psychology", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Exercise and Sports Sciences major in Fitness and Sports Management", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Accountancy", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Management Accounting", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Internal Auditing", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Accounting Information Systems", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Business Administration major in Financial Management", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Business Administration major in Human Resource Management", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Business Administration major in Marketing Management", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Business Administration major in Operations Management", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Entrepreneurship", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Legal Management", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" },
+        { "name": "Bachelor of Science in Nursing", "strand_alignment": null, "source_url": "https://www.sanbeda.edu.ph/manila/academics" }
+      ],
+      "admission_requirements": [
+        { "text": "General grade average of at least 82% in Senior High School with no failing grade in any subject.", "source_url": "https://www.sanbeda.edu.ph/manila/admissions" },
+        { "text": "Pass the San Beda University College Entrance Examination.", "source_url": "https://www.sanbeda.edu.ph/manila/admissions" },
+        { "text": "Pass the official admissions interview (panel interview for Nursing applicants).", "source_url": "https://www.sanbeda.edu.ph/manila/admissions" },
+        { "text": "Favorable recommendation from authorized officials of the last school/senior high school attended.", "source_url": "https://www.sanbeda.edu.ph/manila/admissions" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "SBU College Entrance Examination: Required undergraduate entrance examination paired with an official admissions interview and minimum 82% general average requirement.", "source_url": "https://www.sanbeda.edu.ph/manila/admissions" }
+      ],
+      "tuition_estimates": [],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "San Beda Manila Admissions", "url": "https://www.sanbeda.edu.ph/manila/admissions", "source_url": "https://www.sanbeda.edu.ph/manila/admissions" },
+        { "label": "San Beda Manila Academic Programs", "url": "https://www.sanbeda.edu.ph/manila/academics", "source_url": "https://www.sanbeda.edu.ph/manila/academics" }
+      ]
+    },
+    {
+      "university_name": "Mapúa University",
+      "campus_location": "658 Muralla Street, Intramuros, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.mapua.edu.ph/admissions/",
+          "final_url": "https://www.mapua.edu.ph/admissions/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs",
+          "final_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline Intramuros Manila undergraduate engineering, architecture, design, and science programs plus MPASS policies verified from official mapua.edu.ph pages.",
+        "Programs such as Business, Accountancy, Information Technology, and Health Sciences are primarily hosted at Mapúa's Makati campus and are excluded from this Intramuros Manila listing.",
+        "Tuition amounts and cycle-specific dates are intentionally omitted; confirm latest schedules on mapua.edu.ph/schedules-fees."
+      ],
+      "programs": [
+        { "name": "Bachelor of Science in Architecture", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Industrial Design", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Artificial Intelligence Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Biological Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Chemical Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Civil Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Computer Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Electrical Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Electronics Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Environmental and Sanitary Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Industrial Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Mechanical Engineering", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Chemistry", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Mathematics", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "name": "Bachelor of Science in Physics", "strand_alignment": null, "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" }
+      ],
+      "admission_requirements": [
+        { "text": "Submit the Online Application Form via the Mapúa Admissions portal to receive MPASS Applicant Portal login credentials.", "source_url": "https://www.mapua.edu.ph/admissions/" },
+        { "text": "Pay the MPASS fee and complete the Mapúa Program Placement Assessment (MPASS) online via Cardinal EDGE (unless eligible for an official exemption).", "source_url": "https://www.mapua.edu.ph/admissions/" },
+        { "text": "Original and photocopy of Grade 12 Report Card (Form 138) indicating eligibility for college admission, plus proof of Senior High School completion.", "source_url": "https://www.mapua.edu.ph/admissions/" },
+        { "text": "MPASS exemptions are available for applicants with SAT scores of 1,100 or higher, or completers of recognized International Baccalaureate (IB), Cambridge IGCSE, or British Curriculum programs upon uploading official certification.", "source_url": "https://www.mapua.edu.ph/admissions/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "MPASS (Mapúa Program Placement Assessment): Online computerized placement assessment taken through Cardinal EDGE; waived for SAT >= 1,100, IB, Cambridge IGCSE, and British Curriculum qualifiers.", "source_url": "https://www.mapua.edu.ph/admissions/" }
+      ],
+      "tuition_estimates": [],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "Mapúa Admissions & MPASS", "url": "https://www.mapua.edu.ph/admissions/", "source_url": "https://www.mapua.edu.ph/admissions/" },
+        { "label": "Mapúa Undergraduate Programs", "url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs", "source_url": "https://www.mapua.edu.ph/pages/academics/undergraduate-programs" },
+        { "label": "Mapúa Schedules & Fees", "url": "https://www.mapua.edu.ph/schedules-fees", "source_url": "https://www.mapua.edu.ph/schedules-fees" }
+      ]
+    },
+    {
+      "university_name": "Lyceum of the Philippines University",
+      "campus_location": "Muralla Street, Intramuros, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://manila.lpu.edu.ph/admissions/",
+          "final_url": "https://manila.lpu.edu.ph/admissions/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://manila.lpu.edu.ph/academics/",
+          "final_url": "https://manila.lpu.edu.ph/academics/",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline LPU Manila undergraduate programs, LCET waiver policy, and freshman enrollment/medical requirements verified from official manila.lpu.edu.ph pages.",
+        "Tuition amounts and reservation/enrollment schedules are intentionally omitted; confirm latest fees directly on manila.lpu.edu.ph."
+      ],
+      "programs": [
+        { "name": "Bachelor of Science in International Hospitality Management - Cruise Line Operations in Culinary Arts", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in International Hospitality Management - Cruise Line Operations in Hotel Services", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in International Hospitality Management - Culinary Arts and Kitchen Operations", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in International Hospitality Management - Hotel and Restaurant Administration", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in International Tourism Management", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Accountancy", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Management Accounting", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Customs Administration", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in Business Management", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in Marketing Management", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in Operations Management", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Legal Management", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Multimedia Arts", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Psychology", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Information Technology", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Esports", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Foreign Service major in Diplomacy", "strand_alignment": null, "source_url": "https://manila.lpu.edu.ph/academics/" }
+      ],
+      "admission_requirements": [
+        { "text": "Accomplished LPU Manila online application form and recent 2x2 color ID photo with white background.", "source_url": "https://manila.lpu.edu.ph/admissions/" },
+        { "text": "Original Grade 12 Report Card (Form 138) or Certificate of Candidacy for Graduation.", "source_url": "https://manila.lpu.edu.ph/admissions/" },
+        { "text": "Original Certificate of Good Moral Character and original plus photocopy of PSA Birth Certificate.", "source_url": "https://manila.lpu.edu.ph/admissions/" },
+        { "text": "Valid government-issued ID of parent or guardian if the applicant is a minor.", "source_url": "https://manila.lpu.edu.ph/admissions/" },
+        { "text": "Medical and dental clearance through LPU Health Services Office or a DOH-accredited clinic (CBC, Chest X-Ray, Urinalysis, Physical Exam; CITHM applicants require additional hepatitis screening tests).", "source_url": "https://manila.lpu.edu.ph/admissions/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "LCET (LPU College Entrance Test): Waived for most LPU Manila undergraduate programs, except BS Accountancy and BS Customs Administration which require passing the entrance test.", "source_url": "https://manila.lpu.edu.ph/admissions/" }
+      ],
+      "tuition_estimates": [],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "LPU Manila Admissions", "url": "https://manila.lpu.edu.ph/admissions/", "source_url": "https://manila.lpu.edu.ph/admissions/" },
+        { "label": "LPU Manila Colleges & Programs", "url": "https://manila.lpu.edu.ph/academics/", "source_url": "https://manila.lpu.edu.ph/academics/" }
+      ]
+    },
+    {
+      "university_name": "Centro Escolar University",
+      "campus_location": "9 Mendiola Street, San Miguel, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.ceu.edu.ph/admissions/",
+          "final_url": "https://www.ceu.edu.ph/admissions/",
+          "status": "fetched",
+          "fields": ["admission_requirements"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.ceu.edu.ph/academics/",
+          "final_url": "https://www.ceu.edu.ph/academics/",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline CEU Manila undergraduate programs and freshman admission document requirements verified from official ceu.edu.ph pages.",
+        "Tuition amounts, entrance test policies, and current intake dates are intentionally omitted; confirm latest guidelines directly via ceu.edu.ph/admissions/."
+      ],
+      "programs": [
+        { "name": "Doctor of Dental Medicine", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Doctor of Optometry", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Medical Technology", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Nursing", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Pharmacy", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Clinical Pharmacy", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Biology", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Cosmetic Science", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Psychology", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Accountancy", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in International Management", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Legal Management", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Information Technology", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in International Hospitality Management", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in International Tourism and Travel Management", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Early Childhood Education", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Special Needs Education", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Communication and Media", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Political Science", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Library and Information Science", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Social Work", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Music in Music Composition", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Music in Music Education", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" },
+        { "name": "Bachelor of Music in Music Performance", "strand_alignment": null, "source_url": "https://www.ceu.edu.ph/academics/" }
+      ],
+      "admission_requirements": [
+        { "text": "Accomplished CEU online undergraduate application form via the official CEU admissions portal.", "source_url": "https://www.ceu.edu.ph/admissions/" },
+        { "text": "High School Report Card (DepEd Form 138) or equivalent proof of Senior High School completion.", "source_url": "https://www.ceu.edu.ph/admissions/" },
+        { "text": "Certificate of Good Moral Character issued by the principal or guidance counselor of the previous school attended.", "source_url": "https://www.ceu.edu.ph/admissions/" },
+        { "text": "PSA Certificate of Live Birth and recent colored ID photographs per CEU Admissions Office specifications.", "source_url": "https://www.ceu.edu.ph/admissions/" }
+      ],
+      "entrance_exam_coverage": [],
+      "tuition_estimates": [],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "CEU Admissions Portal", "url": "https://www.ceu.edu.ph/admissions/", "source_url": "https://www.ceu.edu.ph/admissions/" },
+        { "label": "CEU Schools & Academic Programs", "url": "https://www.ceu.edu.ph/academics/", "source_url": "https://www.ceu.edu.ph/academics/" }
+      ]
+    },
+    {
+      "university_name": "Technological University of the Philippines",
+      "campus_location": "Ayala Boulevard, Ermita, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.tup.edu.ph/admissions/",
+          "final_url": "https://www.tup.edu.ph/admissions/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage", "tuition_estimates"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.tup.edu.ph/academics/",
+          "final_url": "https://www.tup.edu.ph/academics/",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline TUP Manila undergraduate BS and Bachelor of Engineering Technology (BET) programs, TUPSTAT policy, and RA 10931 Free Higher Education coverage verified from official tup.edu.ph pages.",
+        "Annual TUPSTAT application dates and strand/grade cutoffs vary per cycle; confirm current announcements on tup.edu.ph."
+      ],
+      "programs": [
+        { "name": "Bachelor of Science in Civil Engineering", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Electrical Engineering", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Electronics Engineering", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Mechanical Engineering", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Architecture", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Information Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Information Systems", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Environmental Science", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Applied Science major in Laboratory Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Food Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in Operations Management", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Entrepreneurship", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Hospitality Management", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Computer Engineering Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Civil Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Construction Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Dies and Moulds Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Electrical Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Electronics Communications Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Electronics Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Instrumentation and Control Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Mechanical Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" },
+        { "name": "Bachelor of Engineering Technology major in Mechatronics Technology", "strand_alignment": null, "source_url": "https://www.tup.edu.ph/academics/" }
+      ],
+      "admission_requirements": [
+        { "text": "Senior High School graduate or graduating student, or ALS passer meeting DepEd college equivalency rules.", "source_url": "https://www.tup.edu.ph/admissions/" },
+        { "text": "Complete online registration via the TUP Enrollment Registration System (ERS) Applicant Access Module and the TUP-Manila Online Application form.", "source_url": "https://www.tup.edu.ph/admissions/" },
+        { "text": "Submit Grade 11/12 Report Card (Form 138) and printed ERS application form to the TUP Office of Admissions to secure a TUPSTAT test permit.", "source_url": "https://www.tup.edu.ph/admissions/" },
+        { "text": "Certificate of Good Moral Character and medical/physical fitness clearance.", "source_url": "https://www.tup.edu.ph/admissions/" },
+        { "text": "Pass the TUP Scholastic and Technical Aptitude Test (TUPSTAT) and oral interview where required by the college.", "source_url": "https://www.tup.edu.ph/admissions/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "TUPSTAT (TUP Scholastic and Technical Aptitude Test): Official entrance examination required for incoming freshmen at TUP Manila, paired with college-level grade evaluation and oral interview where required.", "source_url": "https://www.tup.edu.ph/admissions/" }
+      ],
+      "tuition_estimates": [
+        { "text": "Free Tuition and covered other school fees under Republic Act No. 10931 (Universal Access to Quality Tertiary Education Act) for eligible Filipino first-time undergraduate students in State Universities and Colleges.", "amounts": [{ "min_php": 0, "max_php": 0 }], "basis": "semester", "source_url": "https://www.tup.edu.ph/admissions/" }
+      ],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "TUP Admissions & TUPSTAT", "url": "https://www.tup.edu.ph/admissions/", "source_url": "https://www.tup.edu.ph/admissions/" },
+        { "label": "TUP Colleges & Degree Programs", "url": "https://www.tup.edu.ph/academics/", "source_url": "https://www.tup.edu.ph/academics/" }
+      ]
+    },
+    {
+      "university_name": "Philippine Normal University",
+      "campus_location": "Taft Avenue, Ermita, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.pnu.edu.ph/admissions/",
+          "final_url": "https://www.pnu.edu.ph/admissions/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage", "tuition_estimates"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.pnu.edu.ph/academics/",
+          "final_url": "https://www.pnu.edu.ph/academics/",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline PNU Manila teacher education and allied undergraduate programs, PNUAT policy, and RA 10931 Free Higher Education coverage verified from PNU admissions references.",
+        "Annual PNUAT testing windows and specific GWA thresholds vary per cycle; confirm current announcements on pnu.edu.ph."
+      ],
+      "programs": [
+        { "name": "Bachelor of Early Childhood Education", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Elementary Education", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in English", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Filipino", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Mathematics", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Social Science", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Values Education", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in General Science", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Biology", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Chemistry", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Physics", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Music Education", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Physical Education", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Speech and Theatre Arts", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor in Culture and Arts Education", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Library and Information Science", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Psychology", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Biology for Teachers", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Chemistry for Teachers", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Mathematics for Teachers", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Physics for Teachers", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Nutrition and Dietetics for Teachers", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Information and Communication Technology Education", "strand_alignment": null, "source_url": "https://www.pnu.edu.ph/academics/" }
+      ],
+      "admission_requirements": [
+        { "text": "Senior High School graduate (any SHS strand accepted) from a DepEd-recognized school with a minimum General Weighted Average (GWA) of 85% and no failing grades.", "source_url": "https://www.pnu.edu.ph/admissions/" },
+        { "text": "Accomplished online application form through the official PNU admissions portal along with high school report cards / Form 138.", "source_url": "https://www.pnu.edu.ph/admissions/" },
+        { "text": "Certificate of Good Moral Character issued by the previous school principal or guidance counselor, PSA Birth Certificate, and recent passport-sized photos.", "source_url": "https://www.pnu.edu.ph/admissions/" },
+        { "text": "Pass the Philippine Normal University Admission Test (PNUAT), followed by interview and medical/mental health evaluation for qualifiers.", "source_url": "https://www.pnu.edu.ph/admissions/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "PNUAT (Philippine Normal University Admission Test): Required entrance examination for freshman admission to PNU Manila, followed by an interview and medical/mental health evaluation.", "source_url": "https://www.pnu.edu.ph/admissions/" }
+      ],
+      "tuition_estimates": [
+        { "text": "Free Tuition and covered other school fees under Republic Act No. 10931 (Universal Access to Quality Tertiary Education Act) for eligible Filipino first-time undergraduate students in State Universities and Colleges.", "amounts": [{ "min_php": 0, "max_php": 0 }], "basis": "semester", "source_url": "https://www.pnu.edu.ph/admissions/" }
+      ],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "PNU Admissions & PNUAT", "url": "https://www.pnu.edu.ph/admissions/", "source_url": "https://www.pnu.edu.ph/admissions/" },
+        { "label": "PNU Undergraduate Programs", "url": "https://www.pnu.edu.ph/academics/", "source_url": "https://www.pnu.edu.ph/academics/" }
+      ]
+    },
+    {
+      "university_name": "Pamantasan ng Lungsod ng Maynila",
+      "campus_location": "General Luna Street, Intramuros, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://www.plm.edu.ph/admissions/",
+          "final_url": "https://www.plm.edu.ph/admissions/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage", "tuition_estimates"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://www.plm.edu.ph/academics/colleges",
+          "final_url": "https://www.plm.edu.ph/academics/colleges",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline PLM undergraduate college programs, PLMAT coverage, strict no-prior-college-units policy, and CHED-recognized LUC RA 10931 Free Higher Education status verified from PLM admissions references.",
+        "Annual PLMAT application windows and Manila residency / scholarship categories are confirmed per cycle on plm.edu.ph/admissions/."
+      ],
+      "programs": [
+        { "name": "Bachelor of Science in Architecture", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Accountancy", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Business Administration major in Financial Management", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Business Administration major in Human Resource Management", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Business Administration major in Marketing Management", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Business Administration major in Operations Management", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Government Management", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Chemical Engineering", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Civil Engineering", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Computer Engineering", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Electrical Engineering", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Electronics Engineering", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Industrial Engineering", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Mechanical Engineering", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Nursing", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Physical Therapy", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Biology", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Chemistry", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Information Technology", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Mathematics", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Early Childhood Education", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Elementary Education", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Secondary Education major in English", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Secondary Education major in Filipino", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Secondary Education major in Mathematics", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Secondary Education major in Science", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Secondary Education major in Social Studies", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Arts in Communication", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" },
+        { "name": "Bachelor of Science in Social Work", "strand_alignment": null, "source_url": "https://www.plm.edu.ph/academics/colleges" }
+      ],
+      "admission_requirements": [
+        { "text": "Current Grade 12 student in a DepEd-accredited Senior High School, SHS graduate, or ALS A&E passer recommended for college who has NOT taken any prior college or university units elsewhere.", "source_url": "https://www.plm.edu.ph/admissions/" },
+        { "text": "Upload PSA Birth Certificate, Grade 11/12 School ID, Senior High School Report Card (Form 138) showing General Weighted Average, and recent ID photo via the PLM Admission Portal.", "source_url": "https://www.plm.edu.ph/admissions/" },
+        { "text": "Pass the PLM Admission Test (PLMAT) and satisfy college-specific ranking/cutoff requirements.", "source_url": "https://www.plm.edu.ph/admissions/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "PLMAT (PLM Admission Test): Standardized entrance examination covering English, Science, Mathematics, Filipino, and Abstract Reasoning.", "source_url": "https://www.plm.edu.ph/admissions/" }
+      ],
+      "tuition_estimates": [
+        { "text": "Free Tuition and covered other school fees under Republic Act No. 10931 (CHED-recognized Local University and College funded by the City of Manila) for eligible Filipino first-time undergraduate students.", "amounts": [{ "min_php": 0, "max_php": 0 }], "basis": "semester", "source_url": "https://www.plm.edu.ph/admissions/" }
+      ],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "PLM Admissions & PLMAT", "url": "https://www.plm.edu.ph/admissions/", "source_url": "https://www.plm.edu.ph/admissions/" },
+        { "label": "PLM Colleges & Degree Programs", "url": "https://www.plm.edu.ph/academics/colleges", "source_url": "https://www.plm.edu.ph/academics/colleges" }
+      ]
+    },
+    {
+      "university_name": "St. Paul University Manila",
+      "campus_location": "680 Pedro Gil Street, Malate, Manila, Metro Manila",
+      "retrieved_at_utc": "2026-11-21T00:00:00Z",
+      "sources": [
+        {
+          "requested_url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/",
+          "final_url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/",
+          "status": "fetched",
+          "fields": ["admission_requirements", "entrance_exam_coverage"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        },
+        {
+          "requested_url": "https://spumanila.edu.ph/academics/",
+          "final_url": "https://spumanila.edu.ph/academics/",
+          "status": "fetched",
+          "fields": ["programs"],
+          "retrieved_at_utc": "2026-11-21T00:00:00Z"
+        }
+      ],
+      "source_notes": [
+        "Baseline SPU Manila undergraduate programs, waived entrance exam / zero application fee policy, and freshman documentary checklist verified from official spumanila.edu.ph pages.",
+        "Tuition amounts and cycle-specific enrollment dates are intentionally omitted; confirm latest fees directly on spumanila.edu.ph."
+      ],
+      "programs": [
+        { "name": "Bachelor of Arts in Communication", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in English Language", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Arts in Visual Design and Communication", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Psychology", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Early Childhood Education", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Elementary Education", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Special Needs Education", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in English", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Mathematics", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Secondary Education major in Science", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Business Administration major in Marketing Management", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Entrepreneurship", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Management Accounting", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Tourism Management", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Hospitality Management", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Computer Science", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Information Technology", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Science in Nursing", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" },
+        { "name": "Bachelor of Music in Music Education", "strand_alignment": null, "source_url": "https://spumanila.edu.ph/academics/" }
+      ],
+      "admission_requirements": [
+        { "text": "No application fee is collected; submit the online admission form via the official SPU Manila admissions portal.", "source_url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/" },
+        { "text": "Copy of Grade 12 Report Card reflecting the latest completed grading period or semester (plus complete previous year report card if ongoing).", "source_url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/" },
+        { "text": "Certificate of Good Moral Character (waived for SPU Manila Senior High School graduating students/graduates).", "source_url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/" },
+        { "text": "Digital image of a recent 2x2 colored ID photo with plain background.", "source_url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/" },
+        { "text": "Two (2) Letters of Recommendation using the official SPU Manila template from a class adviser, teacher, guidance counselor, club moderator, or principal, plus an online or on-site interview with the Program Chairperson if invited.", "source_url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "SPUM Entrance Examination: Entrance exam is waived; incoming freshmen are evaluated through uploaded academic credentials, two recommendation letters, and an interview with the Program Chairperson.", "source_url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/" }
+      ],
+      "tuition_estimates": [],
+      "application_deadlines": [],
+      "application_links": [
+        { "label": "Apply to St. Paul University Manila", "url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/", "source_url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/" },
+        { "label": "SPU Manila Academic Programs", "url": "https://spumanila.edu.ph/academics/", "source_url": "https://spumanila.edu.ph/academics/" }
+      ]
+    }
+  ],
+  "supplements": {
+    "dlsu-manila": {
+      "admission_requirements": [
+        { "text": "Online-only application through the official DLSU Archers Hub admissions portal (manual/paper applications are not accepted).", "source_url": "https://www.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/" },
+        { "text": "Eligible applicants include current Grade 12 students expected to graduate, previous high school graduates who have not taken any college courses elsewhere (with Declaration as a New Student Form), DepEd-certified PEPT/ALS/NFEA&E passers, or qualified SAT/IB/A-Level credential holders.", "source_url": "https://www.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/" },
+        { "text": "Accomplished Secondary Scholastic Record in official DLSU format signed by the school principal or registrar, plus clear digital scans of required forms and identification.", "source_url": "https://www.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/" }
+      ],
+      "entrance_exam_coverage": [
+        { "text": "DCAT (DLSU College Admission Test): Evaluates Mental Ability / Logical Reasoning, Reading Comprehension, English and Filipino Language Proficiency, Mathematics (including Algebra, Geometry, and Statistics), and Science.", "source_url": "https://www.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/" }
+      ],
+      "application_links": [
+        { "label": "DLSU Freshmen Procedures & Archers Hub", "url": "https://www.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/", "source_url": "https://www.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/" },
+        { "label": "DLSU Undergraduate Degree Programs", "url": "https://www.dlsu.edu.ph/admissions/undergraduate/degree-programs/", "source_url": "https://www.dlsu.edu.ph/admissions/undergraduate/degree-programs/" },
+        { "label": "DLSU Tuition & Other Fees", "url": "https://www.dlsu.edu.ph/admissions/bachelor-degrees/tuition-and-other-fees/", "source_url": "https://www.dlsu.edu.ph/admissions/bachelor-degrees/tuition-and-other-fees/" }
+      ],
+      "source_notes": [
+        "Freshman eligibility, Archers Hub online-only filing, and DCAT components verified from official dlsu.edu.ph pages to complement the pre-collected degree catalog."
+      ]
+    },
+    "pup-sta-mesa": {
+      "entrance_exam_coverage": [
+        { "text": "PUPCET (PUP College Entrance Test): Official qualifying entrance examination for incoming freshmen applying to PUP Sta. Mesa, Manila via the PUP iApply portal.", "source_url": "https://www.pup.edu.ph/iapply/pupcet" }
+      ],
+      "tuition_estimates": [
+        { "text": "Free Tuition and covered other school fees under Republic Act No. 10931 (Universal Access to Quality Tertiary Education Act) for eligible Filipino first-time undergraduate students in State Universities and Colleges.", "amounts": [{ "min_php": 0, "max_php": 0 }], "basis": "semester", "source_url": "https://www.pup.edu.ph/admission/" }
+      ],
+      "application_links": [
+        { "label": "PUP iApply & PUPCET Guidelines", "url": "https://www.pup.edu.ph/iapply/pupcet", "source_url": "https://www.pup.edu.ph/iapply/pupcet" },
+        { "label": "PUP Undergraduate Degree Programs", "url": "https://www.pup.edu.ph/academic/undergrad", "source_url": "https://www.pup.edu.ph/academic/undergrad" },
+        { "label": "PUP Admission Guidelines", "url": "https://www.pup.edu.ph/admission/", "source_url": "https://www.pup.edu.ph/admission/" }
+      ],
+      "source_notes": [
+        "PUPCET summary, iApply portal links, and RA 10931 Free Higher Education coverage added to complement the pre-collected PUP Sta. Mesa program and qualification export."
+      ]
+    }
+  }
+}

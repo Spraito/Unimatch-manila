@@ -1,0 +1,392 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1 / Global Safety Net: default deny everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Hardened Global Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isVerifiedOwner(userId) {
+      return isVerifiedUser()
+        && isValidId(userId)
+        && request.auth.uid == userId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser()
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'enricomigsduran@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin()
+        || (
+          isVerifiedUser()
+          && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidWeightValue(val) {
+      return (val is int || val is float) && val >= 0 && val <= 1;
+    }
+
+    function isValidWeightsMap(weights) {
+      return weights is map
+        && weights.keys().hasAll(['program', 'location', 'budget', 'sector'])
+        && weights.keys().hasOnly(['program', 'location', 'budget', 'sector'])
+        && isValidWeightValue(weights.program)
+        && isValidWeightValue(weights.location)
+        && isValidWeightValue(weights.budget)
+        && isValidWeightValue(weights.sector);
+    }
+
+    function isValidIdList(items, maxSize) {
+      return items is list
+        && items.size() <= maxSize
+        && (
+          items.size() == 0
+          || (
+            isValidId(items[0])
+            && isValidId(items[items.size() - 1])
+          )
+        );
+    }
+
+    function isValidStringList(items, maxSize, maxItemLen) {
+      return items is list
+        && items.size() <= maxSize
+        && (
+          items.size() == 0
+          || (
+            items[0] is string
+            && items[0].size() <= maxItemLen
+            && items[items.size() - 1] is string
+            && items[items.size() - 1].size() <= maxItemLen
+          )
+        );
+    }
+
+    function isValidMapList(items, maxSize) {
+      return items is list
+        && items.size() <= maxSize
+        && (
+          items.size() == 0
+          || (
+            items[0] is map
+            && items[items.size() - 1] is map
+          )
+        );
+    }
+
+    // --- Validation Blueprints (Anti-Update-Gap) ---
+    function isValidProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.uid == userId
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 80
+        && data.email is string
+        && data.email.size() >= 3
+        && data.email.size() <= 254
+        && data.email == request.auth.token.email
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPreferences(data, userId) {
+      return data.keys().hasAll(['uid', 'program', 'city', 'sector', 'budget', 'budgetBasis', 'weights', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'program', 'city', 'sector', 'budget', 'budgetBasis', 'weights', 'updatedAt'])
+        && data.uid is string
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.uid == userId
+        && data.program is string
+        && data.program.size() <= 200
+        && data.city is string
+        && data.city.size() <= 200
+        && data.sector is string
+        && data.sector.size() <= 20
+        && data.sector in ['', 'Public', 'Private']
+        && (data.budget == null || ((data.budget is int || data.budget is float) && data.budget >= 0 && data.budget <= 10000000))
+        && data.budgetBasis is string
+        && data.budgetBasis.size() <= 20
+        && data.budgetBasis in ['semester', 'trimester', 'year', 'unit']
+        && isValidWeightsMap(data.weights)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidShortlist(data, userId) {
+      return data.keys().hasAll(['uid', 'savedIds', 'compareIds', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'savedIds', 'compareIds', 'updatedAt'])
+        && data.uid is string
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.uid == userId
+        && isValidIdList(data.savedIds, 50)
+        && isValidIdList(data.compareIds, 3)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminMember(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'grantedByUid', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'grantedByUid', 'createdAt'])
+        && data.uid is string
+        && isValidId(data.uid)
+        && data.uid == userId
+        && data.email is string
+        && data.email.size() >= 3
+        && data.email.size() <= 254
+        && data.grantedByUid is string
+        && isValidId(data.grantedByUid)
+        && data.grantedByUid == request.auth.uid
+        && data.createdAt is timestamp;
+    }
+
+    function isValidCatalogUniversity(data, universityId) {
+      return data.keys().hasAll([
+          'id', 'name', 'shortName', 'city', 'campusLocation', 'sector', 'color',
+          'officialUrl', 'collectionStatus', 'academicYear', 'academicYears',
+          'isPublished', 'programs', 'admissionRequirements', 'applicationDeadlines',
+          'entranceExaminations', 'tuitionFees', 'applicationLinks', 'declaredConflicts',
+          'sourceUrls', 'sourceNotes', 'collectedAt', 'lastVerifiedAt',
+          'updatedByUid', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'name', 'shortName', 'city', 'campusLocation', 'sector', 'color',
+          'officialUrl', 'collectionStatus', 'academicYear', 'academicYears',
+          'isPublished', 'programs', 'admissionRequirements', 'applicationDeadlines',
+          'entranceExaminations', 'tuitionFees', 'applicationLinks', 'declaredConflicts',
+          'sourceUrls', 'sourceNotes', 'collectedAt', 'lastVerifiedAt',
+          'updatedByUid', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string
+        && isValidId(data.id)
+        && data.id == universityId
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 200
+        && data.shortName is string
+        && data.shortName.size() >= 1
+        && data.shortName.size() <= 60
+        && data.city is string
+        && data.city.size() >= 1
+        && data.city.size() <= 100
+        && data.campusLocation is string
+        && data.campusLocation.size() >= 1
+        && data.campusLocation.size() <= 300
+        && data.sector is string
+        && data.sector.size() <= 20
+        && data.sector in ['Public', 'Private']
+        && data.color is string
+        && data.color.size() <= 20
+        && data.color in ['green', 'maroon', 'gold', 'rust', 'lilac']
+        && data.officialUrl is string
+        && data.officialUrl.size() <= 500
+        && (data.officialUrl == '' || data.officialUrl.matches('^https://.*'))
+        && data.collectionStatus is string
+        && data.collectionStatus.size() <= 20
+        && data.collectionStatus in ['pending', 'partial', 'verified']
+        && data.academicYear is string
+        && data.academicYear.size() <= 40
+        && isValidStringList(data.academicYears, 10, 40)
+        && data.isPublished is bool
+        && isValidMapList(data.programs, 400)
+        && isValidMapList(data.admissionRequirements, 100)
+        && isValidMapList(data.applicationDeadlines, 50)
+        && isValidMapList(data.entranceExaminations, 30)
+        && isValidMapList(data.tuitionFees, 50)
+        && isValidMapList(data.applicationLinks, 50)
+        && isValidMapList(data.declaredConflicts, 50)
+        && isValidStringList(data.sourceUrls, 50, 500)
+        && isValidStringList(data.sourceNotes, 30, 600)
+        && data.collectedAt is string
+        && data.collectedAt.size() <= 64
+        && data.lastVerifiedAt is string
+        && data.lastVerifiedAt.size() <= 64
+        && data.updatedByUid is string
+        && isValidId(data.updatedByUid)
+        && data.updatedByUid == request.auth.uid
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCollectionRun(data, runId) {
+      return data.keys().hasAll([
+          'id', 'universityId', 'universityName', 'mode', 'status',
+          'fetchedUrlCount', 'programCount', 'conflictCount',
+          'robotsSummary', 'notes', 'createdByUid', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'universityId', 'universityName', 'mode', 'status',
+          'fetchedUrlCount', 'programCount', 'conflictCount',
+          'robotsSummary', 'notes', 'createdByUid', 'createdAt'
+        ])
+        && data.id is string
+        && isValidId(data.id)
+        && data.id == runId
+        && data.universityId is string
+        && isValidId(data.universityId)
+        && data.universityName is string
+        && data.universityName.size() >= 1
+        && data.universityName.size() <= 200
+        && data.mode is string
+        && data.mode.size() <= 30
+        && data.mode in ['polite-web', 'json-import', 'baseline-seed', 'manual-edit']
+        && data.status is string
+        && data.status.size() <= 30
+        && data.status in ['completed', 'partial', 'blocked_by_robots', 'failed']
+        && data.fetchedUrlCount is int
+        && data.fetchedUrlCount >= 0
+        && data.fetchedUrlCount <= 200
+        && data.programCount is int
+        && data.programCount >= 0
+        && data.programCount <= 5000
+        && data.conflictCount is int
+        && data.conflictCount >= 0
+        && data.conflictCount <= 500
+        && data.robotsSummary is string
+        && data.robotsSummary.size() <= 500
+        && data.notes is string
+        && data.notes.size() <= 1000
+        && data.createdByUid is string
+        && isValidId(data.createdByUid)
+        && data.createdByUid == request.auth.uid
+        && data.createdAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // Private PII profile: strictly owner-only single-document access (no list)
+    match /users/{userId}/private/profile {
+      allow get: if isVerifiedOwner(userId);
+      allow create: if isVerifiedOwner(userId)
+        && isValidProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedOwner(userId)
+        && isValidProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Update display name / synced email
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'updatedAt'])
+        );
+      allow delete: if isVerifiedOwner(userId);
+    }
+
+    // Saved recommendation preferences: strictly owner-only single-document access
+    match /users/{userId}/preferences/match {
+      allow get: if isVerifiedOwner(userId);
+      allow create: if isVerifiedOwner(userId)
+        && isValidPreferences(incoming(), userId)
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedOwner(userId)
+        && isValidPreferences(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Update match preferences and weights
+          incoming().diff(existing()).affectedKeys().hasOnly(['program', 'city', 'sector', 'budget', 'budgetBasis', 'weights', 'updatedAt'])
+        );
+      allow delete: if isVerifiedOwner(userId);
+    }
+
+    // Saved schools & compare shortlist: strictly owner-only single-document access
+    match /users/{userId}/shortlist/state {
+      allow get: if isVerifiedOwner(userId);
+      allow create: if isVerifiedOwner(userId)
+        && isValidShortlist(incoming(), userId)
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedOwner(userId)
+        && isValidShortlist(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Update saved schools and compare list
+          incoming().diff(existing()).affectedKeys().hasOnly(['savedIds', 'compareIds', 'updatedAt'])
+        );
+      allow delete: if isVerifiedOwner(userId);
+    }
+
+    // Admin role registry: strictly admin-only
+    match /admins/{userId} {
+      allow get: if isVerifiedUser() && isValidId(userId) && isAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidAdminMember(incoming(), userId)
+        && incoming().createdAt == request.time
+        && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(userId) && isAdmin();
+    }
+
+    // Public university admissions catalog: non-PII public read, strictly admin-only write
+    match /catalogUniversities/{universityId} {
+      allow get: if isValidId(universityId) && (resource.data.isPublished == true || isAdmin());
+      allow list: if resource.data.isPublished == true || isBootstrappedAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(universityId)
+        && isValidCatalogUniversity(incoming(), universityId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+      allow update: if isVerifiedUser()
+        && isValidId(universityId)
+        && isValidCatalogUniversity(incoming(), universityId)
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && isAdmin()
+        && (
+          // Action: Admin catalog metadata & structured admissions update
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'shortName', 'city', 'campusLocation', 'sector', 'color',
+            'officialUrl', 'collectionStatus', 'academicYear', 'academicYears',
+            'isPublished', 'programs', 'admissionRequirements', 'applicationDeadlines',
+            'entranceExaminations', 'tuitionFees', 'applicationLinks', 'declaredConflicts',
+            'sourceUrls', 'sourceNotes', 'collectedAt', 'lastVerifiedAt',
+            'updatedByUid', 'updatedAt'
+          ])
+        );
+      allow delete: if isVerifiedUser() && isValidId(universityId) && isAdmin();
+    }
+
+    // Immutable admin audit log of polite web collections, JSON imports, and baseline seeds
+    match /collectionRuns/{runId} {
+      allow get: if isVerifiedUser() && isValidId(runId) && isAdmin();
+      allow list: if isBootstrappedAdmin() && resource.data.createdByUid == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(runId)
+        && isValidCollectionRun(incoming(), runId)
+        && incoming().createdAt == request.time
+        && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(runId) && isAdmin();
+    }
+  }
+}

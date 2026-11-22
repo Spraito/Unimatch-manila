@@ -573,7 +573,8 @@
   color: #b7dfc4;
 }
 
-:root[data-theme="dark"] .score-track {
+:root[data-theme="dark"] .score-track,
+:root[data-theme="dark"] .score-track::-webkit-progress-bar {
   background: #22322a;
 }
 
@@ -856,3 +857,195 @@
 :root[data-theme="dark"] .match-group {
   background: #16211d;
 }
+
+/* Admin catalog workspace dark surfaces ---------------------------------- */
+:root[data-theme="dark"] .admin-tab,
+:root[data-theme="dark"] .account-form textarea,
+:root[data-theme="dark"] .admin-audit-urls li {
+  background: #141f19;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .admin-tab.active {
+  background: #2f5c44;
+  border-color: #3d7557;
+  color: #f4f7f2;
+}
+
+:root[data-theme="dark"] .admin-policy-box,
+:root[data-theme="dark"] .admin-preview-card,
+:root[data-theme="dark"] .admin-item-list li {
+  background: #121d17;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .admin-domain-chip {
+  background: #1e3327;
+  color: #b7dfc4;
+}
+
+:root[data-theme="dark"] .admin-btn-danger {
+  color: #f0b8ae;
+  border-color: #5a3330;
+}
+
+:root[data-theme="dark"] .admin-preview-details {
+  background: #141f19;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .admin-preview-details summary {
+  color: #b7dfc4;
+}
+
+:root[data-theme="dark"] .admin-pages-box {
+  background: #121d17;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .admin-page-item {
+  background: #141f19;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .admin-url-counter {
+  color: #b7dfc4;
+}
+
+:root[data-theme="dark"] .admin-url-status.has-error .admin-url-counter,
+:root[data-theme="dark"] .admin-url-errors {
+  color: #f0b8ae;
+}
+
+:root[data-theme="dark"] .admin-conflicts-box {
+  background: #272115;
+  border-color: #5a4923;
+}
+
+:root[data-theme="dark"] .admin-conflicts-head strong {
+  color: #ecd08b;
+}
+
+:root[data-theme="dark"] .admin-conflicts-head .account-help {
+  color: #d6be86;
+}
+
+:root[data-theme="dark"] .admin-conflict-item {
+  background: #171d18;
+  border-color: #463a20;
+}
+
+/* Cleaner UI pass — dark-mode parity ------------------------------------- */
+:root[data-theme="dark"] .sidebar-about-link {
+  color: #a9bca9;
+}
+
+:root[data-theme="dark"] .sidebar-about-link:hover {
+  background: #1b3328;
+  color: #fff;
+}
+
+:root[data-theme="dark"] .sidebar-account-links {
+  color: #9db09e;
+}
+
+:root[data-theme="dark"] .filter-chip {
+  background: #151f1a;
+  border-color: #2c3e33;
+  color: #cfe0cf;
+}
+
+:root[data-theme="dark"] .filter-chip:hover {
+  background: #1d2d24;
+  border-color: #446250;
+}
+
+:root[data-theme="dark"] .filter-chip[aria-pressed="true"] {
+  background: #2f6f52;
+  border-color: #3a7f5f;
+  color: #fff;
+}
+
+:root[data-theme="dark"] .card-title-btn {
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .card-title-btn:hover {
+  color: var(--green);
+}
+
+:root[data-theme="dark"] .card-meta,
+:root[data-theme="dark"] .program-strand,
+:root[data-theme="dark"] .detail-meta,
+:root[data-theme="dark"] .muted,
+:root[data-theme="dark"] .muted-note,
+:root[data-theme="dark"] .program-row-meta {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .overview-note {
+  color: #c2d2c0;
+}
+
+:root[data-theme="dark"] .card-stats {
+  border-top-color: #26362d;
+  border-bottom-color: #26362d;
+}
+
+:root[data-theme="dark"] .card-stats > div + div {
+  border-left-color: #26362d;
+}
+
+:root[data-theme="dark"] .metric-value.is-free,
+:root[data-theme="dark"] .is-free-text {
+  color: #8fcaa4;
+}
+
+:root[data-theme="dark"] .portal-link-card {
+  background: #18261e;
+  border-color: #2f4739;
+  color: #c6e4ce;
+}
+
+:root[data-theme="dark"] .portal-link-card:hover {
+  background: #21352a;
+  border-color: #466955;
+}
+
+:root[data-theme="dark"] .req-checklist li {
+  background: #18261e;
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .program-row {
+  border-bottom-color: #26362d;
+}
+
+:root[data-theme="dark"] .program-row-main strong {
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .raw-evidence {
+  border-top-color: var(--line);
+}
+
+:root[data-theme="dark"] .raw-evidence > summary,
+:root[data-theme="dark"] .score-info-toggle summary,
+:root[data-theme="dark"] .footer-link-btn {
+  color: #9ed0b2;
+}
+
+:root[data-theme="dark"] .welcome-stats {
+  border-top-color: #2c4034;
+}
+
+:root[data-theme="dark"] .welcome-stats strong {
+  color: #edf4ea;
+}
+
+:root[data-theme="dark"] .welcome-stats span {
+  color: #a9bba6;
+}
+

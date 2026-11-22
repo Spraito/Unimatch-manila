@@ -11,8 +11,9 @@
     <link rel="stylesheet" href="/static/account.css" />
     <link rel="stylesheet" href="/static/theme-dark.css" />
     <script src="/static/theme.js"></script>
+    <script type="module" src="/static/firebase-client.js"></script>
   </head>
-  <body class="account-page">
+  <body class="account-page" data-account="<%= currentUser ? currentUser.id : 'guest' %>">
     <a class="skip-link" href="#account-main">Skip to content</a>
     <%- include('_icons') %>
     <header class="account-header">
@@ -26,8 +27,10 @@
         <% if (currentUser) { %>
           <a href="/profile" aria-current="page">My profile</a>
         <% } else { %>
-          <a href="/login">Log in</a>
-          <a class="account-nav-cta" href="/register">Create account</a>
+          <a href="/cloud-profile" data-cloud-signed-in hidden>My cloud profile</a>
+          <a href="/admin" data-cloud-admin-only hidden>Manage catalog</a>
+          <a href="/login" data-cloud-signed-out>Log in</a>
+          <a class="account-nav-cta" href="/register" data-cloud-signed-out>Create account</a>
         <% } %>
       </nav>
     </header>

@@ -33,8 +33,37 @@ import {
   refreshCsrfToken,
 } from "../security.js";
 import { rankedRecommendations } from "../store.js";
+import {
+  SlidingFixedWindowLimiter,
+  createRateLimitMiddleware,
+} from "../securityHardening.js";
 
 export const authRouter = express.Router();
+
+const loginRateLimiter = new SlidingFixedWindowLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyPrefix: "auth-login",
+});
+
+const registerRateLimiter = new SlidingFixedWindowLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyPrefix: "auth-register",
+});
+
+const resetRateLimiter = new SlidingFixedWindowLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyPrefix: "auth-reset",
+});
+
+function rateLimitMessage(retryAfterSeconds: number): string {
+  const mins = Math.ceil(retryAfterSeconds / 60);
+  return mins > 1
+    ? `Too many attempts from this device. Please wait about ${mins} minutes and try again.`
+    : `Too many attempts from this device. Please wait ${retryAfterSeconds} seconds and try again.`;
+}
 
 export function pushFlash(
   req: Request,
@@ -80,6 +109,28 @@ function clearAuthSession(req: Request) {
   delete req.session.pending2faAttempts;
   delete req.session.pendingTotpSetup;
   delete req.session.newRecoveryCodes;
+}
+
+function saveAndRedirect(req: Request, res: Response, location: string) {
+  req.session.save(() => {
+    res.redirect(location);
+  });
+}
+
+function regenerateAndRedirect(
+  req: Request,
+  res: Response,
+  populate: () => void,
+  location: string,
+) {
+  req.session.regenerate((err) => {
+    if (err) {
+      clearAuthSession(req);
+    }
+    populate();
+    refreshCsrfToken(req);
+    saveAndRedirect(req, res, location);
+  });
 }
 
 function buildProfileContext(req: Request, res: Response, error?: string | null) {
@@ -158,7 +209,20 @@ authRouter.get("/login", (req, res) => {
   });
 });
 
-authRouter.post("/login", (req, res) => {
+const loginLimitMiddleware = createRateLimitMiddleware(
+  loginRateLimiter,
+  (req, res, result) => {
+    return res.status(429).render("login", {
+      title: "Log in",
+      error: rateLimitMessage(result.retryAfterSeconds),
+      email: String(req.body?.email ?? ""),
+      next_url: nextUrl(req, "/profile"),
+      flashes: consumeFlashes(req),
+    });
+  },
+);
+
+authRouter.post("/login", loginLimitMiddleware, (req, res) => {
   if (!isCsrfValid(req)) {
     return res.status(400).render("login", {
       title: "Log in",
@@ -185,20 +249,28 @@ authRouter.post("/login", (req, res) => {
 
   const target = nextUrl(req, "/profile");
   if (user.totp_enabled) {
-    clearAuthSession(req);
-    req.session.pending2faUserId = user.id;
-    req.session.pending2faNext = target;
-    req.session.pending2faAttempts = 0;
-    refreshCsrfToken(req);
-    return res.redirect("/login/2fa");
+    return regenerateAndRedirect(
+      req,
+      res,
+      () => {
+        req.session.pending2faUserId = user.id;
+        req.session.pending2faNext = target;
+        req.session.pending2faAttempts = 0;
+      },
+      "/login/2fa",
+    );
   }
 
-  clearAuthSession(req);
-  req.session.userId = user.id;
-  req.session.sessionVersion = user.session_version;
-  refreshCsrfToken(req);
-  pushFlash(req, "Welcome back.", "success");
-  return res.redirect(target);
+  return regenerateAndRedirect(
+    req,
+    res,
+    () => {
+      req.session.userId = user.id;
+      req.session.sessionVersion = user.session_version;
+      pushFlash(req, "Welcome back.", "success");
+    },
+    target,
+  );
 });
 
 authRouter.get("/login/2fa", (req, res) => {
@@ -210,7 +282,18 @@ authRouter.get("/login/2fa", (req, res) => {
   });
 });
 
-authRouter.post("/login/2fa", (req, res) => {
+const twoFaLimitMiddleware = createRateLimitMiddleware(
+  loginRateLimiter,
+  (req, res, result) => {
+    return res.status(429).render("two_factor", {
+      title: "Two-factor authentication",
+      error: rateLimitMessage(result.retryAfterSeconds),
+      flashes: consumeFlashes(req),
+    });
+  },
+);
+
+authRouter.post("/login/2fa", twoFaLimitMiddleware, (req, res) => {
   const pending = req.session.pending2faUserId;
   if (!pending) return res.redirect("/login");
   if (!isCsrfValid(req)) {
@@ -227,7 +310,7 @@ authRouter.post("/login/2fa", (req, res) => {
     if (attempts >= 5) {
       clearAuthSession(req);
       pushFlash(req, "Too many invalid codes. Please log in again.", "error");
-      return res.redirect("/login");
+      return saveAndRedirect(req, res, "/login");
     }
     return res.status(401).render("two_factor", {
       title: "Two-factor authentication",
@@ -240,16 +323,20 @@ authRouter.post("/login/2fa", (req, res) => {
   const row = getUser(pending);
   if (!row || !row.is_active) {
     clearAuthSession(req);
-    return res.redirect("/login");
+    return saveAndRedirect(req, res, "/login");
   }
 
   const target = req.session.pending2faNext || "/profile";
-  clearAuthSession(req);
-  req.session.userId = row.id;
-  req.session.sessionVersion = row.session_version;
-  refreshCsrfToken(req);
-  pushFlash(req, "Welcome back.", "success");
-  return res.redirect(isSafeNextUrl(target) ? target : "/profile");
+  return regenerateAndRedirect(
+    req,
+    res,
+    () => {
+      req.session.userId = row.id;
+      req.session.sessionVersion = row.session_version;
+      pushFlash(req, "Welcome back.", "success");
+    },
+    isSafeNextUrl(target) ? target : "/profile",
+  );
 });
 
 authRouter.get("/register", (req, res) => {
@@ -264,7 +351,21 @@ authRouter.get("/register", (req, res) => {
   });
 });
 
-authRouter.post("/register", (req, res) => {
+const registerLimitMiddleware = createRateLimitMiddleware(
+  registerRateLimiter,
+  (req, res, result) => {
+    return res.status(429).render("register", {
+      title: "Create account",
+      error: rateLimitMessage(result.retryAfterSeconds),
+      email: String(req.body?.email ?? ""),
+      display_name: String(req.body?.display_name ?? ""),
+      next_url: nextUrl(req, "/profile"),
+      flashes: consumeFlashes(req),
+    });
+  },
+);
+
+authRouter.post("/register", registerLimitMiddleware, (req, res) => {
   const target = nextUrl(req, "/profile");
   if (!isCsrfValid(req)) {
     return res.status(400).render("register", {
@@ -306,12 +407,20 @@ authRouter.post("/register", (req, res) => {
     });
   }
 
-  clearAuthSession(req);
-  req.session.userId = user.id;
-  req.session.sessionVersion = 0;
-  refreshCsrfToken(req);
-  pushFlash(req, "Your account is ready. Add your preferences below.", "success");
-  return res.redirect(target);
+  return regenerateAndRedirect(
+    req,
+    res,
+    () => {
+      req.session.userId = user.id;
+      req.session.sessionVersion = 0;
+      pushFlash(
+        req,
+        "Your account is ready. Add your preferences below.",
+        "success",
+      );
+    },
+    target,
+  );
 });
 
 authRouter.post("/logout", loginRequired, (req, res) => {
@@ -321,7 +430,7 @@ authRouter.post("/logout", loginRequired, (req, res) => {
   clearAuthSession(req);
   refreshCsrfToken(req);
   pushFlash(req, "You have been logged out.", "success");
-  return res.redirect("/");
+  return saveAndRedirect(req, res, "/");
 });
 
 authRouter.get("/forgot-password", (req, res) => {
@@ -335,7 +444,20 @@ authRouter.get("/forgot-password", (req, res) => {
   });
 });
 
-authRouter.post("/forgot-password", (req, res) => {
+const forgotLimitMiddleware = createRateLimitMiddleware(
+  resetRateLimiter,
+  (req, res, result) => {
+    return res.status(429).render("forgot_password", {
+      title: "Forgot password",
+      submitted: false,
+      dev_reset_link: null,
+      error: rateLimitMessage(result.retryAfterSeconds),
+      flashes: consumeFlashes(req),
+    });
+  },
+);
+
+authRouter.post("/forgot-password", forgotLimitMiddleware, (req, res) => {
   if (!isCsrfValid(req)) {
     return res.status(400).render("forgot_password", {
       title: "Forgot password",
@@ -357,9 +479,7 @@ authRouter.post("/forgot-password", (req, res) => {
     }
     if (address && !IS_PRODUCTION) {
       const token = makeResetToken(row.id, row.session_version);
-      const proto = req.get("x-forwarded-proto") || req.protocol;
-      const host = req.get("host");
-      devResetLink = `${proto}://${host}/reset-password/${token}`;
+      devResetLink = `/reset-password/${encodeURIComponent(token)}`;
     }
   }
   return res.render("forgot_password", {
@@ -401,7 +521,19 @@ authRouter.get("/reset-password/:token", (req, res) => {
   });
 });
 
-authRouter.post("/reset-password/:token", (req, res) => {
+const resetLimitMiddleware = createRateLimitMiddleware(
+  resetRateLimiter,
+  (req, res, result) => {
+    return res.status(429).render("reset_password", {
+      title: "Reset password",
+      token: String(req.params.token ?? ""),
+      error: rateLimitMessage(result.retryAfterSeconds),
+      flashes: consumeFlashes(req),
+    });
+  },
+);
+
+authRouter.post("/reset-password/:token", resetLimitMiddleware, (req, res) => {
   const token = String(req.params.token ?? "");
   if (!isCsrfValid(req)) {
     return res.status(400).render("reset_password", {
@@ -452,7 +584,7 @@ authRouter.post("/reset-password/:token", (req, res) => {
     "Your password has been changed. Log in with the new password.",
     "success",
   );
-  return res.redirect("/login");
+  return saveAndRedirect(req, res, "/login");
 });
 
 authRouter.get("/profile", loginRequired, (req, res) => {
@@ -573,5 +705,5 @@ authRouter.post("/profile", loginRequired, (req, res) => {
       .render("profile", buildProfileContext(req, res, (err as Error).message));
   }
 
-  return res.redirect("/profile");
+  return saveAndRedirect(req, res, "/profile");
 });

@@ -6,21 +6,22 @@
     <meta name="theme-color" content="#173e35" />
     <meta
       name="description"
-      content="Welcome to UniMatch PH — explore Metro Manila universities and degree programs, or sign in to continue your college search."
+      content="Explore Metro Manila universities, 637 degree programs, entrance exams, and admissions requirements with UniMatch PH."
     />
-    <meta property="og:title" content="UniMatch PH — Your next chapter starts here" />
+    <meta property="og:title" content="UniMatch PH — Find the right Manila university" />
     <meta
       property="og:description"
-      content="Explore Metro Manila colleges, compare universities, discover degree programs, and find weighted university matches with UniMatch PH."
+      content="Explore Metro Manila colleges, compare universities, discover degree programs, and find your match with UniMatch PH."
     />
-    <title>UniMatch PH — Your next chapter starts here</title>
+    <title>UniMatch PH — Find the right Manila university</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/style.css" />
     <link rel="stylesheet" href="/static/landing.css" />
     <link rel="stylesheet" href="/static/theme-dark.css" />
     <script src="/static/theme.js"></script>
+    <script type="module" src="/static/firebase-client.js"></script>
   </head>
-  <body class="welcome-page">
+  <body class="welcome-page" data-account="<%= currentUser ? currentUser.id : 'guest' %>">
     <a class="skip-link" href="#main">Skip to content</a>
     <%- include('_icons') %>
 
@@ -32,14 +33,21 @@
           </span>
           <span>UniMatch<span class="brand-ph">PH</span></span>
         </a>
+        <div class="welcome-nav-links">
+          <a class="welcome-text-link" href="/explore">Universities</a>
+          <a class="welcome-text-link" href="/explore#programs">Programs</a>
+          <a class="welcome-text-link" href="/explore#recommend">Find my match</a>
+        </div>
         <div class="welcome-nav-actions">
           <%- include('_theme_toggle') %>
           <% if (currentUser) { %>
             <a class="welcome-text-link" href="/profile">My profile</a>
-            <a class="welcome-pill" href="/explore">Continue exploring</a>
+            <a class="welcome-pill" href="/explore">Open directory</a>
           <% } else { %>
-            <a class="welcome-text-link" href="/login?next=%2Fexplore">Log in</a>
-            <a class="welcome-pill" href="/register?next=%2Fexplore">Sign up</a>
+            <a class="welcome-text-link" href="/cloud-profile" data-cloud-signed-in hidden>Profile</a>
+            <a class="welcome-pill" href="/explore" data-cloud-signed-in hidden>Open directory</a>
+            <a class="welcome-text-link" href="/login?next=%2Fexplore" data-cloud-signed-out>Log in</a>
+            <a class="welcome-pill" href="/explore" data-cloud-signed-out>Explore now</a>
           <% } %>
         </div>
       </nav>
@@ -48,82 +56,72 @@
     <main class="welcome-main" id="main" tabindex="-1">
       <section class="welcome-hero" aria-labelledby="welcome-title">
         <div class="welcome-copy">
-          <span class="eyebrow"><span class="little-line"></span>BIG DREAMS, LOCAL POSSIBILITIES</span>
-
           <% if (currentUser) { %>
             <h1 id="welcome-title">Welcome back,<br /><em><%= accountName() %>.</em></h1>
             <p>
-              Your shortlist, comparisons, and degree-program search are ready
-              whenever you are. Pick up where you left off.
+              Your saved universities, side-by-side comparisons, and degree
+              matches are ready whenever you are.
             </p>
             <div class="welcome-actions">
               <a class="button primary welcome-primary" href="/explore">
-                Continue to the directory<svg class="icon"><use href="#i-arrow" /></svg>
+                Continue exploring<svg class="icon"><use href="#i-arrow" /></svg>
               </a>
-              <a class="button secondary welcome-secondary" href="/profile">
-                My profile
+              <a class="button secondary welcome-secondary" href="/explore#recommend">
+                Find my match
               </a>
             </div>
           <% } else { %>
-            <h1 id="welcome-title">Your next chapter<br />starts <em>here.</em></h1>
+            <h1 id="welcome-title">Find the right Manila<br />university <em>for you.</em></h1>
             <p>
-              Find a college that feels like you. Explore Metro Manila’s
-              universities and the programs that could shape your future.
+              Browse degree programs, check entrance exams and requirements, and
+              compare Metro Manila schools side by side — all sourced from
+              official university pages.
             </p>
             <div class="welcome-actions">
-              <a class="button primary welcome-primary" href="/register?next=%2Fexplore">
-                Create your free account<svg class="icon"><use href="#i-arrow" /></svg>
+              <a class="button primary welcome-primary" href="/explore">
+                Explore 15 universities<svg class="icon"><use href="#i-arrow" /></svg>
               </a>
-              <a class="button secondary welcome-secondary" href="/login?next=%2Fexplore">
-                Log in
-              </a>
-            </div>
-            <div class="welcome-footnote">
-              <span class="welcome-location">
-                <svg class="icon"><use href="#i-pin" /></svg>Made for your Metro Manila
-                college search
-              </span>
-              <a class="welcome-guest" href="/explore">
-                Just browsing? Explore the directory<svg class="icon"><use href="#i-arrow" /></svg>
+              <a class="button secondary welcome-secondary" href="/explore#recommend">
+                Find my match
               </a>
             </div>
           <% } %>
+
+          <div class="welcome-stats" aria-label="Directory coverage">
+            <div>
+              <strong>15</strong>
+              <span>Metro Manila universities</span>
+            </div>
+            <div>
+              <strong>637</strong>
+              <span>Undergraduate programs</span>
+            </div>
+            <div>
+              <strong>5</strong>
+              <span>Free-tuition public schools</span>
+            </div>
+          </div>
         </div>
 
-        <div class="welcome-art">
+        <div class="welcome-art" aria-hidden="true">
           <img
             src="/static/campus.svg"
-            alt="Illustration of a university building among green trees"
+            alt=""
             width="430"
             height="330"
           />
-          <div class="welcome-art-caption">
-            <span class="caption-dot"></span>A world of possibilities, closer to home.
-          </div>
         </div>
       </section>
     </main>
 
     <footer class="welcome-footer">
-      <div class="welcome-footer-inner">
-        <div class="welcome-footer-brand">
-          <a class="welcome-brand" href="/" aria-label="UniMatch PH home">
-            <span class="welcome-brand-mark" aria-hidden="true">
-              <svg class="brand-logo"><use href="#i-logo" /></svg>
-            </span>
-            <span>UniMatch<span class="brand-ph">PH</span></span>
-          </a>
-          <p>A calm starting point for your Metro Manila college search.</p>
-        </div>
-        <nav class="welcome-footer-links" aria-label="Footer links">
-          <a href="/explore">Explore the directory</a>
-          <a href="/explore?notes=1">About the data</a>
-          <a href="/api/collection/status">Collection status</a>
-        </nav>
-      </div>
       <div class="welcome-footer-bottom">
-        <span>UniMatch PH · A college admissions research prototype</span>
-        <span>Verify dates, fees, and eligibility with each university.</span>
+        <span>UniMatch PH · Metro Manila college directory</span>
+        <nav class="welcome-footer-links" aria-label="Footer links">
+          <a href="/explore">Explore</a>
+          <a href="/explore?notes=1">About the data</a>
+          <a href="/register?next=%2Fexplore">Create free account</a>
+        </nav>
       </div>
     </footer>
   </body>
