@@ -287,11 +287,43 @@ function shortLocation(campusLocation, city) {
   return parts[0] || city || "Manila";
 }
 
+const UNIVERSITY_LOGOS = {
+  "dlsu-manila": "/static/logos/dlsu-manila.png",
+  "pup-sta-mesa": "/static/logos/pup-sta-mesa.png",
+  "ust-manila": "/static/logos/ust-manila.png",
+  "adamson-manila": "/static/logos/adamson-manila.png",
+  "plm-manila": "/static/logos/plm-manila.png",
+  "ue-manila": "/static/logos/ue-manila.png",
+  "ceu-manila": "/static/logos/ceu-manila.png",
+  "tup-manila": "/static/logos/tup-manila.png",
+  "pnu-manila": "/static/logos/pnu-manila.png",
+  "sanbeda-manila": "/static/logos/sanbeda-manila.png",
+  "up-manila": "/static/logos/up-manila.png",
+  spumanila: "/static/logos/spumanila.png",
+  "feu-manila": "/static/logos/feu-manila.png",
+  "lpu-manila": "/static/logos/lpu-manila.png",
+  "mapua-manila": "/static/logos/mapua-manila.png",
+};
+
+function resolveSchoolLogo(school) {
+  const id = String(school?.university_id || school?.id || "")
+    .trim()
+    .toLowerCase();
+  if (id && UNIVERSITY_LOGOS[id]) return UNIVERSITY_LOGOS[id];
+  return "";
+}
+
 function schoolMark(school, small = false) {
-  const raw = String(school.short_name || "").trim();
-  const mark = raw.startsWith("UP") ? "UP" : raw;
+  const raw = String(school?.short_name || "").trim();
+  const mark = raw.startsWith("UP") ? "UP" : raw || "UNI";
   const wide = mark.length > 4 ? "wide" : "";
-  return `<span class="school-mark ${e(school.color)} ${small ? "small" : ""} ${wide}" aria-hidden="true">${e(mark)}</span>`;
+  const color = school?.color || "";
+  const logoUrl = resolveSchoolLogo(school);
+  const label = school?.name || school?.university_name || raw || "University";
+  if (logoUrl) {
+    return `<span class="school-mark has-logo ${e(color)} ${small ? "small" : ""}" title="${e(label)}"><img class="school-logo-img" src="${e(logoUrl)}" alt="${e(label)} logo" loading="lazy" decoding="async" referrerpolicy="no-referrer" /><span class="school-mark-fallback" aria-hidden="true">${e(mark)}</span></span>`;
+  }
+  return `<span class="school-mark ${e(color)} ${small ? "small" : ""} ${wide}" aria-hidden="true">${e(mark)}</span>`;
 }
 
 function statusTag(school) {
@@ -698,11 +730,21 @@ function recommendationGroup(group) {
     (highest, item) => Math.max(highest, Number(item.score) || 0),
     0,
   );
+  const matchedSchool = state.schools.find((s) => s.id === group.university_id);
+  const markSource = matchedSchool || {
+    id: group.university_id,
+    name: group.university_name,
+    short_name: group.short_name,
+    color: "green",
+  };
   return `<section class="match-group">
     <header class="match-group-head">
-      <div>
-        <h3>${e(group.university_name)}</h3>
-        <p class="card-location">${icon("pin")}${e(group.campus_location || "Campus not available")}</p>
+      <div class="match-group-title-row">
+        ${schoolMark(markSource)}
+        <div>
+          <h3>${e(group.university_name)}</h3>
+          <p class="card-location">${icon("pin")}${e(group.campus_location || "Campus not available")}</p>
+        </div>
       </div>
       <div class="match-group-meta">
         <strong>${e(best)}<span>/100 best</span></strong>
@@ -1462,5 +1504,24 @@ window.addEventListener("unimatch:catalog-updated", async (event) => {
     // Keep existing rendered view on transient refresh issue
   }
 });
+
+document.addEventListener(
+  "error",
+  (event) => {
+    const img = event.target;
+    if (
+      img instanceof HTMLImageElement &&
+      img.classList.contains("school-logo-img")
+    ) {
+      const wrap = img.closest(".school-mark");
+      if (wrap) {
+        wrap.classList.remove("has-logo");
+        wrap.setAttribute("aria-hidden", "true");
+      }
+      img.remove();
+    }
+  },
+  true,
+);
 
 initialize();

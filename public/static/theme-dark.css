@@ -206,6 +206,12 @@
   --school-bg: #282438;
 }
 
+:root[data-theme="dark"] .school-mark.has-logo {
+  background: #f6f8f4;
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
 /* Section headings and filters ------------------------------------------- */
 :root[data-theme="dark"] .section-eyebrow,
 :root[data-theme="dark"] .section-heading p {
@@ -1049,3 +1055,30 @@
   color: #a9bba6;
 }
 
+/* Admin account management dark mode ------------------------------------- */
+:root[data-theme="dark"] .admin-summary-strip {
+  background: #141f19;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .admin-summary-value,
+:root[data-theme="dark"] .admin-summary-actor,
+:root[data-theme="dark"] .admin-status-text {
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .admin-modal-backdrop {
+  background: rgba(5, 11, 8, 0.74);
+}
+
+:root[data-theme="dark"] .admin-modal {
+  background: #141f19;
+  border-color: #2b3f33;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme="dark"] .admin-btn-confirm-danger {
+  background: #b93830 !important;
+  border-color: #b93830 !important;
+  color: #fff !important;
+}

@@ -270,13 +270,26 @@ export interface CollectionRunRecord {
   message: string | null;
 }
 
+export type UserRole = "student" | "admin";
+export type AuthProvider = "local" | "google";
+
+export const BOOTSTRAPPED_ADMIN_EMAILS = new Set(["enricomigsduran@gmail.com"]);
+
+export function isBootstrappedAdminEmail(email: string): boolean {
+  return BOOTSTRAPPED_ADMIN_EMAILS.has(String(email || "").trim().toLowerCase());
+}
+
 export interface UserRecord {
   id: string;
+  username_hash: string | null;
+  username_encrypted: string | null;
   email_hash: string;
   email_encrypted: string;
   display_name_encrypted: string;
   password_hash: string;
-  role: string;
+  auth_provider: AuthProvider;
+  firebase_uid: string | null;
+  role: UserRole;
   is_active: boolean;
   failed_logins: number;
   locked_until: string | null;
@@ -285,6 +298,7 @@ export interface UserRecord {
   totp_recovery_hashes: string[];
   session_version: number;
   password_changed_at: string | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
   last_login_at: string | null;
@@ -471,6 +485,7 @@ export const collectionRuns: CollectionRunRecord[] = [];
 
 export const usersById = new Map<string, UserRecord>();
 export const userIdByEmailHash = new Map<string, string>();
+export const userIdByUsernameHash = new Map<string, string>();
 export const userPreferencesById = new Map<string, UserPreferencesRecord>();
 
 function upsertSources(

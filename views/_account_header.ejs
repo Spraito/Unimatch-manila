@@ -25,9 +25,14 @@
         <%- include('_theme_toggle') %>
         <a href="/explore">Explore colleges</a>
         <% if (currentUser) { %>
-          <a href="/profile" aria-current="page">My profile</a>
+          <% if (currentUser.role === 'admin') { %>
+            <a href="/admin/accounts">Admin accounts</a>
+            <a href="/admin">Manage catalog</a>
+          <% } %>
+          <a href="/profile">My profile</a>
         <% } else { %>
           <a href="/cloud-profile" data-cloud-signed-in hidden>My cloud profile</a>
+          <a href="/admin/accounts" data-cloud-admin-only hidden>Admin accounts</a>
           <a href="/admin" data-cloud-admin-only hidden>Manage catalog</a>
           <a href="/login" data-cloud-signed-out>Log in</a>
           <a class="account-nav-cta" href="/register" data-cloud-signed-out>Create account</a>

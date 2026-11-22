@@ -1,5 +1,6 @@
 /**
- * In-memory account and student preference management.
+ * Account and student preference management with Neon PostgreSQL persistence
+ * and cross-provider unique email enforcement (local email/password vs Google OAuth).
  */
 import crypto from "node:crypto";
 import { cleanText } from "./algorithms/extraction.js";
@@ -8,6 +9,17 @@ import {
   normalizeWeights,
   type Criterion,
 } from "./algorithms/matching.js";
+import {
+  hydratePgUserIntoStore,
+  persistAccountStore,
+} from "./accountPersistence.js";
+import {
+  PostgresUniqueViolationError,
+  dbFindUserByEmail,
+  dbUpsertUser,
+  dbUpsertUserPreferences,
+  isPostgresSchemaReady,
+} from "./db/postgres.js";
 import {
   DecryptionError,
   consumeRecoveryCode,
@@ -20,13 +32,18 @@ import {
   hashRecoveryCodes,
   normalizeEmail,
   totpUri,
+  usernameLookupHash,
   verifyPassword,
   verifyTotp,
 } from "./security.js";
 import {
+  isBootstrappedAdminEmail,
   userIdByEmailHash,
+  userIdByUsernameHash,
   userPreferencesById,
   usersById,
+  type AuthProvider,
+  type UserPreferencesRecord,
   type UserRecord,
 } from "./store.js";
 
@@ -34,15 +51,70 @@ const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
 const DUMMY_PASSWORD_HASH = hashPassword("unimatch-not-a-real-account");
 
+export const GOOGLE_ACCOUNT_EXISTS_MSG =
+  "An account with this email already exists via Google Sign-In. Please sign in with Google instead.";
+export const LOCAL_ACCOUNT_EXISTS_MSG =
+  "An account with this email already exists using email and password. Please log in with your email and password instead.";
+export const GOOGLE_LOGIN_REQUIRED_MSG =
+  "This email is registered with Google Sign-In. Please click 'Continue with Google' to log in.";
+
 export class AccountError extends Error {
-  constructor(message: string) {
+  readonly statusCode: number;
+
+  constructor(message: string, statusCode = 400) {
     super(message);
     this.name = "AccountError";
+    this.statusCode = statusCode;
+  }
+}
+
+export class AccountConflictError extends AccountError {
+  readonly existingProvider: AuthProvider;
+
+  constructor(message: string, existingProvider: AuthProvider) {
+    super(message, 409);
+    this.name = "AccountConflictError";
+    this.existingProvider = existingProvider;
   }
 }
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function safeDecrypt(value: string | null | undefined): string {
+  if (!value) return "";
+  try {
+    return decryptPii(value);
+  } catch {
+    return "";
+  }
+}
+
+function syncUserToPostgresBackground(
+  record: UserRecord,
+  plainEmail?: string,
+  plainUsername?: string | null,
+): void {
+  if (!isPostgresSchemaReady()) return;
+  const email = (plainEmail || safeDecrypt(record.email_encrypted)).trim().toLowerCase();
+  if (!email) return;
+  const username =
+    plainUsername !== undefined
+      ? plainUsername
+      : record.username_encrypted
+        ? safeDecrypt(record.username_encrypted) || null
+        : null;
+  void dbUpsertUser(record, email, username).catch((err) => {
+    console.error("[postgres] Failed to sync user update:", err);
+  });
+}
+
+function syncPreferencesToPostgresBackground(pref: UserPreferencesRecord): void {
+  if (!isPostgresSchemaReady()) return;
+  void dbUpsertUserPreferences(pref).catch((err) => {
+    console.error("[postgres] Failed to sync user preferences:", err);
+  });
 }
 
 export function validateDisplayName(value: string): string {
@@ -145,26 +217,41 @@ function validatePreferencesInput(raw: Record<string, unknown>) {
   };
 }
 
-export function createUser(
-  email: string,
-  password: string,
-  displayName: string,
-) {
-  const normalizedEmail = normalizeEmail(email);
-  const validName = validateDisplayName(displayName);
-  const validPassword = validatePassword(password);
-  const lookup = emailLookupHash(normalizedEmail);
-  if (userIdByEmailHash.has(lookup)) {
-    throw new AccountError("An account with this email already exists");
+function assertEmailAvailableForLocalRegistration(
+  normalizedEmail: string,
+  lookupHash: string,
+): void {
+  if (isBootstrappedAdminEmail(normalizedEmail)) {
+    throw new AccountConflictError(GOOGLE_ACCOUNT_EXISTS_MSG, "google");
   }
+  const existingId = userIdByEmailHash.get(lookupHash);
+  if (existingId) {
+    const existing = usersById.get(existingId);
+    if (existing?.auth_provider === "google") {
+      throw new AccountConflictError(GOOGLE_ACCOUNT_EXISTS_MSG, "google");
+    }
+    throw new AccountConflictError(LOCAL_ACCOUNT_EXISTS_MSG, "local");
+  }
+}
+
+function buildLocalStudentRecord(
+  normalizedEmail: string,
+  lookupHash: string,
+  validName: string,
+  validPassword: string,
+): UserRecord {
   const now = nowIso();
   const userId = `usr-${crypto.randomBytes(12).toString("hex")}`;
-  const record: UserRecord = {
+  return {
     id: userId,
-    email_hash: lookup,
+    username_hash: null,
+    username_encrypted: null,
+    email_hash: lookupHash,
     email_encrypted: encryptPii(normalizedEmail),
     display_name_encrypted: encryptPii(validName),
     password_hash: hashPassword(validPassword),
+    auth_provider: "local",
+    firebase_uid: null,
     role: "student",
     is_active: true,
     failed_logins: 0,
@@ -174,28 +261,246 @@ export function createUser(
     totp_recovery_hashes: [],
     session_version: 0,
     password_changed_at: null,
+    created_by: null,
     created_at: now,
     updated_at: now,
     last_login_at: null,
   };
-  usersById.set(userId, record);
-  userIdByEmailHash.set(lookup, userId);
-  return { id: userId, email: normalizedEmail, display_name: validName };
 }
 
-export function authenticate(email: string, password: string) {
-  let lookup: string;
+export function createUser(
+  email: string,
+  password: string,
+  displayName: string,
+) {
+  const normalizedEmail = normalizeEmail(email);
+  const validName = validateDisplayName(displayName);
+  const validPassword = validatePassword(password);
+  const lookup = emailLookupHash(normalizedEmail);
+  assertEmailAvailableForLocalRegistration(normalizedEmail, lookup);
+
+  const record = buildLocalStudentRecord(
+    normalizedEmail,
+    lookup,
+    validName,
+    validPassword,
+  );
+  usersById.set(record.id, record);
+  userIdByEmailHash.set(lookup, record.id);
+  persistAccountStore();
+  syncUserToPostgresBackground(record, normalizedEmail, null);
+  return { id: record.id, email: normalizedEmail, display_name: validName };
+}
+
+export async function createUserAsync(
+  email: string,
+  password: string,
+  displayName: string,
+) {
+  const normalizedEmail = normalizeEmail(email);
+  const validName = validateDisplayName(displayName);
+  const validPassword = validatePassword(password);
+  const lookup = emailLookupHash(normalizedEmail);
+
+  if (isPostgresSchemaReady()) {
+    const existingPg = await dbFindUserByEmail(normalizedEmail);
+    if (existingPg) {
+      hydratePgUserIntoStore(existingPg);
+      if (existingPg.auth_provider === "google") {
+        throw new AccountConflictError(GOOGLE_ACCOUNT_EXISTS_MSG, "google");
+      }
+      throw new AccountConflictError(LOCAL_ACCOUNT_EXISTS_MSG, "local");
+    }
+  }
+
+  assertEmailAvailableForLocalRegistration(normalizedEmail, lookup);
+
+  const record = buildLocalStudentRecord(
+    normalizedEmail,
+    lookup,
+    validName,
+    validPassword,
+  );
+
+  if (isPostgresSchemaReady()) {
+    try {
+      await dbUpsertUser(record, normalizedEmail, null);
+    } catch (err) {
+      if (err instanceof PostgresUniqueViolationError) {
+        const raced = await dbFindUserByEmail(normalizedEmail);
+        if (raced?.auth_provider === "google") {
+          throw new AccountConflictError(GOOGLE_ACCOUNT_EXISTS_MSG, "google");
+        }
+        throw new AccountConflictError(LOCAL_ACCOUNT_EXISTS_MSG, "local");
+      }
+      throw err;
+    }
+  }
+
+  usersById.set(record.id, record);
+  userIdByEmailHash.set(lookup, record.id);
+  persistAccountStore();
+  return { id: record.id, email: normalizedEmail, display_name: validName };
+}
+
+export async function registerOrVerifyGoogleAccount(input: {
+  firebaseUid: string;
+  email: string;
+  displayName?: string | null;
+}) {
+  const normalizedEmail = normalizeEmail(input.email);
+  const uid = String(input.firebaseUid || "").trim();
+  if (!uid) {
+    throw new AccountError("Google account identifier is missing.");
+  }
+  const fallbackName = normalizedEmail.split("@")[0] || "Student";
+  const safeDisplayName = validateDisplayName(
+    String(input.displayName || "").trim() || fallbackName,
+  );
+  const lookup = emailLookupHash(normalizedEmail);
+
+  // Authoritative check in Neon Postgres first when configured
+  if (isPostgresSchemaReady()) {
+    const existingPg = await dbFindUserByEmail(normalizedEmail);
+    if (existingPg) {
+      const hydrated = hydratePgUserIntoStore(existingPg);
+      if (hydrated.auth_provider === "local") {
+        throw new AccountConflictError(LOCAL_ACCOUNT_EXISTS_MSG, "local");
+      }
+      const now = nowIso();
+      hydrated.firebase_uid = uid;
+      hydrated.display_name_encrypted = encryptPii(safeDisplayName);
+      hydrated.last_login_at = now;
+      hydrated.updated_at = now;
+      await dbUpsertUser(hydrated, normalizedEmail, null);
+      persistAccountStore();
+      return {
+        id: hydrated.id,
+        email: normalizedEmail,
+        display_name: safeDisplayName,
+        role: hydrated.role,
+        auth_provider: hydrated.auth_provider,
+      };
+    }
+  }
+
+  // Check in-memory account store
+  const existingId = userIdByEmailHash.get(lookup);
+  if (existingId) {
+    const existing = usersById.get(existingId);
+    if (existing) {
+      if (existing.auth_provider === "local") {
+        throw new AccountConflictError(LOCAL_ACCOUNT_EXISTS_MSG, "local");
+      }
+      const now = nowIso();
+      existing.firebase_uid = uid;
+      existing.display_name_encrypted = encryptPii(safeDisplayName);
+      existing.last_login_at = now;
+      existing.updated_at = now;
+      if (isPostgresSchemaReady()) {
+        await dbUpsertUser(existing, normalizedEmail, null);
+      }
+      persistAccountStore();
+      return {
+        id: existing.id,
+        email: normalizedEmail,
+        display_name: safeDisplayName,
+        role: existing.role,
+        auth_provider: existing.auth_provider,
+      };
+    }
+  }
+
+  const now = nowIso();
+  const userId = `gusr-${crypto.randomBytes(12).toString("hex")}`;
+  const record: UserRecord = {
+    id: userId,
+    username_hash: null,
+    username_encrypted: null,
+    email_hash: lookup,
+    email_encrypted: encryptPii(normalizedEmail),
+    display_name_encrypted: encryptPii(safeDisplayName),
+    password_hash: "",
+    auth_provider: "google",
+    firebase_uid: uid,
+    role: isBootstrappedAdminEmail(normalizedEmail) ? "admin" : "student",
+    is_active: true,
+    failed_logins: 0,
+    locked_until: null,
+    totp_secret_encrypted: null,
+    totp_enabled: false,
+    totp_recovery_hashes: [],
+    session_version: 0,
+    password_changed_at: null,
+    created_by: null,
+    created_at: now,
+    updated_at: now,
+    last_login_at: now,
+  };
+
+  if (isPostgresSchemaReady()) {
+    try {
+      await dbUpsertUser(record, normalizedEmail, null);
+    } catch (err) {
+      if (err instanceof PostgresUniqueViolationError) {
+        const raced = await dbFindUserByEmail(normalizedEmail);
+        if (raced?.auth_provider === "local") {
+          throw new AccountConflictError(LOCAL_ACCOUNT_EXISTS_MSG, "local");
+        }
+        if (raced) {
+          const hydrated = hydratePgUserIntoStore(raced);
+          return {
+            id: hydrated.id,
+            email: normalizedEmail,
+            display_name: safeDisplayName,
+            role: hydrated.role,
+            auth_provider: hydrated.auth_provider,
+          };
+        }
+      }
+      throw err;
+    }
+  }
+
+  usersById.set(record.id, record);
+  userIdByEmailHash.set(lookup, record.id);
+  persistAccountStore();
+  return {
+    id: record.id,
+    email: normalizedEmail,
+    display_name: safeDisplayName,
+    role: record.role,
+    auth_provider: record.auth_provider,
+  };
+}
+
+export function authenticate(identifier: string, password: string) {
+  const rawIdentifier = String(identifier || "").trim();
+  let userId: string | undefined;
   try {
-    lookup = emailLookupHash(email);
+    if (rawIdentifier.includes("@")) {
+      const lookup = emailLookupHash(rawIdentifier);
+      userId = userIdByEmailHash.get(lookup);
+    } else if (rawIdentifier) {
+      const lookup = usernameLookupHash(rawIdentifier);
+      userId = userIdByUsernameHash.get(lookup);
+    }
   } catch {
     verifyPassword(String(password || ""), DUMMY_PASSWORD_HASH);
-    throw new AccountError("Invalid email or password");
+    throw new AccountError("Invalid email, username, or password");
   }
-  const userId = userIdByEmailHash.get(lookup);
   const user = userId ? usersById.get(userId) : undefined;
   if (!user) {
     verifyPassword(String(password || ""), DUMMY_PASSWORD_HASH);
-    throw new AccountError("Invalid email or password");
+    if (rawIdentifier.includes("@") && isBootstrappedAdminEmail(rawIdentifier)) {
+      throw new AccountError(GOOGLE_LOGIN_REQUIRED_MSG);
+    }
+    throw new AccountError("Invalid email, username, or password");
+  }
+
+  if (user.auth_provider === "google" || !user.password_hash) {
+    verifyPassword(String(password || ""), DUMMY_PASSWORD_HASH);
+    throw new AccountError(GOOGLE_LOGIN_REQUIRED_MSG);
   }
 
   const now = Date.now();
@@ -210,7 +515,7 @@ export function authenticate(email: string, password: string) {
 
   if (!user.is_active) {
     verifyPassword(String(password || ""), DUMMY_PASSWORD_HASH);
-    throw new AccountError("Invalid email or password");
+    throw new AccountError("Invalid email, username, or password");
   }
 
   if (!verifyPassword(String(password || ""), user.password_hash)) {
@@ -219,7 +524,9 @@ export function authenticate(email: string, password: string) {
       user.failed_logins = 0;
       user.locked_until = new Date(now + LOCKOUT_MS).toISOString();
     }
-    throw new AccountError("Invalid email or password");
+    persistAccountStore();
+    syncUserToPostgresBackground(user);
+    throw new AccountError("Invalid email, username, or password");
   }
 
   const iso = new Date(now).toISOString();
@@ -227,6 +534,8 @@ export function authenticate(email: string, password: string) {
   user.locked_until = null;
   user.last_login_at = iso;
   user.updated_at = iso;
+  persistAccountStore();
+  syncUserToPostgresBackground(user);
 
   return {
     id: user.id,
@@ -250,13 +559,32 @@ export function findUserByEmail(email: string): UserRecord | undefined {
   }
 }
 
+export async function findUserByEmailAsync(
+  email: string,
+): Promise<UserRecord | undefined> {
+  const local = findUserByEmail(email);
+  if (local) return local;
+  if (!isPostgresSchemaReady()) return undefined;
+  try {
+    const normalized = normalizeEmail(email);
+    const pgRow = await dbFindUserByEmail(normalized);
+    if (!pgRow) return undefined;
+    return hydratePgUserIntoStore(pgRow);
+  } catch {
+    return undefined;
+  }
+}
+
 export function getProfile(userId: string) {
   const user = getUser(userId);
   if (!user) throw new AccountError("Account not found");
   return {
     id: user.id,
+    username: user.username_encrypted ? decryptPii(user.username_encrypted) : null,
     email: decryptPii(user.email_encrypted),
     display_name: decryptPii(user.display_name_encrypted),
+    auth_provider: user.auth_provider,
+    role: user.role,
     created_at: user.created_at,
     updated_at: user.updated_at,
     last_login_at: user.last_login_at,
@@ -272,20 +600,38 @@ export function updateProfile(
   if (!user) throw new AccountError("Account not found");
   const validName = validateDisplayName(displayName);
   const cleanedEmail = email ? cleanText(email) : "";
+  let updatedPlainEmail = safeDecrypt(user.email_encrypted);
+
   if (cleanedEmail) {
     const normalized = normalizeEmail(cleanedEmail);
     const newHash = emailLookupHash(normalized);
+    if (
+      isBootstrappedAdminEmail(normalized) &&
+      user.email_hash !== newHash
+    ) {
+      throw new AccountConflictError(GOOGLE_ACCOUNT_EXISTS_MSG, "google");
+    }
     const owner = userIdByEmailHash.get(newHash);
     if (owner && owner !== userId) {
-      throw new AccountError("That email address is already in use");
+      const ownerRec = usersById.get(owner);
+      if (ownerRec?.auth_provider === "google") {
+        throw new AccountConflictError(GOOGLE_ACCOUNT_EXISTS_MSG, "google");
+      }
+      throw new AccountConflictError(
+        "That email address is already in use",
+        "local",
+      );
     }
     userIdByEmailHash.delete(user.email_hash);
     user.email_hash = newHash;
     user.email_encrypted = encryptPii(normalized);
     userIdByEmailHash.set(newHash, userId);
+    updatedPlainEmail = normalized;
   }
   user.display_name_encrypted = encryptPii(validName);
   user.updated_at = nowIso();
+  persistAccountStore();
+  syncUserToPostgresBackground(user, updatedPlainEmail);
   return getProfile(userId);
 }
 
@@ -320,7 +666,7 @@ export function savePreferences(
   if (!getUser(userId)) throw new AccountError("Account not found");
   const values = validatePreferencesInput(raw);
   const now = nowIso();
-  userPreferencesById.set(userId, {
+  const prefRecord: UserPreferencesRecord = {
     user_id: userId,
     program: values.program,
     city: values.city,
@@ -329,7 +675,10 @@ export function savePreferences(
     budget_basis: values.budget_basis,
     weights: values.weights,
     updated_at: now,
-  });
+  };
+  userPreferencesById.set(userId, prefRecord);
+  persistAccountStore();
+  syncPreferencesToPostgresBackground(prefRecord);
   return getPreferences(userId);
 }
 
@@ -356,6 +705,9 @@ function updatePasswordInternal(userId: string, newPassword: string): number {
   const password = validatePassword(newPassword);
   const user = getUser(userId);
   if (!user) throw new AccountError("Account not found");
+  if (user.auth_provider === "google") {
+    throw new AccountError(GOOGLE_LOGIN_REQUIRED_MSG);
+  }
   if (verifyPassword(password, user.password_hash)) {
     throw new AccountError("Choose a password you have not used before");
   }
@@ -366,6 +718,8 @@ function updatePasswordInternal(userId: string, newPassword: string): number {
   user.failed_logins = 0;
   user.locked_until = null;
   user.updated_at = now;
+  persistAccountStore();
+  syncUserToPostgresBackground(user);
   return user.session_version;
 }
 
@@ -380,6 +734,9 @@ export function changePassword(
   }
   const user = getUser(userId);
   if (!user) throw new AccountError("Account not found");
+  if (user.auth_provider === "google") {
+    throw new AccountError(GOOGLE_LOGIN_REQUIRED_MSG);
+  }
   if (!verifyPassword(String(currentPassword || ""), user.password_hash)) {
     throw new AccountError("Your current password is incorrect");
   }
@@ -442,6 +799,8 @@ export function enableTotp(
   user.totp_enabled = true;
   user.totp_recovery_hashes = hashRecoveryCodes(codes);
   user.updated_at = nowIso();
+  persistAccountStore();
+  syncUserToPostgresBackground(user);
   return codes;
 }
 
@@ -464,6 +823,8 @@ export function verifySecondFactor(userId: string, code: string): boolean {
   if (matched) {
     user.totp_recovery_hashes = remaining;
     user.updated_at = nowIso();
+    persistAccountStore();
+    syncUserToPostgresBackground(user);
     return true;
   }
   return false;
@@ -489,4 +850,6 @@ export function disableTotp(
   user.totp_enabled = false;
   user.totp_recovery_hashes = [];
   user.updated_at = nowIso();
+  persistAccountStore();
+  syncUserToPostgresBackground(user);
 }

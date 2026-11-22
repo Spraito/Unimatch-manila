@@ -195,4 +195,17 @@ describe("Core cryptographic and redirect safety helpers", () => {
     assert.equal(verifyTotp(secret, code, fixedTime), true);
     assert.equal(verifyTotp(secret, "000000", fixedTime), false);
   });
+
+  it("defaults UNIMATCH_ENV to production whenever unset or blank", async () => {
+    const { resolveUnimatchEnv, isProductionEnv } = await import("./env.js");
+    assert.equal(resolveUnimatchEnv(undefined), "production");
+    assert.equal(resolveUnimatchEnv(""), "production");
+    assert.equal(resolveUnimatchEnv("   "), "production");
+    assert.equal(isProductionEnv(undefined), true);
+    assert.equal(isProductionEnv(""), true);
+    assert.equal(resolveUnimatchEnv("development"), "development");
+    assert.equal(isProductionEnv("development"), false);
+    assert.equal(resolveUnimatchEnv("PRODUCTION"), "production");
+    assert.equal(isProductionEnv("PRODUCTION"), true);
+  });
 });

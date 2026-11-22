@@ -147,14 +147,30 @@ select {
 .skip-link {
   position: fixed;
   left: 15px;
-  top: -100px;
+  top: 10px;
   z-index: 30;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
   background: var(--white);
-  padding: 12px 20px;
   border-radius: 8px;
 }
-.skip-link:focus {
-  top: 10px;
+.skip-link:focus,
+.skip-link:focus-visible {
+  width: auto;
+  height: auto;
+  padding: 12px 20px;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+  opacity: 1;
+  pointer-events: auto;
+  box-shadow: 0 8px 24px rgba(15, 30, 24, 0.16);
 }
 .sidebar {
   position: fixed;
@@ -762,6 +778,33 @@ main {
   padding: 0 9px;
   font-size: 11px;
 }
+.school-mark.has-logo {
+  width: 52px;
+  min-width: 52px;
+  height: 52px;
+  padding: 5px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid color-mix(in srgb, var(--school-color) 20%, var(--line));
+  box-shadow: 0 2px 6px rgba(15, 30, 24, 0.05);
+}
+.school-mark.has-logo.small {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 3px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.school-mark.has-logo .school-mark-fallback {
+  display: none;
+}
+.school-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
 .save-button {
   height: 34px;
   width: 34px;
@@ -1185,6 +1228,13 @@ main {
   align-items: center;
   gap: 16px;
   padding-right: 36px;
+}
+.detail-head .school-mark.has-logo {
+  width: 60px;
+  min-width: 60px;
+  height: 60px;
+  padding: 6px;
+  border-radius: 14px;
 }
 .detail-head h2 {
   font-family: var(--font-display);
@@ -1963,6 +2013,13 @@ main {
   gap: 14px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--line);
+}
+
+.match-group-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .match-group-head h3 {

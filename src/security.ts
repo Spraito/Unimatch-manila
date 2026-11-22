@@ -5,12 +5,17 @@
  * HMAC-SHA256 for email lookups & timed password-reset tokens, and RFC 6238
  * HMAC-SHA1 for TOTP two-factor authentication.
  */
+import "./env.js";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import type { Request } from "express";
+import { IS_PRODUCTION, UNIMATCH_ENV } from "./env.js";
+
+export { IS_PRODUCTION, UNIMATCH_ENV };
 
 const ENCRYPTION_CONTEXT = Buffer.from("unimatch-profile-pii-v1", "utf8");
 const LOOKUP_CONTEXT = Buffer.from("unimatch-email-lookup-v1", "utf8");
+const USERNAME_LOOKUP_CONTEXT = Buffer.from("unimatch-username-lookup-v1", "utf8");
 const RESET_SALT = "unimatch-password-reset-v1";
 export const RESET_MAX_AGE_SECONDS = 30 * 60;
 const TOTP_STEP = 30;
@@ -24,25 +29,38 @@ export class DecryptionError extends Error {
   }
 }
 
-function decodeKeyOrRandom(envValue: string | undefined): Buffer {
-  if (envValue && envValue.trim()) {
-    try {
-      const normalized = envValue.trim().replace(/-/g, "+").replace(/_/g, "/");
-      const raw = Buffer.from(normalized, "base64");
-      if (raw.length === 32) return raw;
-    } catch {
-      // Fall back to ephemeral key in non-production runtime
-    }
+function parse32ByteKey(envValue: string | undefined): Buffer | null {
+  if (!envValue || !envValue.trim()) return null;
+  const trimmed = envValue.trim();
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    const hexBuf = Buffer.from(trimmed, "hex");
+    if (hexBuf.length === 32) return hexBuf;
   }
-  return crypto.randomBytes(32);
+  try {
+    const normalized = trimmed.replace(/-/g, "+").replace(/_/g, "/");
+    const raw = Buffer.from(normalized, "base64");
+    if (raw.length === 32) return raw;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function decodeKeyOrRandom(envValue: string | undefined): Buffer {
+  return parse32ByteKey(envValue) ?? crypto.randomBytes(32);
+}
+
+function hasValid32ByteKey(envValue: string | undefined): boolean {
+  return parse32ByteKey(envValue) !== null;
 }
 
 export const SESSION_SECRET =
   process.env.SECRET_KEY?.trim() || crypto.randomBytes(48).toString("base64url");
 const DATA_KEY_BYTES = decodeKeyOrRandom(process.env.UNIMATCH_DATA_KEY);
 const LOOKUP_KEY_BYTES = decodeKeyOrRandom(process.env.UNIMATCH_LOOKUP_KEY);
-export const IS_PRODUCTION =
-  (process.env.UNIMATCH_ENV || "").toLowerCase() === "production";
+export const HAS_PERSISTENT_PII_KEYS =
+  hasValid32ByteKey(process.env.UNIMATCH_DATA_KEY) &&
+  hasValid32ByteKey(process.env.UNIMATCH_LOOKUP_KEY);
 
 export function hashPassword(password: string): string {
   return bcrypt.hashSync(password, 10);
@@ -108,6 +126,31 @@ export function emailLookupHash(email: string): string {
   return crypto
     .createHmac("sha256", LOOKUP_KEY_BYTES)
     .update(Buffer.concat([LOOKUP_CONTEXT, Buffer.from(":" + normalized, "utf8")]))
+    .digest("hex");
+}
+
+const USERNAME_RE = /^[a-z0-9][a-z0-9_-]{2,31}$/;
+
+export function normalizeUsername(value: string): string {
+  const username = String(value || "").trim().toLowerCase();
+  if (username.length < 3 || username.length > 32) {
+    throw new Error("Username must be between 3 and 32 characters");
+  }
+  if (!USERNAME_RE.test(username)) {
+    throw new Error(
+      "Username must start with a letter or number and contain only letters, numbers, underscores, or hyphens",
+    );
+  }
+  return username;
+}
+
+export function usernameLookupHash(username: string): string {
+  const normalized = normalizeUsername(username);
+  return crypto
+    .createHmac("sha256", LOOKUP_KEY_BYTES)
+    .update(
+      Buffer.concat([USERNAME_LOOKUP_CONTEXT, Buffer.from(":" + normalized, "utf8")]),
+    )
     .digest("hex");
 }
 

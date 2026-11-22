@@ -24,6 +24,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
+import { AdminAccountsController } from "./adminAccounts.js";
 import { AdminCatalogController } from "./adminPanel.js";
 import {
   CatalogOpType,
@@ -433,16 +434,61 @@ function showAuthFeedback(message: string, isError = true): void {
   box.hidden = !message;
 }
 
+let googleSyncInProgress = false;
+
+async function syncGoogleAccountWithBackend(
+  user: User,
+): Promise<{ ok: boolean; error?: string; conflict?: boolean }> {
+  const idToken = await user.getIdToken();
+  const resp = await fetch("/api/auth/google-sync", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+  let payload: { error?: string; code?: string } = {};
+  try {
+    payload = (await resp.json()) as { error?: string; code?: string };
+  } catch {
+    payload = {};
+  }
+  if (!resp.ok) {
+    return {
+      ok: false,
+      conflict: resp.status === 409 || payload.code === "AUTH_PROVIDER_CONFLICT",
+      error:
+        payload.error ||
+        "Could not complete Google sign-in right now. Please try again.",
+    };
+  }
+  return { ok: true };
+}
+
 async function triggerGoogleSignIn(button: HTMLButtonElement): Promise<void> {
   const originalLabel = button.textContent || "Continue with Google";
   button.disabled = true;
   button.textContent = "Opening Google sign-in…";
   showAuthFeedback("", false);
+  googleSyncInProgress = true;
 
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
     const credential = await signInWithPopup(auth, provider);
+
+    const syncResult = await syncGoogleAccountWithBackend(credential.user);
+    if (!syncResult.ok) {
+      await signOut(auth).catch(() => {});
+      showAuthFeedback(
+        syncResult.error ||
+          "An account with this email already exists using email and password. Please log in with your email and password instead.",
+      );
+      return;
+    }
+
     await ensureCloudProfile(credential.user);
     const nextAttr = button.dataset.next || "/cloud-profile";
     const destination = isSafeRedirect(nextAttr);
@@ -466,6 +512,7 @@ async function triggerGoogleSignIn(button: HTMLButtonElement): Promise<void> {
       );
     }
   } finally {
+    googleSyncInProgress = false;
     button.disabled = false;
     button.textContent = originalLabel;
   }
@@ -627,7 +674,7 @@ async function refreshCloudRecommendations(
           city: prefs.city,
           sector: prefs.sector,
           budget: prefs.budget,
-          budget_basis: prefs.budget !== null ? prefs.budgetBasis : null,
+          budget_basis: prefs.budget !== null ? prefs.budgetBasis : undefined,
         },
         prefs.weights,
         10,
@@ -943,7 +990,12 @@ function boot(): void {
       )
     : null;
 
-  if (!isAdminPage) {
+  const adminAccountsRoot = document.getElementById("admin-accounts-page");
+  const adminAccountsController = adminAccountsRoot
+    ? new AdminAccountsController(auth, adminAccountsRoot)
+    : null;
+
+  if (!isAdminPage && !adminAccountsRoot) {
     void hydratePublishedCatalog();
   }
 
@@ -959,6 +1011,9 @@ function boot(): void {
       if (adminController) {
         await adminController.onAuthChanged(null);
       }
+      if (adminAccountsController) {
+        await adminAccountsController.onAuthChanged(null);
+      }
       if (isCloudProfilePage) {
         const signedOutSection = document.getElementById("cloud-signed-out");
         const signedInSection = document.getElementById("cloud-signed-in");
@@ -970,8 +1025,30 @@ function boot(): void {
       return;
     }
 
+    if (googleSyncInProgress) {
+      return;
+    }
+
+    const syncCheck = await syncGoogleAccountWithBackend(user).catch(() => ({
+      ok: true,
+      conflict: false,
+      error: undefined,
+    }));
+    if (!syncCheck.ok && syncCheck.conflict) {
+      await signOut(auth).catch(() => {});
+      showAuthFeedback(
+        syncCheck.error ||
+          "An account with this email already exists using email and password. Please log in with your email and password instead.",
+      );
+      return;
+    }
+
     const isAdmin = await verifyAdminAccess(db, user);
     updateAdminLinksVisibility(isAdmin);
+
+    if (adminAccountsController) {
+      await adminAccountsController.onAuthChanged(user);
+    }
 
     if (adminController) {
       await adminController.onAuthChanged(user);
@@ -984,6 +1061,13 @@ function boot(): void {
           sanitizeDisplayName(user.displayName || user.email?.split("@")[0] || "Admin"),
         );
       }
+      return;
+    }
+
+    if (adminAccountsController) {
+      updateHeaderLinksForCloudUser(
+        sanitizeDisplayName(user.displayName || user.email?.split("@")[0] || "Admin"),
+      );
       return;
     }
 

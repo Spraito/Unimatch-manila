@@ -7,6 +7,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { getApp, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
+import {
+  findActiveAdminByEmail,
+  isBootstrappedAdminEmail,
+} from "../adminAccounts.js";
 import { ROOT } from "../store.js";
 
 function readProjectId(): string {
@@ -27,11 +31,10 @@ const adminApp = getApps().length
 
 export const adminAuth = getAuth(adminApp);
 
-const BOOTSTRAPPED_ADMIN_EMAILS = new Set(["enricomigsduran@gmail.com"]);
-
 export function isVerifiedAdminToken(decoded: DecodedIdToken): boolean {
   if (!decoded.email_verified || typeof decoded.email !== "string") {
     return false;
   }
-  return BOOTSTRAPPED_ADMIN_EMAILS.has(decoded.email.trim().toLowerCase());
+  const email = decoded.email.trim().toLowerCase();
+  return isBootstrappedAdminEmail(email) || Boolean(findActiveAdminByEmail(email));
 }

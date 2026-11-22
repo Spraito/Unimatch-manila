@@ -34675,6 +34675,451 @@ function scoreLiveCatalogRecommendations(records, preferences, rawWeights, maxIt
   return recommend(candidates, preferences, weights, maxItems);
 }
 
+// client/adminAccounts.ts
+function escapeHTML(value) {
+  return String(value ?? "").replace(
+    /[&<>"']/g,
+    (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[ch] || ch
+  );
+}
+function formatShortDate(iso) {
+  if (!iso) return "\u2014";
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso.slice(0, 10);
+  return parsed.toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
+}
+var AdminAccountsController = class {
+  auth;
+  root;
+  isSessionAdmin;
+  sessionDenied;
+  csrfToken;
+  firebaseUser = null;
+  accounts = [];
+  summary = null;
+  currentActor = null;
+  pendingRemoveTarget = null;
+  isSubmittingCreate = false;
+  isSubmittingRemove = false;
+  constructor(auth2, root) {
+    this.auth = auth2;
+    this.root = root;
+    this.isSessionAdmin = root.dataset.sessionAdmin === "true";
+    this.sessionDenied = root.dataset.sessionDenied === "true";
+    this.csrfToken = root.dataset.csrfToken || "";
+    this.bindEvents();
+    if (this.isSessionAdmin && !this.sessionDenied) {
+      this.showWorkspace();
+      void this.loadAccounts();
+    }
+  }
+  setFeedback(message, isError = false) {
+    const el = document.getElementById("admin-accounts-feedback");
+    if (!el) return;
+    el.textContent = message;
+    el.classList.toggle("error", isError);
+    el.classList.toggle("success", !isError);
+    el.hidden = !message;
+  }
+  setFormError(message) {
+    const el = document.getElementById("admin-create-error");
+    if (!el) return;
+    el.textContent = message;
+    el.hidden = !message;
+  }
+  showGate(mode) {
+    const loading = document.getElementById("admin-accounts-loading");
+    const signedOut = document.getElementById("admin-accounts-signed-out");
+    const denied = document.getElementById("admin-accounts-denied");
+    const workspace = document.getElementById("admin-accounts-workspace");
+    if (loading) loading.hidden = mode !== "loading";
+    if (signedOut) signedOut.hidden = mode !== "signed-out";
+    if (denied) denied.hidden = mode !== "denied";
+    if (workspace) workspace.hidden = mode !== "workspace";
+  }
+  showWorkspace() {
+    this.showGate("workspace");
+  }
+  async onAuthChanged(user) {
+    this.firebaseUser = user;
+    if (this.sessionDenied) {
+      this.showGate("denied");
+      return;
+    }
+    if (this.isSessionAdmin) {
+      return;
+    }
+    if (!user) {
+      this.showGate("signed-out");
+      return;
+    }
+    this.showGate("loading");
+    await this.loadAccounts();
+  }
+  async buildAuthHeaders(includeJson = false) {
+    const headers = {
+      Accept: "application/json"
+    };
+    if (includeJson) {
+      headers["Content-Type"] = "application/json";
+    }
+    if (this.isSessionAdmin) {
+      if (this.csrfToken) {
+        headers["X-CSRF-Token"] = this.csrfToken;
+      }
+      return headers;
+    }
+    if (this.firebaseUser) {
+      const token = await getFreshIdToken(this.auth);
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  }
+  async loadAccounts() {
+    try {
+      const headers = await this.buildAuthHeaders(false);
+      const resp = await fetch("/api/admin/accounts", {
+        method: "GET",
+        headers,
+        credentials: "same-origin"
+      });
+      if (resp.status === 401) {
+        this.showGate("signed-out");
+        return;
+      }
+      if (resp.status === 403) {
+        this.showGate("denied");
+        return;
+      }
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !data || !Array.isArray(data.accounts)) {
+        throw new Error(data?.error || "Could not load administrator accounts.");
+      }
+      this.accounts = data.accounts;
+      this.summary = data.summary;
+      this.currentActor = data.currentActor;
+      this.showWorkspace();
+      this.render();
+    } catch (err) {
+      if (!this.isSessionAdmin && !this.firebaseUser) {
+        this.showGate("signed-out");
+        return;
+      }
+      this.showWorkspace();
+      this.setFeedback(
+        err instanceof Error ? err.message : "Could not load administrator accounts.",
+        true
+      );
+    }
+  }
+  render() {
+    const totalEl = document.getElementById("admin-stat-total");
+    const localEl = document.getElementById("admin-stat-local");
+    const actorEl = document.getElementById("admin-stat-actor");
+    const listEl = document.getElementById("admin-accounts-list");
+    if (totalEl && this.summary) {
+      totalEl.textContent = String(this.summary.totalActiveAdmins);
+    }
+    if (localEl && this.summary) {
+      localEl.textContent = String(this.summary.localAdminCount);
+    }
+    if (actorEl && this.currentActor) {
+      const modeLabel = this.currentActor.source === "firebase" ? "Google sign-in" : "Local admin session";
+      actorEl.textContent = `${this.currentActor.email || this.currentActor.displayName} \xB7 ${modeLabel}`;
+    }
+    if (!listEl) return;
+    if (!this.accounts.length) {
+      listEl.innerHTML = '<p class="account-empty">No administrator accounts are currently configured.</p>';
+      return;
+    }
+    const rows = this.accounts.map((acct) => {
+      const authLabel = acct.authType === "primary-google" ? "Primary Google" : "Local password";
+      const addedLabel = acct.createdAt ? `Added ${formatShortDate(acct.createdAt)}` : "System owner";
+      const lastLoginLine = acct.lastLoginAt ? `<div class="admin-cell-sub">Last login ${escapeHTML(
+        formatShortDate(acct.lastLoginAt)
+      )}</div>` : "";
+      const createdByLine = acct.createdBy ? `<div class="admin-cell-sub">Added by ${escapeHTML(acct.createdBy)}</div>` : "";
+      const actionCell = acct.canRemove ? `<button
+               type="button"
+               class="button secondary admin-btn-sm admin-btn-danger"
+               data-action="open-remove-admin"
+               data-admin-id="${escapeHTML(acct.id)}"
+             >Remove</button>` : `<span class="admin-protected-note">${escapeHTML(
+        acct.protectionReason || "Protected"
+      )}</span>`;
+      return `<tr>
+          <td>
+            <strong>${escapeHTML(acct.displayName)}</strong>
+            <div class="admin-cell-sub">@${escapeHTML(acct.username)}${acct.isCurrentUser ? " \xB7 You" : ""}</div>
+          </td>
+          <td>
+            <span>${escapeHTML(acct.email)}</span>
+            ${createdByLine}
+          </td>
+          <td>
+            <span class="admin-status-text">${escapeHTML(authLabel)}</span>
+          </td>
+          <td class="admin-tabular">
+            <span>${escapeHTML(addedLabel)}</span>
+            ${lastLoginLine}
+          </td>
+          <td class="admin-actions-col">
+            ${actionCell}
+          </td>
+        </tr>`;
+    }).join("");
+    listEl.innerHTML = `<div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Administrator</th>
+            <th>Email</th>
+            <th>Access type</th>
+            <th>Activity</th>
+            <th class="admin-actions-col">Action</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }
+  openRemoveModal(accountId) {
+    const target = this.accounts.find((a) => a.id === accountId && a.canRemove);
+    if (!target) return;
+    this.pendingRemoveTarget = target;
+    const modal = document.getElementById("admin-remove-modal");
+    const targetLabel = document.getElementById("admin-remove-target-label");
+    const targetEmail = document.getElementById("admin-remove-target-email");
+    const modalError = document.getElementById("admin-remove-error");
+    const confirmBtn = document.getElementById(
+      "admin-remove-confirm"
+    );
+    if (targetLabel) {
+      targetLabel.textContent = `${target.displayName} (@${target.username})`;
+    }
+    if (targetEmail) {
+      targetEmail.textContent = target.email;
+    }
+    if (modalError) {
+      modalError.textContent = "";
+      modalError.hidden = true;
+    }
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "Remove administrator";
+    }
+    if (modal) {
+      modal.hidden = false;
+      confirmBtn?.focus();
+    }
+  }
+  closeRemoveModal() {
+    const modal = document.getElementById("admin-remove-modal");
+    if (modal) modal.hidden = true;
+    this.pendingRemoveTarget = null;
+  }
+  async handleCreateSubmit(event) {
+    event.preventDefault();
+    if (this.isSubmittingCreate) return;
+    const form = event.currentTarget;
+    const usernameInput = document.getElementById(
+      "new-admin-username"
+    );
+    const emailInput = document.getElementById(
+      "new-admin-email"
+    );
+    const displayInput = document.getElementById(
+      "new-admin-display-name"
+    );
+    const passwordInput = document.getElementById(
+      "new-admin-password"
+    );
+    const confirmInput = document.getElementById(
+      "new-admin-password-confirm"
+    );
+    const submitBtn = document.getElementById(
+      "admin-create-submit"
+    );
+    const username = (usernameInput?.value || "").trim();
+    const email = (emailInput?.value || "").trim();
+    const displayName = (displayInput?.value || "").trim();
+    const password = passwordInput?.value || "";
+    const passwordConfirm = confirmInput?.value || "";
+    this.setFormError("");
+    this.setFeedback("");
+    if (!username || !email || !password) {
+      this.setFormError("Username, email address, and password are required.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      this.setFormError("Passwords do not match.");
+      return;
+    }
+    if (password.length < 10) {
+      this.setFormError("Password must be at least 10 characters long.");
+      return;
+    }
+    this.isSubmittingCreate = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Creating account\u2026";
+    }
+    try {
+      const headers = await this.buildAuthHeaders(true);
+      const resp = await fetch("/api/admin/accounts", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({
+          username,
+          email,
+          displayName: displayName || void 0,
+          password,
+          passwordConfirm
+        })
+      });
+      const data = await resp.json().catch(() => null);
+      if (resp.status === 401) {
+        this.showGate("signed-out");
+        return;
+      }
+      if (resp.status === 403) {
+        this.showGate("denied");
+        return;
+      }
+      if (!resp.ok) {
+        throw new Error(data?.error || "Could not create administrator account.");
+      }
+      form.reset();
+      await this.loadAccounts();
+      const created = data?.account;
+      this.setFeedback(
+        created ? `Administrator account @${created.username} (${created.email}) created. They can now sign in at /login.` : "Administrator account created.",
+        false
+      );
+    } catch (err) {
+      this.setFormError(
+        err instanceof Error ? err.message : "Could not create administrator account."
+      );
+    } finally {
+      this.isSubmittingCreate = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Create administrator";
+      }
+    }
+  }
+  async handleConfirmRemove() {
+    if (!this.pendingRemoveTarget || this.isSubmittingRemove) return;
+    const target = this.pendingRemoveTarget;
+    const confirmBtn = document.getElementById(
+      "admin-remove-confirm"
+    );
+    const modalError = document.getElementById("admin-remove-error");
+    this.isSubmittingRemove = true;
+    if (modalError) {
+      modalError.textContent = "";
+      modalError.hidden = true;
+    }
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Removing\u2026";
+    }
+    try {
+      const headers = await this.buildAuthHeaders(false);
+      const resp = await fetch(
+        `/api/admin/accounts/${encodeURIComponent(target.id)}`,
+        {
+          method: "DELETE",
+          headers,
+          credentials: "same-origin"
+        }
+      );
+      const data = await resp.json().catch(() => null);
+      if (resp.status === 401) {
+        this.closeRemoveModal();
+        this.showGate("signed-out");
+        return;
+      }
+      if (resp.status === 403) {
+        this.closeRemoveModal();
+        this.showGate("denied");
+        return;
+      }
+      if (!resp.ok) {
+        throw new Error(data?.error || "Could not remove administrator account.");
+      }
+      this.closeRemoveModal();
+      this.setFormError("");
+      await this.loadAccounts();
+      this.setFeedback(
+        `Removed administrator @${data?.removedUsername || target.username} (${data?.removedEmail || target.email}). Their admin access and active sessions have been revoked.`,
+        false
+      );
+    } catch (err) {
+      if (modalError) {
+        modalError.textContent = err instanceof Error ? err.message : "Could not remove administrator account.";
+        modalError.hidden = false;
+      }
+    } finally {
+      this.isSubmittingRemove = false;
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Remove administrator";
+      }
+    }
+  }
+  bindEvents() {
+    const form = document.getElementById("admin-create-form");
+    form?.addEventListener("submit", (event) => {
+      void this.handleCreateSubmit(event);
+    });
+    form?.addEventListener("input", () => {
+      this.setFormError("");
+    });
+    this.root.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!target) return;
+      const openBtn = target.closest(
+        '[data-action="open-remove-admin"]'
+      );
+      if (openBtn?.dataset.adminId) {
+        this.openRemoveModal(openBtn.dataset.adminId);
+        return;
+      }
+      if (target.closest('[data-action="close-remove-modal"]')) {
+        this.closeRemoveModal();
+        return;
+      }
+      if (target.id === "admin-remove-modal") {
+        this.closeRemoveModal();
+        return;
+      }
+      if (target.closest("#admin-remove-confirm")) {
+        void this.handleConfirmRemove();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        const modal = document.getElementById("admin-remove-modal");
+        if (modal && !modal.hidden) {
+          this.closeRemoveModal();
+        }
+      }
+    });
+  }
+};
+
 // src/algorithms/collectorUrlQueue.ts
 function hostMatchesApprovedDomains(hostname, approvedDomains) {
   const host = hostname.trim().toLowerCase().replace(/\.$/, "");
@@ -34773,7 +35218,7 @@ function buildCollectorUrlQueue(checkedConfiguredUrls, pastedRawText, approvedDo
 }
 
 // client/adminPanel.ts
-function escapeHTML(value) {
+function escapeHTML2(value) {
   return String(value ?? "").replace(
     /[&<>"']/g,
     (ch) => ({
@@ -34956,16 +35401,16 @@ var AdminCatalogController = class {
         ${filtered.map(
       (u) => `<tr>
           <td>
-            <strong>${escapeHTML(u.name)}</strong>
-            <div class="admin-cell-sub">${escapeHTML(u.shortName)} \xB7 <code>${escapeHTML(u.id)}</code></div>
+            <strong>${escapeHTML2(u.name)}</strong>
+            <div class="admin-cell-sub">${escapeHTML2(u.shortName)} \xB7 <code>${escapeHTML2(u.id)}</code></div>
           </td>
-          <td>${escapeHTML(u.city)} \xB7 ${escapeHTML(u.sector)}</td>
+          <td>${escapeHTML2(u.city)} \xB7 ${escapeHTML2(u.sector)}</td>
           <td>${u.programs.length}</td>
           <td>${u.tuitionFees.length} fee \xB7 ${u.applicationDeadlines.length} date</td>
-          <td><span class="account-pill">${escapeHTML(u.collectionStatus)}</span></td>
+          <td><span class="account-pill">${escapeHTML2(u.collectionStatus)}</span></td>
           <td class="admin-row-actions">
-            <button type="button" class="button secondary admin-btn-sm" data-admin-edit="${escapeHTML(u.id)}">Edit</button>
-            <button type="button" class="button secondary admin-btn-sm admin-btn-danger" data-admin-delete="${escapeHTML(u.id)}">Delete</button>
+            <button type="button" class="button secondary admin-btn-sm" data-admin-edit="${escapeHTML2(u.id)}">Edit</button>
+            <button type="button" class="button secondary admin-btn-sm admin-btn-danger" data-admin-delete="${escapeHTML2(u.id)}">Delete</button>
           </td>
         </tr>`
     ).join("")}
@@ -35024,13 +35469,13 @@ var AdminCatalogController = class {
           <input
             type="checkbox"
             checked
-            data-collector-page-url="${escapeHTML(page.url)}"
+            data-collector-page-url="${escapeHTML2(page.url)}"
           />
           <span class="admin-page-meta">
             <span class="admin-page-title">
-              <strong>${escapeHTML(labelText)}</strong>${fieldSummary ? `<span class="admin-page-fields"> \xB7 ${escapeHTML(fieldSummary)}</span>` : ""}
+              <strong>${escapeHTML2(labelText)}</strong>${fieldSummary ? `<span class="admin-page-fields"> \xB7 ${escapeHTML2(fieldSummary)}</span>` : ""}
             </span>
-            <code class="admin-page-url">${escapeHTML(page.url)}</code>
+            <code class="admin-page-url">${escapeHTML2(page.url)}</code>
           </span>
         </label>`;
     }).join("");
@@ -35077,7 +35522,7 @@ var AdminCatalogController = class {
     }
     const hasError = errors.length > 0;
     statusEl.classList.toggle("has-error", hasError);
-    statusEl.innerHTML = `<div class="admin-url-counter">${escapeHTML(parts.join(" \xB7 "))}</div>${hasError ? `<ul class="admin-url-errors">${errors.map((msg) => `<li>${escapeHTML(msg)}</li>`).join("")}</ul>` : ""}`;
+    statusEl.innerHTML = `<div class="admin-url-counter">${escapeHTML2(parts.join(" \xB7 "))}</div>${hasError ? `<ul class="admin-url-errors">${errors.map((msg) => `<li>${escapeHTML2(msg)}</li>`).join("")}</ul>` : ""}`;
     if (runBtn && !runBtn.dataset.busy) {
       runBtn.disabled = !queue.canRun;
     }
@@ -35091,11 +35536,11 @@ var AdminCatalogController = class {
     if (!this.collectorConfig) return;
     if (select && select.options.length <= 1) {
       select.innerHTML = this.collectorConfig.targets.map(
-        (t) => `<option value="${escapeHTML(t.universityId)}">${escapeHTML(t.name)} (${t.pages.length} official page${t.pages.length === 1 ? "" : "s"})</option>`
+        (t) => `<option value="${escapeHTML2(t.universityId)}">${escapeHTML2(t.name)} (${t.pages.length} official page${t.pages.length === 1 ? "" : "s"})</option>`
       ).join("");
     }
     if (domainsEl) {
-      domainsEl.innerHTML = this.collectorConfig.approvedDomains.map((d) => `<span class="admin-domain-chip">${escapeHTML(d)}</span>`).join("");
+      domainsEl.innerHTML = this.collectorConfig.approvedDomains.map((d) => `<span class="admin-domain-chip">${escapeHTML2(d)}</span>`).join("");
     }
     if (policyEl) {
       const maxPages = this.collectorConfig.maxPagesPerRun || 12;
@@ -35123,11 +35568,11 @@ var AdminCatalogController = class {
       <tbody>
         ${this.runs.map(
       (r) => `<tr>
-          <td><strong>${escapeHTML(r.universityName)}</strong><div class="admin-cell-sub">${r.createdAtMs ? escapeHTML(new Date(r.createdAtMs).toLocaleString("en-PH")) : "Just now"}</div></td>
-          <td><span class="account-status">${escapeHTML(r.mode)}</span></td>
-          <td><span class="account-pill">${escapeHTML(r.status)}</span></td>
+          <td><strong>${escapeHTML2(r.universityName)}</strong><div class="admin-cell-sub">${r.createdAtMs ? escapeHTML2(new Date(r.createdAtMs).toLocaleString("en-PH")) : "Just now"}</div></td>
+          <td><span class="account-status">${escapeHTML2(r.mode)}</span></td>
+          <td><span class="account-pill">${escapeHTML2(r.status)}</span></td>
           <td>${r.fetchedUrlCount} URLs \xB7 ${r.programCount} programs \xB7 ${r.conflictCount} conflicts</td>
-          <td><div>${escapeHTML(r.notes)}</div>${r.robotsSummary ? `<div class="admin-cell-sub">${escapeHTML(r.robotsSummary)}</div>` : ""}</td>
+          <td><div>${escapeHTML2(r.notes)}</div>${r.robotsSummary ? `<div class="admin-cell-sub">${escapeHTML2(r.robotsSummary)}</div>` : ""}</td>
         </tr>`
     ).join("")}
       </tbody>
@@ -35168,7 +35613,7 @@ var AdminCatalogController = class {
     if (progEl) {
       progEl.innerHTML = u.programs.length ? `<ul class="admin-item-list">${u.programs.map(
         (p2, idx) => `<li>
-            <div><strong>${escapeHTML(p2.name)}</strong> <span class="account-status">${escapeHTML(p2.topic)}</span>${p2.strandAlignment ? `<div class="admin-cell-sub">Strand: ${escapeHTML(p2.strandAlignment)}</div>` : ""}</div>
+            <div><strong>${escapeHTML2(p2.name)}</strong> <span class="account-status">${escapeHTML2(p2.topic)}</span>${p2.strandAlignment ? `<div class="admin-cell-sub">Strand: ${escapeHTML2(p2.strandAlignment)}</div>` : ""}</div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-program="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No degree programs added yet.</p>';
@@ -35177,7 +35622,7 @@ var AdminCatalogController = class {
     if (feeEl) {
       feeEl.innerHTML = u.tuitionFees.length ? `<ul class="admin-item-list">${u.tuitionFees.map(
         (f2, idx) => `<li>
-            <div><strong>${f2.amountMin !== null ? `PHP ${f2.amountMin.toLocaleString("en-PH")}${f2.amountMax && f2.amountMax !== f2.amountMin ? `\u2013${f2.amountMax.toLocaleString("en-PH")}` : ""}` : "Note only"}</strong> (${escapeHTML(f2.basis)})${f2.rawText ? `<div class="admin-cell-sub">${escapeHTML(f2.rawText)}</div>` : ""}</div>
+            <div><strong>${f2.amountMin !== null ? `PHP ${f2.amountMin.toLocaleString("en-PH")}${f2.amountMax && f2.amountMax !== f2.amountMin ? `\u2013${f2.amountMax.toLocaleString("en-PH")}` : ""}` : "Note only"}</strong> (${escapeHTML2(f2.basis)})${f2.rawText ? `<div class="admin-cell-sub">${escapeHTML2(f2.rawText)}</div>` : ""}</div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-fee="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No tuition records added yet.</p>';
@@ -35186,7 +35631,7 @@ var AdminCatalogController = class {
     if (deadlineEl) {
       deadlineEl.innerHTML = u.applicationDeadlines.length ? `<ul class="admin-item-list">${u.applicationDeadlines.map(
         (d, idx) => `<li>
-            <div><strong>${escapeHTML(d.label)}</strong>${d.dateIso ? ` \u2014 ${escapeHTML(d.dateIso)}` : ""}${d.rawText ? `<div class="admin-cell-sub">${escapeHTML(d.rawText)}</div>` : ""}</div>
+            <div><strong>${escapeHTML2(d.label)}</strong>${d.dateIso ? ` \u2014 ${escapeHTML2(d.dateIso)}` : ""}${d.rawText ? `<div class="admin-cell-sub">${escapeHTML2(d.rawText)}</div>` : ""}</div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-deadline="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No deadlines added yet.</p>';
@@ -35195,7 +35640,7 @@ var AdminCatalogController = class {
     if (reqEl) {
       reqEl.innerHTML = u.admissionRequirements.length ? `<ul class="admin-item-list">${u.admissionRequirements.map(
         (r, idx) => `<li>
-            <div><span class="account-status">${escapeHTML(r.category)}</span> ${escapeHTML(r.text)}</div>
+            <div><span class="account-status">${escapeHTML2(r.category)}</span> ${escapeHTML2(r.text)}</div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-req="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No admission requirements added yet.</p>';
@@ -35204,7 +35649,7 @@ var AdminCatalogController = class {
     if (examEl) {
       examEl.innerHTML = u.entranceExaminations.length ? `<ul class="admin-item-list">${u.entranceExaminations.map(
         (e2, idx) => `<li>
-            <div><strong>${escapeHTML(e2.examName)}</strong><div class="admin-cell-sub">${escapeHTML(e2.coverage)}</div></div>
+            <div><strong>${escapeHTML2(e2.examName)}</strong><div class="admin-cell-sub">${escapeHTML2(e2.coverage)}</div></div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-exam="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No entrance exam notes added yet.</p>';
@@ -35213,7 +35658,7 @@ var AdminCatalogController = class {
     if (linkEl) {
       linkEl.innerHTML = u.applicationLinks.length ? `<ul class="admin-item-list">${u.applicationLinks.map(
         (l2, idx) => `<li>
-            <div><strong>${escapeHTML(l2.label)}</strong><div class="admin-cell-sub">${escapeHTML(l2.url)}</div></div>
+            <div><strong>${escapeHTML2(l2.label)}</strong><div class="admin-cell-sub">${escapeHTML2(l2.url)}</div></div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-link="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No official application links added yet.</p>';
@@ -35235,10 +35680,10 @@ var AdminCatalogController = class {
     const urlRows = audit.urls.length ? `<ul class="admin-audit-urls">${audit.urls.map(
       (u) => `<li>
           <div class="admin-audit-url-head">
-            <code class="admin-page-url">${escapeHTML(u.url)}</code>
-            <span class="admin-cell-sub">${escapeHTML(formatSourceKind(u))} \xB7 ${escapeHTML(u.status)}${u.httpStatus ? ` \xB7 HTTP ${u.httpStatus}` : ""}</span>
+            <code class="admin-page-url">${escapeHTML2(u.url)}</code>
+            <span class="admin-cell-sub">${escapeHTML2(formatSourceKind(u))} \xB7 ${escapeHTML2(u.status)}${u.httpStatus ? ` \xB7 HTTP ${u.httpStatus}` : ""}</span>
           </div>
-          <div class="admin-cell-sub">${escapeHTML(u.robotsReason)} \xB7 ${escapeHTML(u.detail)}</div>
+          <div class="admin-cell-sub">${escapeHTML2(u.robotsReason)} \xB7 ${escapeHTML2(u.detail)}</div>
         </li>`
     ).join("")}</ul>` : "";
     const conflictsSection = draft.declaredConflicts.length ? `<section class="admin-conflicts-box" aria-label="Flagged differences across official pages">
@@ -35251,78 +35696,78 @@ var AdminCatalogController = class {
           <ul class="admin-conflicts-list">
             ${draft.declaredConflicts.map(
       (c) => `<li class="admin-conflict-item">
-                  <div class="admin-conflict-field"><strong>${escapeHTML(c.field.replace(/_/g, " "))}</strong></div>
+                  <div class="admin-conflict-field"><strong>${escapeHTML2(c.field.replace(/_/g, " "))}</strong></div>
                   <div class="admin-conflict-grid">
                     <div>
                       <span class="admin-conflict-label">Kept (official priority)</span>
-                      <div>${escapeHTML(c.keptValue)}</div>
+                      <div>${escapeHTML2(c.keptValue)}</div>
                     </div>
                     <div>
                       <span class="admin-conflict-label">Other official page</span>
-                      <div>${escapeHTML(c.discardedValue)}</div>
+                      <div>${escapeHTML2(c.discardedValue)}</div>
                     </div>
                   </div>
-                  <div class="admin-cell-sub">${escapeHTML(c.reason)}</div>
+                  <div class="admin-cell-sub">${escapeHTML2(c.reason)}</div>
                 </li>`
     ).join("")}
           </ul>
         </section>` : "";
     const renderSectionDetails = (title, itemsHtml, count) => count > 0 ? `<details class="admin-preview-details">
-            <summary>${escapeHTML(title)} (${count})</summary>
+            <summary>${escapeHTML2(title)} (${count})</summary>
             <ul class="admin-preview-list">${itemsHtml}</ul>
           </details>` : "";
     const programsPreview = renderSectionDetails(
       "Extracted degree programs",
       draft.programs.slice(0, 40).map(
-        (p2) => `<li><strong>${escapeHTML(p2.name)}</strong> <span class="admin-cell-sub">\xB7 ${escapeHTML(p2.topic)}${p2.strandAlignment ? ` \xB7 Strand: ${escapeHTML(p2.strandAlignment)}` : ""}</span></li>`
+        (p2) => `<li><strong>${escapeHTML2(p2.name)}</strong> <span class="admin-cell-sub">\xB7 ${escapeHTML2(p2.topic)}${p2.strandAlignment ? ` \xB7 Strand: ${escapeHTML2(p2.strandAlignment)}` : ""}</span></li>`
       ).join("") + (draft.programs.length > 40 ? `<li class="admin-cell-sub">\u2026and ${draft.programs.length - 40} more programs (all viewable in Editor)</li>` : ""),
       draft.programs.length
     );
     const reqsPreview = renderSectionDetails(
       "Extracted admission requirements",
       draft.admissionRequirements.slice(0, 20).map(
-        (r) => `<li><span class="admin-cell-sub">${escapeHTML(r.category)} \xB7</span> ${escapeHTML(r.text)}</li>`
+        (r) => `<li><span class="admin-cell-sub">${escapeHTML2(r.category)} \xB7</span> ${escapeHTML2(r.text)}</li>`
       ).join(""),
       draft.admissionRequirements.length
     );
     const feesPreview = renderSectionDetails(
       "Extracted tuition & fee notes",
       draft.tuitionFees.slice(0, 15).map((f2) => {
-        const amt = f2.amountMin !== null ? f2.amountMin === 0 && f2.amountMax === 0 ? "Free Tuition (RA 10931)" : `PHP ${f2.amountMin.toLocaleString()}${f2.amountMax && f2.amountMax !== f2.amountMin ? ` \u2013 ${f2.amountMax.toLocaleString()}` : ""} (${escapeHTML(f2.basis)})` : escapeHTML(f2.basis);
-        return `<li><strong>${amt}</strong> \u2014 ${escapeHTML(f2.rawText)}</li>`;
+        const amt = f2.amountMin !== null ? f2.amountMin === 0 && f2.amountMax === 0 ? "Free Tuition (RA 10931)" : `PHP ${f2.amountMin.toLocaleString()}${f2.amountMax && f2.amountMax !== f2.amountMin ? ` \u2013 ${f2.amountMax.toLocaleString()}` : ""} (${escapeHTML2(f2.basis)})` : escapeHTML2(f2.basis);
+        return `<li><strong>${amt}</strong> \u2014 ${escapeHTML2(f2.rawText)}</li>`;
       }).join(""),
       draft.tuitionFees.length
     );
     const deadlinesPreview = renderSectionDetails(
       "Extracted dates & deadlines",
       draft.applicationDeadlines.slice(0, 15).map(
-        (d) => `<li><strong>${escapeHTML(d.label)}</strong>${d.dateIso ? ` (${escapeHTML(d.dateIso)})` : ""} \u2014 ${escapeHTML(d.rawText)}</li>`
+        (d) => `<li><strong>${escapeHTML2(d.label)}</strong>${d.dateIso ? ` (${escapeHTML2(d.dateIso)})` : ""} \u2014 ${escapeHTML2(d.rawText)}</li>`
       ).join(""),
       draft.applicationDeadlines.length
     );
     const examsPreview = renderSectionDetails(
       "Extracted entrance examinations",
       draft.entranceExaminations.slice(0, 10).map(
-        (e2) => `<li><strong>${escapeHTML(e2.examName)}</strong> \u2014 ${escapeHTML(e2.coverage)}</li>`
+        (e2) => `<li><strong>${escapeHTML2(e2.examName)}</strong> \u2014 ${escapeHTML2(e2.coverage)}</li>`
       ).join(""),
       draft.entranceExaminations.length
     );
     const linksPreview = renderSectionDetails(
       "Official portals & PDF guides",
       draft.applicationLinks.slice(0, 12).map(
-        (l2) => `<li><strong>${escapeHTML(l2.label)}</strong> \u2014 <span class="admin-cell-sub">${escapeHTML(l2.url)}</span></li>`
+        (l2) => `<li><strong>${escapeHTML2(l2.label)}</strong> \u2014 <span class="admin-cell-sub">${escapeHTML2(l2.url)}</span></li>`
       ).join(""),
       draft.applicationLinks.length
     );
     el.innerHTML = `<div class="admin-preview-card">
       <div class="admin-preview-head">
         <div>
-          <h3>${escapeHTML(draft.name)}</h3>
-          <p class="account-help">${escapeHTML(audit.notes)}</p>
+          <h3>${escapeHTML2(draft.name)}</h3>
+          <p class="account-help">${escapeHTML2(audit.notes)}</p>
         </div>
-        <span class="account-pill">${escapeHTML(audit.status)}</span>
+        <span class="account-pill">${escapeHTML2(audit.status)}</span>
       </div>
-      <p class="admin-cell-sub">${escapeHTML(audit.robotsSummary)}</p>
+      <p class="admin-cell-sub">${escapeHTML2(audit.robotsSummary)}</p>
       <div class="admin-preview-metrics">
         <span><strong>${draft.programs.length}</strong> programs</span>
         <span><strong>${draft.tuitionFees.length}</strong> tuition notes</span>
@@ -36089,7 +36534,7 @@ function isSafeRedirect(value) {
   }
   return value;
 }
-function escapeHTML2(value) {
+function escapeHTML3(value) {
   return String(value ?? "").replace(
     /[&<>"']/g,
     (ch) => ({
@@ -36268,15 +36713,52 @@ function showAuthFeedback(message, isError = true) {
   box.classList.toggle("success", !isError);
   box.hidden = !message;
 }
+var googleSyncInProgress = false;
+async function syncGoogleAccountWithBackend(user) {
+  const idToken = await user.getIdToken();
+  const resp = await fetch("/api/auth/google-sync", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({})
+  });
+  let payload = {};
+  try {
+    payload = await resp.json();
+  } catch {
+    payload = {};
+  }
+  if (!resp.ok) {
+    return {
+      ok: false,
+      conflict: resp.status === 409 || payload.code === "AUTH_PROVIDER_CONFLICT",
+      error: payload.error || "Could not complete Google sign-in right now. Please try again."
+    };
+  }
+  return { ok: true };
+}
 async function triggerGoogleSignIn(button) {
   const originalLabel = button.textContent || "Continue with Google";
   button.disabled = true;
   button.textContent = "Opening Google sign-in\u2026";
   showAuthFeedback("", false);
+  googleSyncInProgress = true;
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
     const credential = await signInWithPopup(auth, provider);
+    const syncResult = await syncGoogleAccountWithBackend(credential.user);
+    if (!syncResult.ok) {
+      await signOut(auth).catch(() => {
+      });
+      showAuthFeedback(
+        syncResult.error || "An account with this email already exists using email and password. Please log in with your email and password instead."
+      );
+      return;
+    }
     await ensureCloudProfile(credential.user);
     const nextAttr = button.dataset.next || "/cloud-profile";
     const destination = isSafeRedirect(nextAttr);
@@ -36297,9 +36779,15 @@ async function triggerGoogleSignIn(button) {
       );
     }
   } finally {
+    googleSyncInProgress = false;
     button.disabled = false;
     button.textContent = originalLabel;
   }
+}
+function extractAvatarInitial(name4, fallback = "G") {
+  const cleaned = String(name4 || "").trim();
+  const match = cleaned.match(/[A-Za-z0-9]/);
+  return match ? match[0].toUpperCase() : fallback;
 }
 function updateHeaderLinksForCloudUser(displayName) {
   const bodyAccount = document.body.dataset.account;
@@ -36310,6 +36798,10 @@ function updateHeaderLinksForCloudUser(displayName) {
   });
   document.querySelectorAll("[data-cloud-signed-out]").forEach((el) => {
     el.hidden = isSignedIn;
+  });
+  const initial = isSignedIn ? extractAvatarInitial(displayName, "S") : "G";
+  document.querySelectorAll("[data-cloud-avatar]").forEach((el) => {
+    el.textContent = initial;
   });
   if (displayName) {
     document.querySelectorAll("[data-cloud-display-name]").forEach((el) => {
@@ -36388,7 +36880,7 @@ async function refreshCloudRecommendations(prefs) {
           city: prefs.city,
           sector: prefs.sector,
           budget: prefs.budget,
-          budget_basis: prefs.budgetBasis
+          budget_basis: prefs.budget !== null ? prefs.budgetBasis : void 0
         },
         prefs.weights,
         10
@@ -36431,8 +36923,8 @@ async function refreshCloudRecommendations(prefs) {
         <section class="account-match-group">
           <header class="account-match-group-head">
             <div>
-              <h3>${escapeHTML2(group.university_name)}</h3>
-              <p>${escapeHTML2(group.campus_location || "Campus not available")}</p>
+              <h3>${escapeHTML3(group.university_name)}</h3>
+              <p>${escapeHTML3(group.campus_location || "Campus not available")}</p>
             </div>
             <span class="account-pill">${group.items.length} program${group.items.length === 1 ? "" : "s"}</span>
           </header>
@@ -36442,16 +36934,16 @@ async function refreshCloudRecommendations(prefs) {
               <li class="account-match">
                 <div class="account-match-head">
                   <div>
-                    <h4>${escapeHTML2(item.program_name || "All collected programs at this university")}</h4>
-                    <p>#${item.rank} overall${item.topic ? ` \xB7 ${escapeHTML2(item.topic)}` : ""}</p>
+                    <h4>${escapeHTML3(item.program_name || "All collected programs at this university")}</h4>
+                    <p>#${item.rank} overall${item.topic ? ` \xB7 ${escapeHTML3(item.topic)}` : ""}</p>
                   </div>
-                  <strong class="account-score">${escapeHTML2(item.score)}<span>/100</span></strong>
+                  <strong class="account-score">${escapeHTML3(item.score)}<span>/100</span></strong>
                 </div>
                 <details>
                   <summary>Why this match?</summary>
                   <ul>
                     ${(item.explanations || []).map(
-          (ex) => `<li><strong>${escapeHTML2(ex.label)}:</strong> ${escapeHTML2(ex.reason)} <span class="account-status">${escapeHTML2(String(ex.status || "").replace(/_/g, " "))}</span></li>`
+          (ex) => `<li><strong>${escapeHTML3(ex.label)}:</strong> ${escapeHTML3(ex.reason)} <span class="account-status">${escapeHTML3(String(ex.status || "").replace(/_/g, " "))}</span></li>`
         ).join("")}
                   </ul>
                 </details>
@@ -36462,7 +36954,7 @@ async function refreshCloudRecommendations(prefs) {
     ).join("");
     container.innerHTML = `<p class="account-help">Grouped by university and ranked with the custom stable merge sort. Scores measure fit against your saved preferences, not admission chances.</p><div class="account-match-groups">${groupsHtml}</div>`;
   } catch (err) {
-    container.innerHTML = `<p class="account-alert error" role="alert">${escapeHTML2(err instanceof Error ? err.message : "Could not load recommendations.")}</p>`;
+    container.innerHTML = `<p class="account-alert error" role="alert">${escapeHTML3(err instanceof Error ? err.message : "Could not load recommendations.")}</p>`;
   }
 }
 async function hydrateCloudProfilePage(user) {
@@ -36643,7 +37135,9 @@ function boot() {
       path
     )
   ) : null;
-  if (!isAdminPage) {
+  const adminAccountsRoot = document.getElementById("admin-accounts-page");
+  const adminAccountsController = adminAccountsRoot ? new AdminAccountsController(auth, adminAccountsRoot) : null;
+  if (!isAdminPage && !adminAccountsRoot) {
     void hydratePublishedCatalog();
   }
   onAuthStateChanged(auth, async (user) => {
@@ -36657,6 +37151,9 @@ function boot() {
       if (adminController) {
         await adminController.onAuthChanged(null);
       }
+      if (adminAccountsController) {
+        await adminAccountsController.onAuthChanged(null);
+      }
       if (isCloudProfilePage) {
         const signedOutSection = document.getElementById("cloud-signed-out");
         const signedInSection = document.getElementById("cloud-signed-in");
@@ -36667,8 +37164,27 @@ function boot() {
       }
       return;
     }
+    if (googleSyncInProgress) {
+      return;
+    }
+    const syncCheck = await syncGoogleAccountWithBackend(user).catch(() => ({
+      ok: true,
+      conflict: false,
+      error: void 0
+    }));
+    if (!syncCheck.ok && syncCheck.conflict) {
+      await signOut(auth).catch(() => {
+      });
+      showAuthFeedback(
+        syncCheck.error || "An account with this email already exists using email and password. Please log in with your email and password instead."
+      );
+      return;
+    }
     const isAdmin = await verifyAdminAccess(db, user);
     updateAdminLinksVisibility(isAdmin);
+    if (adminAccountsController) {
+      await adminAccountsController.onAuthChanged(user);
+    }
     if (adminController) {
       await adminController.onAuthChanged(user);
       try {
@@ -36677,9 +37193,15 @@ function boot() {
         updateHeaderLinksForCloudUser(profile.displayName);
       } catch {
         updateHeaderLinksForCloudUser(
-          sanitizeDisplayName(user.displayName || "Admin")
+          sanitizeDisplayName(user.displayName || user.email?.split("@")[0] || "Admin")
         );
       }
+      return;
+    }
+    if (adminAccountsController) {
+      updateHeaderLinksForCloudUser(
+        sanitizeDisplayName(user.displayName || user.email?.split("@")[0] || "Admin")
+      );
       return;
     }
     if (isCloudProfilePage) {
@@ -36707,7 +37229,7 @@ function boot() {
       );
     } catch {
       updateHeaderLinksForCloudUser(
-        sanitizeDisplayName(user.displayName || "Student")
+        sanitizeDisplayName(user.displayName || user.email?.split("@")[0] || "Student")
       );
     }
   });

@@ -75,7 +75,12 @@
           <div class="sidebar-account-info">
             <% if (currentUser) { %>
               <strong><%= accountName() %></strong>
-              <a href="/profile">My profile</a>
+              <span class="sidebar-account-links">
+                <a href="/profile">My profile</a>
+                <% if (currentUser.role === 'admin') { %>
+                  <a href="/admin/accounts"> · Admin</a>
+                <% } %>
+              </span>
             <% } else { %>
               <strong data-cloud-signed-in data-cloud-display-name hidden>Student</strong>
               <span class="sidebar-account-links" data-cloud-signed-in hidden>

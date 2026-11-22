@@ -2,26 +2,37 @@
  * Student registration, login, 2FA, password recovery and profile routes.
  */
 import express, { type NextFunction, type Request, type Response } from "express";
+import { hydratePgUserIntoStore } from "../accountPersistence.js";
 import {
+  AccountConflictError,
   AccountError,
   authenticate,
   beginTotpSetup,
   changePassword,
-  createUser,
+  createUserAsync,
   disableTotp,
   enableTotp,
   findUserByEmail,
+  findUserByEmailAsync,
   getPreferences,
   getProfile,
   getTotpState,
   getUser,
   hasPreferences,
   recommendationPreferences,
+  registerOrVerifyGoogleAccount,
   resetPassword as applyPasswordReset,
   savePreferences,
   updateProfile,
   verifySecondFactor,
 } from "../accounts.js";
+import { dbFindUserByEmail, isPostgresSchemaReady } from "../db/postgres.js";
+import { adminAuth } from "../lib/firebaseAdmin.js";
+import {
+  isBrevoConfigured,
+  sendGoogleSignInReminderEmail,
+  sendPasswordResetEmail,
+} from "../mailer.js";
 import {
   DecryptionError,
   IS_PRODUCTION,
@@ -30,9 +41,10 @@ import {
   isSafeNextUrl,
   loadResetToken,
   makeResetToken,
+  normalizeEmail,
   refreshCsrfToken,
 } from "../security.js";
-import { rankedRecommendations } from "../store.js";
+import { isBootstrappedAdminEmail, rankedRecommendations } from "../store.js";
 import {
   SlidingFixedWindowLimiter,
   createRateLimitMiddleware,
@@ -199,10 +211,14 @@ function buildProfileContext(req: Request, res: Response, error?: string | null)
 }
 
 authRouter.get("/login", (req, res) => {
-  if (res.locals.currentUser) return res.redirect("/profile");
+  if (res.locals.currentUser) {
+    return res.redirect(
+      res.locals.currentUser.role === "admin" ? "/admin/accounts" : "/profile",
+    );
+  }
   return res.render("login", {
     title: "Log in",
-    next_url: nextUrl(req, "/profile"),
+    next_url: nextUrl(req, ""),
     email: "",
     error: null,
     flashes: consumeFlashes(req),
@@ -222,7 +238,7 @@ const loginLimitMiddleware = createRateLimitMiddleware(
   },
 );
 
-authRouter.post("/login", loginLimitMiddleware, (req, res) => {
+authRouter.post("/login", loginLimitMiddleware, async (req, res) => {
   if (!isCsrfValid(req)) {
     return res.status(400).render("login", {
       title: "Log in",
@@ -232,22 +248,26 @@ authRouter.post("/login", loginLimitMiddleware, (req, res) => {
       flashes: consumeFlashes(req),
     });
   }
-  const email = String(req.body?.email ?? "");
+  const identifier = String(req.body?.email ?? req.body?.identifier ?? "");
   const password = String(req.body?.password ?? "");
+  if (identifier.includes("@")) {
+    await findUserByEmailAsync(identifier);
+  }
   let user;
   try {
-    user = authenticate(email, password);
+    user = authenticate(identifier, password);
   } catch (err) {
     return res.status(401).render("login", {
       title: "Log in",
       error: (err as Error).message,
-      email,
-      next_url: nextUrl(req, "/profile"),
+      email: identifier,
+      next_url: nextUrl(req, ""),
       flashes: consumeFlashes(req),
     });
   }
 
-  const target = nextUrl(req, "/profile");
+  const defaultTarget = user.role === "admin" ? "/admin/accounts" : "/profile";
+  const target = nextUrl(req, defaultTarget);
   if (user.totp_enabled) {
     return regenerateAndRedirect(
       req,
@@ -365,7 +385,7 @@ const registerLimitMiddleware = createRateLimitMiddleware(
   },
 );
 
-authRouter.post("/register", registerLimitMiddleware, (req, res) => {
+authRouter.post("/register", registerLimitMiddleware, async (req, res) => {
   const target = nextUrl(req, "/profile");
   if (!isCsrfValid(req)) {
     return res.status(400).render("register", {
@@ -395,9 +415,15 @@ authRouter.post("/register", registerLimitMiddleware, (req, res) => {
 
   let user;
   try {
-    user = createUser(email, password, displayName);
+    user = await createUserAsync(email, password, displayName);
   } catch (err) {
-    return res.status(400).render("register", {
+    const statusCode =
+      err instanceof AccountConflictError
+        ? 409
+        : err instanceof AccountError
+          ? err.statusCode
+          : 400;
+    return res.status(statusCode).render("register", {
       title: "Create account",
       error: (err as Error).message,
       email,
@@ -422,6 +448,66 @@ authRouter.post("/register", registerLimitMiddleware, (req, res) => {
     target,
   );
 });
+
+const googleSyncLimitMiddleware = createRateLimitMiddleware(loginRateLimiter);
+
+authRouter.post(
+  "/api/auth/google-sync",
+  googleSyncLimitMiddleware,
+  async (req, res) => {
+    const header = String(req.headers.authorization || "");
+    if (!header.startsWith("Bearer ")) {
+      return res
+        .status(401)
+        .json({ error: "Google sign-in authorization token is required." });
+    }
+    const token = header.slice(7).trim();
+    if (!token || token.length > 8192) {
+      return res.status(401).json({ error: "Invalid authorization token." });
+    }
+
+    let decoded;
+    try {
+      decoded = await adminAuth.verifyIdToken(token);
+    } catch {
+      return res.status(401).json({
+        error: "Your Google sign-in token could not be verified. Please try again.",
+      });
+    }
+
+    const email = typeof decoded.email === "string" ? decoded.email.trim() : "";
+    if (!email) {
+      return res.status(400).json({
+        error: "Your Google account did not provide a valid email address.",
+      });
+    }
+
+    try {
+      const account = await registerOrVerifyGoogleAccount({
+        firebaseUid: decoded.uid,
+        email,
+        displayName:
+          typeof decoded.name === "string" ? decoded.name : undefined,
+      });
+      return res.json({ ok: true, account });
+    } catch (err) {
+      if (err instanceof AccountConflictError) {
+        return res.status(409).json({
+          code: "AUTH_PROVIDER_CONFLICT",
+          provider: err.existingProvider,
+          error: err.message,
+        });
+      }
+      if (err instanceof AccountError) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      console.error("[auth] Failed to sync Google account:", err);
+      return res.status(500).json({
+        error: "Could not verify your account right now. Please try again.",
+      });
+    }
+  },
+);
 
 authRouter.post("/logout", loginRequired, (req, res) => {
   if (!isCsrfValid(req)) {
@@ -457,7 +543,27 @@ const forgotLimitMiddleware = createRateLimitMiddleware(
   },
 );
 
-authRouter.post("/forgot-password", forgotLimitMiddleware, (req, res) => {
+function buildBaseOrigin(req: Request): string {
+  const fwdProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim();
+  const proto = fwdProto || req.protocol || "https";
+  const fwdHost = String(req.headers["x-forwarded-host"] || "")
+    .split(",")[0]
+    .trim();
+  const host = fwdHost || String(req.headers.host || "localhost:3000").trim();
+  return `${proto}://${host}`;
+}
+
+function buildAbsoluteResetUrl(req: Request, token: string): string {
+  return `${buildBaseOrigin(req)}/reset-password/${encodeURIComponent(token)}`;
+}
+
+function buildAbsoluteLoginUrl(req: Request): string {
+  return `${buildBaseOrigin(req)}/login`;
+}
+
+authRouter.post("/forgot-password", forgotLimitMiddleware, async (req, res) => {
   if (!isCsrfValid(req)) {
     return res.status(400).render("forgot_password", {
       title: "Forgot password",
@@ -467,21 +573,150 @@ authRouter.post("/forgot-password", forgotLimitMiddleware, (req, res) => {
       flashes: consumeFlashes(req),
     });
   }
-  const email = String(req.body?.email ?? "");
+
+  const rawEmail = String(req.body?.email ?? "");
   let devResetLink: string | null = null;
-  const row = email.trim() ? findUserByEmail(email) : undefined;
-  if (row && row.is_active) {
-    let address = "";
+  let normalizedEmail = "";
+  try {
+    normalizedEmail = normalizeEmail(rawEmail);
+  } catch {
+    console.log(
+      "[forgot-password] Step 1: Submitted email is blank or invalid format; returning neutral response.",
+    );
+    return res.render("forgot_password", {
+      title: "Forgot password",
+      submitted: true,
+      dev_reset_link: null,
+      error: null,
+      flashes: consumeFlashes(req),
+    });
+  }
+
+  const postgresReady = isPostgresSchemaReady();
+  let foundInPostgres = false;
+  let row = undefined;
+
+  if (postgresReady) {
     try {
-      address = decryptPii(row.email_encrypted);
-    } catch {
-      address = "";
+      const pgRow = await dbFindUserByEmail(normalizedEmail);
+      if (pgRow) {
+        foundInPostgres = true;
+        row = hydratePgUserIntoStore(pgRow);
+      }
+      console.log("[forgot-password] Step 1: PostgreSQL user lookup completed:", {
+        email: normalizedEmail,
+        postgresReady: true,
+        foundInPostgres,
+        authProvider: row?.auth_provider ?? null,
+        isActive: row?.is_active ?? null,
+      });
+    } catch (err) {
+      console.error("[forgot-password] Step 1: PostgreSQL lookup failed:", {
+        email: normalizedEmail,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
-    if (address && !IS_PRODUCTION) {
-      const token = makeResetToken(row.id, row.session_version);
-      devResetLink = `/reset-password/${encodeURIComponent(token)}`;
+  } else {
+    console.log("[forgot-password] Step 1: PostgreSQL not active; checking in-memory store.", {
+      email: normalizedEmail,
+      postgresReady: false,
+    });
+  }
+
+  if (!row) {
+    row = findUserByEmail(normalizedEmail);
+    if (row) {
+      console.log("[forgot-password] Step 1b: User found in local account store:", {
+        email: normalizedEmail,
+        authProvider: row.auth_provider,
+        isActive: row.is_active,
+      });
     }
   }
+
+  const isBootstrappedGoogle = isBootstrappedAdminEmail(normalizedEmail);
+  const isGoogleOnlyAccount =
+    (Boolean(row) && row!.is_active && row!.auth_provider === "google") ||
+    (!row && isBootstrappedGoogle);
+
+  if (isGoogleOnlyAccount) {
+    let displayName = "Primary Google Admin";
+    if (row) {
+      try {
+        displayName = decryptPii(row.display_name_encrypted) || "there";
+      } catch {
+        displayName = "there";
+      }
+    }
+    console.log("[forgot-password] Step 2: Account is Google-only; sending Google Sign-In guidance email via Brevo.", {
+      email: normalizedEmail,
+      foundInPostgres,
+      isBootstrappedGoogle,
+      brevoConfigured: isBrevoConfigured(),
+    });
+    const loginUrl = buildAbsoluteLoginUrl(req);
+    const delivery = await sendGoogleSignInReminderEmail({
+      to: normalizedEmail,
+      displayName,
+      loginUrl,
+    });
+    console.log("[forgot-password] Step 3: Brevo response for Google Sign-In reminder:", {
+      email: normalizedEmail,
+      ok: delivery.ok,
+      configured: delivery.configured,
+      status: delivery.status ?? null,
+      responseBody: delivery.responseBody ?? null,
+      error: delivery.error ?? null,
+    });
+  } else if (row && row.is_active && row.auth_provider === "local") {
+    let address = normalizedEmail;
+    let displayName = "";
+    try {
+      address = decryptPii(row.email_encrypted) || normalizedEmail;
+      displayName = decryptPii(row.display_name_encrypted);
+    } catch {
+      address = normalizedEmail;
+    }
+    const token = makeResetToken(row.id, row.session_version);
+    console.log("[forgot-password] Step 2: Active local email/password account found; sending password reset link via Brevo.", {
+      email: address,
+      foundInPostgres,
+      authProvider: row.auth_provider,
+      brevoConfigured: isBrevoConfigured(),
+    });
+    if (isBrevoConfigured()) {
+      const resetUrl = buildAbsoluteResetUrl(req, token);
+      const delivery = await sendPasswordResetEmail({
+        to: address,
+        displayName,
+        resetUrl,
+      });
+      console.log("[forgot-password] Step 3: Brevo response for password reset email:", {
+        email: address,
+        ok: delivery.ok,
+        configured: delivery.configured,
+        status: delivery.status ?? null,
+        responseBody: delivery.responseBody ?? null,
+        error: delivery.error ?? null,
+      });
+    } else if (!IS_PRODUCTION) {
+      console.log(
+        "[forgot-password] Step 3: BREVO_API_KEY not configured in development mode; exposing local dev_reset_link.",
+      );
+      devResetLink = `/reset-password/${encodeURIComponent(token)}`;
+    } else {
+      console.warn(
+        "[forgot-password] Step 3: BREVO_API_KEY is not configured in production; password reset email was not sent.",
+      );
+    }
+  } else {
+    console.log("[forgot-password] Step 2: No active account matched; skipping email delivery.", {
+      email: normalizedEmail,
+      foundInPostgres,
+      foundInactive: Boolean(row && !row.is_active),
+    });
+  }
+
   return res.render("forgot_password", {
     title: "Forgot password",
     submitted: true,

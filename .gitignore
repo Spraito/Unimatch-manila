@@ -9,3 +9,7 @@ test-results/
 .env.*
 *.key
 secrets/
+data/accounts.json
+data/accounts.json.tmp
+.neon
+node_modules/

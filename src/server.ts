@@ -1,11 +1,17 @@
 /**
  * UniMatch PH — Express + EJS web server (migrated from Flask/SQLite to Node.js).
  */
+import "./env.js";
 import fs from "node:fs";
 import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import session from "express-session";
+import {
+  loadAccountsFromPostgres,
+  loadPersistedAccounts,
+} from "./accountPersistence.js";
 import { getProfile, getUser } from "./accounts.js";
+import { registerSessionRevoker } from "./adminAccounts.js";
 import {
   CRITERION_LABELS,
   DEFAULT_WEIGHTS,
@@ -13,6 +19,7 @@ import {
   parseWeights,
 } from "./algorithms/matching.js";
 import { exportBaselineCatalog } from "./collector.js";
+import { initPostgresSchema, isPostgresConfigured } from "./db/postgres.js";
 import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
 import { SESSION_SECRET, getCsrfToken } from "./security.js";
@@ -51,6 +58,7 @@ declare module "express-session" {
 }
 
 initStore();
+loadPersistedAccounts();
 
 function loadFirebaseAuthDomain(): string | undefined {
   try {
@@ -134,10 +142,29 @@ app.use((req, res, next) => {
   next();
 });
 
+const sessionStore = new session.MemoryStore();
+
+// Immediately destroy all active Express sessions belonging to a removed/revoked user
+registerSessionRevoker((revokedUserId: string) => {
+  sessionStore.all((err, sessions) => {
+    if (err || !sessions) return;
+    for (const [sid, raw] of Object.entries(sessions)) {
+      const data = raw as session.SessionData | undefined;
+      if (
+        data &&
+        (data.userId === revokedUserId || data.pending2faUserId === revokedUserId)
+      ) {
+        sessionStore.destroy(sid, () => {});
+      }
+    }
+  });
+});
+
 app.use(
   session({
     name: "unimatch_session",
     secret: SESSION_SECRET,
+    store: sessionStore,
     resave: false,
     saveUninitialized: false,
     proxy: true,
@@ -167,6 +194,7 @@ app.use((req, res, next) => {
     "/profile",
     "/cloud-profile",
     "/admin",
+    "/admin/accounts",
     "/logout",
   ]);
   if (
@@ -395,6 +423,30 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 });
 
 const PORT = Number(process.env.PORT || 3000);
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`UniMatch PH server running at http://0.0.0.0:${PORT}`);
-});
+
+async function startServer(): Promise<void> {
+  if (isPostgresConfigured()) {
+    try {
+      await initPostgresSchema();
+      const hydrated = await loadAccountsFromPostgres();
+      console.log(
+        `[postgres] Connected to Neon PostgreSQL; schema verified (${hydrated.usersLoaded} account(s), ${hydrated.preferencesLoaded} preference record(s) loaded).`,
+      );
+    } catch (err) {
+      console.error(
+        "[postgres] Failed to initialize Neon PostgreSQL on startup:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  } else {
+    console.warn(
+      "[postgres] DATABASE_URL is not set; using local account fallback store until DATABASE_URL is configured.",
+    );
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`UniMatch PH server running at http://0.0.0.0:${PORT}`);
+  });
+}
+
+void startServer();

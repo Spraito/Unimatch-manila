@@ -1,0 +1,241 @@
+<%- include('_account_header') %>
+<div
+  id="admin-accounts-page"
+  data-session-admin="<%= isSessionAdmin ? 'true' : 'false' %>"
+  data-session-denied="<%= sessionAccessDenied ? 'true' : 'false' %>"
+  data-csrf-token="<%= csrfToken() %>"
+>
+  <p class="account-alert" id="admin-accounts-feedback" role="alert" hidden></p>
+
+  <% if (sessionAccessDenied) { %>
+    <section class="account-card account-card-narrow" id="admin-accounts-denied">
+      <span class="account-eyebrow">ACCESS RESTRICTED</span>
+      <h1>Administrator access required</h1>
+      <p class="account-lead">
+        Your signed-in student account does not have permission to view or manage administrator accounts.
+      </p>
+      <p class="account-switch">
+        <a href="/profile">Return to your profile</a> · <a href="/explore">Explore colleges</a>
+      </p>
+    </section>
+  <% } else { %>
+    <p class="account-help" id="admin-accounts-loading" <%= isSessionAdmin ? 'hidden' : '' %>>
+      Verifying administrator permissions…
+    </p>
+
+    <section class="account-card account-card-narrow" id="admin-accounts-signed-out" hidden>
+      <span class="account-eyebrow">ADMINISTRATION</span>
+      <h1>Administrator sign-in required</h1>
+      <p class="account-lead">
+        Sign in with an authorized administrator account to add or remove administrators.
+      </p>
+      <div class="account-form">
+        <a class="button primary google-signin-button" href="/login?next=%2Fadmin%2Faccounts">
+          Log in with admin username or email
+        </a>
+        <button
+          class="button secondary google-signin-button"
+          type="button"
+          data-firebase-google-signin
+          data-next="/admin/accounts"
+        >
+          Continue with Google Admin
+        </button>
+      </div>
+      <p class="account-switch">
+        Looking for colleges as a student? <a href="/explore">Return to explorer</a>.
+      </p>
+    </section>
+
+    <section class="account-card account-card-narrow" id="admin-accounts-denied" hidden>
+      <span class="account-eyebrow">ACCESS RESTRICTED</span>
+      <h1>Administrator access required</h1>
+      <p class="account-lead">
+        Your signed-in account does not have permission to view or manage administrator accounts.
+      </p>
+      <p class="account-switch">
+        <a href="/cloud-profile">Go to your student profile</a> · <a href="/explore">Explore colleges</a>
+      </p>
+    </section>
+
+    <div id="admin-accounts-workspace" <%= isSessionAdmin ? '' : 'hidden' %>>
+      <section class="account-intro">
+        <div>
+          <span class="account-eyebrow">ADMIN / ACCOUNT MANAGEMENT</span>
+          <h1>Administrator Accounts</h1>
+          <p class="account-lead">
+            Add authorized co-administrators with hashed credentials and revoke access immediately when an account is removed.
+          </p>
+        </div>
+        <div class="admin-header-meta">
+          <a class="button secondary" href="/admin">Catalog manager</a>
+          <% if (isSessionAdmin) { %>
+            <form method="post" action="/logout" class="account-logout">
+              <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+              <button class="button secondary" type="submit">Log out</button>
+            </form>
+          <% } %>
+        </div>
+      </section>
+
+      <section class="admin-summary-strip" aria-label="Administrator summary">
+        <div class="admin-summary-item">
+          <span class="admin-summary-label">Active administrators</span>
+          <strong class="admin-summary-value admin-tabular" id="admin-stat-total">—</strong>
+        </div>
+        <div class="admin-summary-item">
+          <span class="admin-summary-label">Local password admins</span>
+          <strong class="admin-summary-value admin-tabular" id="admin-stat-local">—</strong>
+        </div>
+        <div class="admin-summary-item admin-summary-item-wide">
+          <span class="admin-summary-label">Signed in as</span>
+          <span class="admin-summary-actor" id="admin-stat-actor">
+            <%= sessionAdmin ? (sessionAdmin.email + ' · Local admin session') : 'Verifying…' %>
+          </span>
+        </div>
+      </section>
+
+      <div class="admin-accounts-layout">
+        <section class="account-card admin-accounts-directory">
+          <div class="admin-toolbar">
+            <div>
+              <span class="account-eyebrow">AUTHORIZED TEAM</span>
+              <h2>Existing administrators</h2>
+              <p class="account-help">
+                You cannot remove your own active account, and at least one administrator must always remain active to prevent lockout.
+              </p>
+            </div>
+          </div>
+
+          <div id="admin-accounts-list">
+            <p class="account-help">Loading administrator accounts…</p>
+          </div>
+        </section>
+
+        <section class="account-card admin-accounts-create">
+          <span class="account-eyebrow">NEW ADMINISTRATOR</span>
+          <h2>Add administrator</h2>
+          <p class="account-help">
+            Passwords are hashed securely with bcrypt before storage and are never displayed again.
+          </p>
+          <p class="account-alert error" id="admin-create-error" role="alert" hidden></p>
+          <form id="admin-create-form" class="account-form" novalidate>
+            <div class="account-split">
+              <div class="account-field">
+                <label for="new-admin-username">Username</label>
+                <input
+                  id="new-admin-username"
+                  name="username"
+                  type="text"
+                  minlength="3"
+                  maxlength="32"
+                  autocomplete="off"
+                  placeholder="e.g. admissions_lead"
+                  required
+                />
+                <span class="account-help">3–32 characters: letters, numbers, underscores, or hyphens.</span>
+              </div>
+
+              <div class="account-field">
+                <label for="new-admin-email">Email address</label>
+                <input
+                  id="new-admin-email"
+                  name="email"
+                  type="email"
+                  maxlength="254"
+                  autocomplete="off"
+                  placeholder="admin@unimatch.edu.ph"
+                  required
+                />
+                <span class="account-help">Must be unique across all student and admin accounts.</span>
+              </div>
+            </div>
+
+            <div class="account-field">
+              <label for="new-admin-display-name">Display name (optional)</label>
+              <input
+                id="new-admin-display-name"
+                name="displayName"
+                type="text"
+                maxlength="80"
+                autocomplete="off"
+                placeholder="e.g. Maria Santos"
+              />
+            </div>
+
+            <div class="account-split">
+              <div class="account-field">
+                <label for="new-admin-password">Password</label>
+                <input
+                  id="new-admin-password"
+                  name="password"
+                  type="password"
+                  minlength="10"
+                  maxlength="128"
+                  autocomplete="new-password"
+                  required
+                />
+                <span class="account-help">At least 10 characters with varied characters and no leading or trailing spaces.</span>
+              </div>
+
+              <div class="account-field">
+                <label for="new-admin-password-confirm">Confirm password</label>
+                <input
+                  id="new-admin-password-confirm"
+                  name="passwordConfirm"
+                  type="password"
+                  minlength="10"
+                  maxlength="128"
+                  autocomplete="new-password"
+                  required
+                />
+              </div>
+            </div>
+
+            <button class="button primary" id="admin-create-submit" type="submit">
+              Create administrator
+            </button>
+          </form>
+        </section>
+      </div>
+    </div>
+
+    <div
+      class="admin-modal-backdrop"
+      id="admin-remove-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="admin-remove-modal-title"
+      hidden
+    >
+      <div class="admin-modal">
+        <span class="account-eyebrow">CONFIRM REMOVAL</span>
+        <h2 id="admin-remove-modal-title">Remove administrator account?</h2>
+        <p class="account-lead">
+          You are about to remove <strong id="admin-remove-target-label"></strong> (<span id="admin-remove-target-email"></span>).
+        </p>
+        <p class="account-help">
+          This deletes the account and immediately revokes its access to all protected administrator pages and API endpoints.
+        </p>
+        <p class="account-alert error" id="admin-remove-error" role="alert" hidden></p>
+        <div class="admin-modal-actions">
+          <button
+            type="button"
+            class="button secondary"
+            data-action="close-remove-modal"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="button primary admin-btn-confirm-danger"
+            id="admin-remove-confirm"
+          >
+            Remove administrator
+          </button>
+        </div>
+      </div>
+    </div>
+  <% } %>
+</div>
+<%- include('_account_footer') %>
