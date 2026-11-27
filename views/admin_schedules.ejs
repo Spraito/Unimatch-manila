@@ -1,0 +1,265 @@
+<%- include('_account_header') %>
+<div
+  id="admin-schedules-page"
+  data-session-admin="<%= isSessionAdmin ? 'true' : 'false' %>"
+  data-session-denied="<%= sessionAccessDenied ? 'true' : 'false' %>"
+  data-csrf-token="<%= csrfToken() %>"
+>
+  <p class="account-alert" id="admin-sched-feedback" role="alert" hidden></p>
+
+  <% if (sessionAccessDenied) { %>
+    <section class="account-card account-card-narrow" id="admin-sched-denied">
+      <span class="account-eyebrow">ACCESS RESTRICTED</span>
+      <h1>Administrator access required</h1>
+      <p class="account-lead">
+        Your signed-in student account does not have permission to manage centralized university admission schedules.
+      </p>
+      <p class="account-switch">
+        <a href="/calendar">Open your application calendar</a> · <a href="/explore">Explore colleges</a>
+      </p>
+    </section>
+  <% } else { %>
+    <p class="account-help" id="admin-sched-loading" <%= isSessionAdmin ? 'hidden' : '' %>>
+      Verifying administrator permissions…
+    </p>
+
+    <section class="account-card account-card-narrow" id="admin-sched-signed-out" hidden>
+      <span class="account-eyebrow">ADMINISTRATION</span>
+      <h1>Administrator sign-in required</h1>
+      <p class="account-lead">
+        Sign in with a local administrator account or authorized Google Admin account to manage centralized university admission schedules.
+      </p>
+      <div class="account-form">
+        <a class="button primary google-signin-button" href="/login?next=%2Fadmin%2Fschedules">
+          Log in with admin username or email
+        </a>
+        <button
+          class="button secondary google-signin-button"
+          type="button"
+          data-firebase-google-signin
+          data-next="/admin/schedules"
+        >
+          Continue with Google Admin
+        </button>
+      </div>
+      <p class="account-switch">
+        Looking for your personal calendar? <a href="/calendar">Open student calendar</a>.
+      </p>
+    </section>
+
+    <section class="account-card account-card-narrow" id="admin-sched-denied" hidden>
+      <span class="account-eyebrow">ACCESS RESTRICTED</span>
+      <h1>Administrator access required</h1>
+      <p class="account-lead">
+        Your signed-in account does not have permission to modify centralized university admission schedules.
+      </p>
+      <p class="account-switch">
+        <a href="/calendar">Go to your calendar</a> · <a href="/explore">Explore colleges</a>
+      </p>
+    </section>
+
+    <div id="admin-sched-workspace" <%= isSessionAdmin ? '' : 'hidden' %>>
+      <section class="account-intro">
+        <div>
+          <span class="account-eyebrow">ADMINISTRATION / ADMISSION SCHEDULES</span>
+          <h1>University Admission Schedules</h1>
+          <p class="account-lead">
+            Maintain verified entrance examination dates, application openings, deadlines, and official announcement links. Updates immediately reflect across all students who saved the university.
+          </p>
+          <p class="admin-dash-actor-line" id="admin-sched-actor">
+            <%= sessionAdmin ? (sessionAdmin.email + ' · Local admin session') : 'Verifying administrator session…' %>
+          </p>
+        </div>
+        <div class="admin-header-meta">
+          <a class="button secondary" href="/admin/dashboard">Admin dashboard</a>
+          <a class="button secondary" href="/admin">Catalog manager</a>
+          <a class="button secondary" href="/calendar">Student calendar</a>
+          <% if (isSessionAdmin) { %>
+            <form method="post" action="/logout" class="account-logout">
+              <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+              <button class="button secondary" type="submit">Log out</button>
+            </form>
+          <% } %>
+        </div>
+      </section>
+
+      <section class="admin-dash-kpis" aria-label="Admission schedule summary">
+        <div class="admin-dash-kpi">
+          <span class="admin-summary-label">Total schedule entries</span>
+          <strong class="admin-summary-value admin-tabular" id="sched-kpi-total">—</strong>
+          <span class="admin-dash-kpi-sub">Centralized database records</span>
+        </div>
+        <div class="admin-dash-kpi">
+          <span class="admin-summary-label">Verified upcoming</span>
+          <strong class="admin-summary-value admin-tabular" id="sched-kpi-verified">—</strong>
+          <span class="admin-dash-kpi-sub">Confirmed on student calendars</span>
+        </div>
+        <div class="admin-dash-kpi">
+          <span class="admin-summary-label">Unverified / TBA</span>
+          <strong class="admin-summary-value admin-tabular" id="sched-kpi-pending">—</strong>
+          <span class="admin-dash-kpi-sub">Clearly separated from confirmed dates</span>
+        </div>
+        <div class="admin-dash-kpi">
+          <span class="admin-summary-label">Past / expired</span>
+          <strong class="admin-summary-value admin-tabular" id="sched-kpi-expired">—</strong>
+          <span class="admin-dash-kpi-sub">Archived from upcoming alerts</span>
+        </div>
+      </section>
+
+      <div class="admin-sched-layout">
+        <section class="account-card admin-sched-form-card">
+          <span class="account-eyebrow" id="sched-form-eyebrow">NEW ADMISSION EVENT</span>
+          <h2 id="sched-form-title">Add admission event</h2>
+          <p class="account-help">
+            Only mark an event as <strong>Verified</strong> when backed by an official university announcement. Use <strong>To Be Announced</strong> whenever a school has not released dates yet.
+          </p>
+
+          <form id="admin-sched-form" class="account-form" novalidate>
+            <input type="hidden" id="sched-event-id" value="" />
+
+            <label for="sched-university">University</label>
+            <select id="sched-university" required>
+              <option value="">Select university…</option>
+            </select>
+
+            <label for="sched-name">Event name</label>
+            <input
+              id="sched-name"
+              type="text"
+              maxlength="160"
+              required
+              placeholder="e.g., UPCAT 2027 Entrance Examination"
+            />
+
+            <div class="admin-form-grid-2">
+              <div>
+                <label for="sched-type">Event type</label>
+                <select id="sched-type" required>
+                  <option value="entrance_exam">Entrance Examination</option>
+                  <option value="application_open">Application Opening</option>
+                  <option value="application_deadline">Application Deadline</option>
+                  <option value="results_release">Results Release</option>
+                  <option value="enrollment">Enrollment &amp; Confirmation</option>
+                  <option value="other">Admission Event</option>
+                </select>
+              </div>
+              <div>
+                <label for="sched-verification">Verification status</label>
+                <select id="sched-verification" required>
+                  <option value="verified">Verified (confirmed date)</option>
+                  <option value="unverified">Unverified (tentative)</option>
+                  <option value="tba">To Be Announced (no date)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="admin-form-grid-2">
+              <div>
+                <label for="sched-start-date">Start date</label>
+                <input id="sched-start-date" type="date" />
+              </div>
+              <div>
+                <label for="sched-end-date">End date (optional)</label>
+                <input id="sched-end-date" type="date" />
+              </div>
+            </div>
+
+            <div class="admin-form-grid-2">
+              <div>
+                <label for="sched-exam-time">Exam time (optional)</label>
+                <input
+                  id="sched-exam-time"
+                  type="text"
+                  maxlength="100"
+                  placeholder="e.g., 7:00 AM – 12:00 PM"
+                />
+              </div>
+              <div>
+                <label for="sched-venue">Venue / location (optional)</label>
+                <input
+                  id="sched-venue"
+                  type="text"
+                  maxlength="240"
+                  placeholder="e.g., Main Campus Testing Center / Online"
+                />
+              </div>
+            </div>
+
+            <label for="sched-source-url">Official source URL (HTTPS)</label>
+            <input
+              id="sched-source-url"
+              type="url"
+              maxlength="500"
+              placeholder="https://admissions.university.edu.ph/..."
+            />
+
+            <label for="sched-description">Description or notes</label>
+            <textarea
+              id="sched-description"
+              rows="3"
+              maxlength="1500"
+              placeholder="Eligibility notes, documents to bring, or official announcement summary…"
+            ></textarea>
+
+            <div class="admin-form-actions">
+              <button type="submit" class="button primary" id="sched-submit-btn">
+                Save admission event
+              </button>
+              <button type="button" class="button secondary" id="sched-cancel-edit" hidden>
+                Cancel edit
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section class="account-card admin-sched-list-card">
+          <div class="admin-toolbar">
+            <div>
+              <span class="account-eyebrow">CENTRALIZED SCHEDULE DIRECTORY</span>
+              <h2>All university admission events</h2>
+              <p class="account-help" id="sched-list-subtitle">Loading admission events…</p>
+            </div>
+            <div class="admin-toolbar-actions">
+              <button type="button" class="button secondary admin-btn-sm" id="sched-refresh-btn">
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div class="admin-sched-filters">
+            <select id="sched-filter-university" aria-label="Filter by university">
+              <option value="">All universities</option>
+            </select>
+            <select id="sched-filter-type" aria-label="Filter by event type">
+              <option value="">All event types</option>
+              <option value="entrance_exam">Entrance Examination</option>
+              <option value="application_open">Application Opening</option>
+              <option value="application_deadline">Application Deadline</option>
+              <option value="results_release">Results Release</option>
+              <option value="enrollment">Enrollment &amp; Confirmation</option>
+              <option value="other">Admission Event</option>
+            </select>
+            <select id="sched-filter-verification" aria-label="Filter by verification status">
+              <option value="">All statuses</option>
+              <option value="verified">Verified</option>
+              <option value="unverified">Unverified</option>
+              <option value="tba">To Be Announced</option>
+            </select>
+            <input
+              id="sched-filter-search"
+              type="search"
+              maxlength="120"
+              placeholder="Search event or university…"
+              aria-label="Search admission events"
+            />
+          </div>
+
+          <div id="admin-sched-table">
+            <p class="account-help">Loading admission schedule records…</p>
+          </div>
+        </section>
+      </div>
+    </div>
+  <% } %>
+</div>
+<%- include('_account_footer') %>

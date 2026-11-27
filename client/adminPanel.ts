@@ -9,8 +9,6 @@ import type { Firestore } from "firebase/firestore";
 import {
   deleteCatalogUniversity,
   getFreshIdToken,
-  loadAllCatalogUniversitiesForAdmin,
-  loadCollectionRunsForAdmin,
   recordCollectionRun,
   saveCatalogUniversity,
   slugifyCatalogId,
@@ -118,13 +116,17 @@ function emptyDraft(): CatalogUniversityRecord {
 export class AdminCatalogController {
   private readonly db: Firestore;
   private readonly auth: Auth;
+  private readonly root: HTMLElement;
   private readonly reportError: FirestoreErrorReporter;
+  private readonly isSessionAdmin: boolean;
+  private readonly sessionDenied: boolean;
+  private readonly csrfToken: string;
   private user: User | null = null;
   private isAdmin = false;
+  private initialQueryApplied = false;
   private activeTab = "catalog";
   private universities: CatalogUniversityRecord[] = [];
   private runs: CollectionRunRecord[] = [];
-  private baselineCache: CatalogUniversityRecord[] = [];
   private collectorConfig: CollectorConfigSummary | null = null;
   private editing: CatalogUniversityRecord = emptyDraft();
   private editingIsExisting = false;
@@ -138,11 +140,26 @@ export class AdminCatalogController {
   } | null = null;
   private searchTerm = "";
 
-  constructor(db: Firestore, auth: Auth, reportError: FirestoreErrorReporter) {
+  constructor(
+    db: Firestore,
+    auth: Auth,
+    root: HTMLElement,
+    reportError: FirestoreErrorReporter,
+  ) {
     this.db = db;
     this.auth = auth;
+    this.root = root;
     this.reportError = reportError;
+    this.isSessionAdmin = root.dataset.sessionAdmin === "true";
+    this.sessionDenied = root.dataset.sessionDenied === "true";
+    this.csrfToken = root.dataset.csrfToken || "";
     this.bindEvents();
+
+    if (this.isSessionAdmin && !this.sessionDenied) {
+      this.isAdmin = true;
+      this.showWorkspace();
+      void this.refreshWorkspace();
+    }
   }
 
   private setFeedback(message: string, isError = false): void {
@@ -152,6 +169,17 @@ export class AdminCatalogController {
     el.classList.toggle("error", isError);
     el.classList.toggle("success", !isError);
     el.hidden = !message;
+  }
+
+  private showWorkspace(): void {
+    const loading = document.getElementById("admin-loading");
+    const gateSignedOut = document.getElementById("admin-gate-signed-out");
+    const gateDenied = document.getElementById("admin-gate-denied");
+    const workspace = document.getElementById("admin-workspace");
+    if (loading) loading.hidden = true;
+    if (gateSignedOut) gateSignedOut.hidden = true;
+    if (gateDenied) gateDenied.hidden = true;
+    if (workspace) workspace.hidden = false;
   }
 
   private setTab(tab: string): void {
@@ -166,8 +194,36 @@ export class AdminCatalogController {
     });
   }
 
+  private async buildAuthHeaders(
+    includeJson = false,
+    includeCsrf = false,
+  ): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+    if (includeJson) {
+      headers["Content-Type"] = "application/json";
+    }
+    if (this.isSessionAdmin) {
+      if (includeCsrf && this.csrfToken) {
+        headers["X-CSRF-Token"] = this.csrfToken;
+      }
+      return headers;
+    }
+    const token = await getFreshIdToken(this.auth);
+    headers.Authorization = `Bearer ${token}`;
+    return headers;
+  }
+
   async onAuthChanged(user: User | null): Promise<void> {
     this.user = user;
+    if (this.sessionDenied) return;
+    if (this.isSessionAdmin) {
+      // Local session admin already has full access without requiring Google sign-in
+      this.isAdmin = true;
+      return;
+    }
+
     const loading = document.getElementById("admin-loading");
     const gateSignedOut = document.getElementById("admin-gate-signed-out");
     const gateDenied = document.getElementById("admin-gate-denied");
@@ -193,55 +249,155 @@ export class AdminCatalogController {
       return;
     }
 
-    if (gateSignedOut) gateSignedOut.hidden = true;
-    if (gateDenied) gateDenied.hidden = true;
-    workspace.hidden = false;
+    this.showWorkspace();
     const adminEmailEl = document.getElementById("admin-account-email");
     if (adminEmailEl) adminEmailEl.textContent = user.email || "";
 
     await this.refreshWorkspace();
   }
 
-  private async fetchBaselineAndCollector(): Promise<void> {
-    const token = await getFreshIdToken(this.auth);
-    const resp = await fetch("/api/admin/baseline", {
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (!resp.ok) {
-      const problem = (await resp.json().catch(() => ({}))) as { error?: string };
-      throw new Error(problem.error || "Could not load collector configuration.");
+  private applyInitialDeepLink(): void {
+    if (this.initialQueryApplied) return;
+    this.initialQueryApplied = true;
+    const params = new URLSearchParams(window.location.search);
+    const editSlug = (params.get("edit") || "").trim().toLowerCase();
+    const tabParam = (params.get("tab") || "").trim().toLowerCase();
+
+    if (editSlug) {
+      const found = this.universities.find((u) => u.id === editSlug);
+      if (found) {
+        this.editing = structuredClone(found);
+        this.editingIsExisting = true;
+        this.populateEditorForm();
+        this.setTab("editor");
+        return;
+      }
     }
-    const data = (await resp.json()) as {
-      universities: CatalogUniversityRecord[];
-      collector: CollectorConfigSummary;
-    };
-    this.baselineCache = data.universities || [];
-    this.collectorConfig = data.collector || null;
+
+    if (["catalog", "editor", "collector", "import"].includes(tabParam)) {
+      if (tabParam === "editor") {
+        this.editing = emptyDraft();
+        this.editingIsExisting = false;
+        this.populateEditorForm();
+      }
+      this.setTab(tabParam);
+    }
   }
 
   private async refreshWorkspace(): Promise<void> {
-    if (!this.user || !this.isAdmin) return;
+    if (!this.isAdmin) return;
     try {
-      const [catalogList, runList] = await Promise.all([
-        loadAllCatalogUniversitiesForAdmin(this.db, this.reportError),
-        loadCollectionRunsForAdmin(this.db, this.user, this.reportError).catch(() => []),
-        this.collectorConfig ? Promise.resolve() : this.fetchBaselineAndCollector(),
-      ]);
-      this.universities = catalogList;
-      this.runs = runList;
+      const headers = await this.buildAuthHeaders(false, false);
+      const resp = await fetch("/api/admin/catalog", {
+        method: "GET",
+        credentials: "same-origin",
+        headers,
+      });
+
+      if (resp.status === 401 || resp.status === 403) {
+        const problem = (await resp.json().catch(() => ({}))) as { error?: string };
+        this.setFeedback(
+          problem.error || "Administrator sign-in is required to manage the catalog.",
+          true,
+        );
+        return;
+      }
+
+      const data = (await resp.json()) as {
+        error?: string;
+        universities?: CatalogUniversityRecord[];
+        runs?: CollectionRunRecord[];
+        collector?: CollectorConfigSummary;
+        actor?: { email: string; displayName: string; source: string };
+      };
+      if (!resp.ok) {
+        throw new Error(data.error || "Could not load the catalog manager.");
+      }
+
+      this.universities = Array.isArray(data.universities) ? data.universities : [];
+      this.runs = Array.isArray(data.runs) ? data.runs : [];
+      if (data.collector) {
+        this.collectorConfig = data.collector;
+      }
+      if (data.actor?.email) {
+        const adminEmailEl = document.getElementById("admin-account-email");
+        if (adminEmailEl) adminEmailEl.textContent = data.actor.email;
+      }
+
       this.renderCatalogList();
       this.renderCollectorControls();
       this.renderRunHistory();
       this.populateEditorForm();
+      this.applyInitialDeepLink();
     } catch (err) {
       this.setFeedback(
         err instanceof Error ? err.message : "Could not load the catalog manager.",
         true,
       );
     }
+  }
+
+  private async persistUniversityViaApi(
+    record: CatalogUniversityRecord,
+    audit?: {
+      mode?: "manual-edit" | "polite-web" | "json-import";
+      status?: "completed" | "partial" | "blocked_by_robots" | "failed";
+      fetchedUrlCount?: number;
+      robotsSummary?: string;
+      notes?: string;
+    },
+  ): Promise<CatalogUniversityRecord> {
+    const cleanId = slugifyCatalogId(record.id || record.name);
+    if (!cleanId) {
+      throw new Error("Enter a valid university slug ID or full name first.");
+    }
+    const headers = await this.buildAuthHeaders(true, true);
+    const resp = await fetch(`/api/admin/catalog/${encodeURIComponent(cleanId)}`, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers,
+      body: JSON.stringify({
+        university: { ...record, id: cleanId },
+        audit,
+      }),
+    });
+    const data = (await resp.json()) as {
+      error?: string;
+      university?: CatalogUniversityRecord;
+    };
+    if (!resp.ok || !data.university) {
+      throw new Error(data.error || "Could not save university to the catalog.");
+    }
+
+    // Best-effort Firestore mirror when signed in as a Firebase Google Admin
+    if (this.user && !this.isSessionAdmin) {
+      void saveCatalogUniversity(
+        this.db,
+        this.user,
+        data.university,
+        this.reportError,
+      ).catch(() => {});
+      if (audit) {
+        void recordCollectionRun(
+          this.db,
+          this.user,
+          {
+            universityId: data.university.id,
+            universityName: data.university.name,
+            mode: audit.mode || "manual-edit",
+            status: audit.status || "completed",
+            fetchedUrlCount: audit.fetchedUrlCount ?? data.university.sourceUrls.length,
+            programCount: data.university.programs.length,
+            conflictCount: data.university.declaredConflicts.length,
+            robotsSummary: audit.robotsSummary || "Direct verified admin catalog update.",
+            notes: audit.notes || `Saved ${data.university.name}.`,
+          },
+          this.reportError,
+        ).catch(() => {});
+      }
+    }
+
+    return data.university;
   }
 
   private renderCatalogList(): void {
@@ -855,7 +1011,7 @@ export class AdminCatalogController {
   }
 
   private async handleSeedBaseline(button: HTMLButtonElement): Promise<void> {
-    if (!this.user || !this.isAdmin) return;
+    if (!this.isAdmin) return;
     const overwriteBox = document.getElementById(
       "admin-seed-overwrite",
     ) as HTMLInputElement | null;
@@ -866,44 +1022,23 @@ export class AdminCatalogController {
     button.textContent = "Seeding catalog…";
     this.setFeedback("");
     try {
-      if (!this.baselineCache.length) {
-        await this.fetchBaselineAndCollector();
+      const headers = await this.buildAuthHeaders(true, true);
+      const resp = await fetch("/api/admin/catalog/seed", {
+        method: "POST",
+        credentials: "same-origin",
+        headers,
+        body: JSON.stringify({ overwrite }),
+      });
+      const data = (await resp.json()) as {
+        error?: string;
+        written?: number;
+        skipped?: number;
+      };
+      if (!resp.ok) {
+        throw new Error(data.error || "Could not seed baseline universities.");
       }
-      const existingById = new Map(this.universities.map((u) => [u.id, u]));
-      let written = 0;
-      let skipped = 0;
-      let totalProgs = 0;
-      for (const item of this.baselineCache) {
-        const existingRecord = existingById.get(item.id);
-        const isEmptyPlaceholder =
-          existingRecord &&
-          existingRecord.programs.length === 0 &&
-          existingRecord.admissionRequirements.length === 0 &&
-          existingRecord.entranceExaminations.length === 0;
-        if (!overwrite && existingRecord && !isEmptyPlaceholder) {
-          skipped += 1;
-          continue;
-        }
-        await saveCatalogUniversity(this.db, this.user, item, this.reportError);
-        written += 1;
-        totalProgs += item.programs.length;
-      }
-      await recordCollectionRun(
-        this.db,
-        this.user,
-        {
-          universityId: "all-baseline",
-          universityName: "Metro Manila Baseline (15 schools)",
-          mode: "baseline-seed",
-          status: "completed",
-          fetchedUrlCount: written,
-          programCount: totalProgs,
-          conflictCount: 0,
-          robotsSummary: "Seeded from verified baseline JSON dataset.",
-          notes: `Saved ${written} universit${written === 1 ? "y" : "ies"} (${skipped} existing kept untouched).`,
-        },
-        this.reportError,
-      );
+      const written = Number(data.written || 0);
+      const skipped = Number(data.skipped || 0);
       this.setFeedback(
         `Baseline sync complete: saved ${written} universities (${skipped} existing entries preserved).`,
         false,
@@ -921,7 +1056,7 @@ export class AdminCatalogController {
   }
 
   private async handleRunPoliteCollect(button: HTMLButtonElement): Promise<void> {
-    if (!this.user || !this.isAdmin) return;
+    if (!this.isAdmin) return;
     const discoverBox = document.getElementById(
       "collector-discover-subpages",
     ) as HTMLInputElement | null;
@@ -951,14 +1086,11 @@ export class AdminCatalogController {
     button.textContent = `Checking robots.txt & collecting ${queue.queuedUrls.length} official page${queue.queuedUrls.length === 1 ? "" : "s"}…`;
     this.setFeedback("");
     try {
-      const token = await getFreshIdToken(this.auth);
+      const headers = await this.buildAuthHeaders(true, true);
       const resp = await fetch("/api/admin/collect", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: "same-origin",
+        headers,
         body: JSON.stringify({
           universityId: target.universityId,
           urls: queue.queuedUrls,
@@ -994,7 +1126,7 @@ export class AdminCatalogController {
   }
 
   private async handleParseJsonImport(button: HTMLButtonElement): Promise<void> {
-    if (!this.user || !this.isAdmin) return;
+    if (!this.isAdmin) return;
     const textarea = document.getElementById(
       "import-json-text",
     ) as HTMLTextAreaElement | null;
@@ -1017,14 +1149,11 @@ export class AdminCatalogController {
     button.textContent = "Structuring with Algorithm 1…";
     this.setFeedback("");
     try {
-      const token = await getFreshIdToken(this.auth);
+      const headers = await this.buildAuthHeaders(true, true);
       const resp = await fetch("/api/admin/parse-import", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: "same-origin",
+        headers,
         body: JSON.stringify({ snapshot: parsed }),
       });
       const data = (await resp.json()) as {
@@ -1058,7 +1187,7 @@ export class AdminCatalogController {
     source: { draft: CatalogUniversityRecord; audit: CollectorAudit } | null,
     clearTarget: "collect" | "import",
   ): Promise<void> {
-    if (!this.user || !this.isAdmin || !source) return;
+    if (!this.isAdmin || !source) return;
     try {
       // Smart non-destructive merge: keep newly collected items and preserve existing verified details
       const existing = this.universities.find((u) => u.id === source.draft.id);
@@ -1119,23 +1248,13 @@ export class AdminCatalogController {
           50,
         ),
       };
-      await saveCatalogUniversity(this.db, this.user, merged, this.reportError);
-      await recordCollectionRun(
-        this.db,
-        this.user,
-        {
-          universityId: merged.id,
-          universityName: merged.name,
-          mode: source.audit.mode,
-          status: source.audit.status,
-          fetchedUrlCount: source.audit.fetchedUrlCount,
-          programCount: merged.programs.length,
-          conflictCount: merged.declaredConflicts.length,
-          robotsSummary: source.audit.robotsSummary,
-          notes: source.audit.notes,
-        },
-        this.reportError,
-      );
+      await this.persistUniversityViaApi(merged, {
+        mode: source.audit.mode,
+        status: source.audit.status,
+        fetchedUrlCount: source.audit.fetchedUrlCount,
+        robotsSummary: source.audit.robotsSummary,
+        notes: source.audit.notes,
+      });
       if (clearTarget === "collect") {
         this.pendingCollectResult = null;
         this.renderAuditPreview("collector-preview-box", null, "", "");
@@ -1179,10 +1298,28 @@ export class AdminCatalogController {
       const delBtn = target.closest<HTMLButtonElement>("[data-admin-delete]");
       if (delBtn?.dataset.adminDelete) {
         const id = delBtn.dataset.adminDelete;
-        if (!this.user || !this.isAdmin) return;
+        if (!this.isAdmin) return;
         delBtn.disabled = true;
-        void deleteCatalogUniversity(this.db, id, this.reportError)
-          .then(() => {
+        void this.buildAuthHeaders(false, true)
+          .then((headers) =>
+            fetch(`/api/admin/catalog/${encodeURIComponent(id)}`, {
+              method: "DELETE",
+              credentials: "same-origin",
+              headers,
+            }),
+          )
+          .then(async (resp) => {
+            const payload = (await resp.json().catch(() => ({}))) as {
+              error?: string;
+            };
+            if (!resp.ok) {
+              throw new Error(payload.error || "Could not delete university.");
+            }
+            if (this.user && !this.isSessionAdmin) {
+              void deleteCatalogUniversity(this.db, id, this.reportError).catch(
+                () => {},
+              );
+            }
             this.setFeedback(`Removed "${id}" from the catalog.`, false);
             return this.refreshWorkspace();
           })
@@ -1468,7 +1605,7 @@ export class AdminCatalogController {
     ) as HTMLFormElement | null;
     editorForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!this.user || !this.isAdmin) return;
+      if (!this.isAdmin) return;
       const submitBtn = editorForm.querySelector<HTMLButtonElement>(
         'button[type="submit"]',
       );
@@ -1476,28 +1613,13 @@ export class AdminCatalogController {
       this.setFeedback("");
       try {
         this.readEditorMetadataIntoEditing();
-        const saved = await saveCatalogUniversity(
-          this.db,
-          this.user,
-          this.editing,
-          this.reportError,
-        );
-        await recordCollectionRun(
-          this.db,
-          this.user,
-          {
-            universityId: saved.id,
-            universityName: saved.name,
-            mode: "manual-edit",
-            status: "completed",
-            fetchedUrlCount: saved.sourceUrls.length,
-            programCount: saved.programs.length,
-            conflictCount: saved.declaredConflicts.length,
-            robotsSummary: "Direct verified admin catalog update.",
-            notes: `Saved ${saved.name} (${saved.programs.length} programs, ${saved.tuitionFees.length} tuition records).`,
-          },
-          this.reportError,
-        );
+        const saved = await this.persistUniversityViaApi(this.editing, {
+          mode: "manual-edit",
+          status: "completed",
+          fetchedUrlCount: this.editing.sourceUrls.length,
+          robotsSummary: "Direct verified admin catalog update.",
+          notes: `Saved ${this.editing.name} (${this.editing.programs.length} programs, ${this.editing.tuitionFees.length} tuition records).`,
+        });
         this.editingIsExisting = true;
         this.setFeedback(`Saved ${saved.name} to the live catalog.`, false);
         await this.refreshWorkspace();

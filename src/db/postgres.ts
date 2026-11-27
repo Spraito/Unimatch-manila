@@ -107,6 +107,69 @@ export const POSTGRES_SCHEMA_STATEMENTS: readonly string[] = [
     weights JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
+  `CREATE TABLE IF NOT EXISTS catalog_universities (
+    id TEXT PRIMARY KEY,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    is_published BOOLEAN NOT NULL DEFAULT TRUE,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    collection_status TEXT NOT NULL DEFAULT 'partial',
+    updated_by TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `ALTER TABLE catalog_universities ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;`,
+  `CREATE TABLE IF NOT EXISTS catalog_collection_runs (
+    id TEXT PRIMARY KEY,
+    university_id TEXT NOT NULL,
+    university_name TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    status TEXT NOT NULL,
+    fetched_url_count INTEGER NOT NULL DEFAULT 0,
+    program_count INTEGER NOT NULL DEFAULT 0,
+    conflict_count INTEGER NOT NULL DEFAULT 0,
+    robots_summary TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    actor_email TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_catalog_runs_created_at ON catalog_collection_runs (created_at DESC);`,
+  `CREATE TABLE IF NOT EXISTS admission_events (
+    event_id TEXT PRIMARY KEY,
+    university_id TEXT NOT NULL,
+    event_name TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    start_date TEXT,
+    end_date TEXT,
+    exam_time TEXT,
+    venue TEXT,
+    official_source_url TEXT,
+    description TEXT NOT NULL DEFAULT '',
+    verification_status TEXT NOT NULL DEFAULT 'tba' CHECK (verification_status IN ('verified', 'unverified', 'tba')),
+    updated_by TEXT NOT NULL DEFAULT 'system',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_admission_events_university ON admission_events (university_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_admission_events_status_date ON admission_events (verification_status, start_date);`,
+  `CREATE TABLE IF NOT EXISTS user_application_tracking (
+    user_id TEXT NOT NULL,
+    university_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Interested',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, university_id)
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_user_application_tracking_user ON user_application_tracking (user_id);`,
+  `CREATE TABLE IF NOT EXISTS user_event_reminders (
+    user_id TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    intervals_days JSONB NOT NULL DEFAULT '[7,3,1]'::jsonb,
+    channels JSONB NOT NULL DEFAULT '["in_app"]'::jsonb,
+    dismissed_keys JSONB NOT NULL DEFAULT '[]'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, event_id)
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_user_event_reminders_user ON user_event_reminders (user_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_user_event_reminders_event ON user_event_reminders (event_id);`,
 ];
 
 let poolInstance: Pool | null = null;
@@ -228,7 +291,15 @@ export async function checkPostgresConnection(): Promise<{
       `SELECT table_name
          FROM information_schema.tables
         WHERE table_schema = 'public'
-          AND table_name IN ('users', 'user_preferences')
+          AND table_name IN (
+            'users',
+            'user_preferences',
+            'catalog_universities',
+            'catalog_collection_runs',
+            'admission_events',
+            'user_application_tracking',
+            'user_event_reminders'
+          )
         ORDER BY table_name ASC`,
     );
     return {
@@ -507,3 +578,408 @@ export async function dbLoadAllAccounts(): Promise<{
 
   return { users, preferences };
 }
+
+export interface PgCatalogUniversityRow {
+  id: string;
+  payload: Record<string, unknown>;
+  is_published: boolean;
+  is_deleted: boolean;
+  collection_status: string;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export interface PgCatalogRunRow {
+  id: string;
+  university_id: string;
+  university_name: string;
+  mode: string;
+  status: string;
+  fetched_url_count: number;
+  program_count: number;
+  conflict_count: number;
+  robots_summary: string;
+  notes: string;
+  actor_email: string;
+  created_at: string;
+}
+
+export async function dbLoadCatalogUniversities(): Promise<
+  PgCatalogUniversityRow[]
+> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return [];
+  const result = await pool.query(
+    `SELECT id, payload, is_published, is_deleted, collection_status, updated_by, updated_at
+       FROM catalog_universities
+      ORDER BY id ASC`,
+  );
+  return result.rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      id: String(r.id),
+      payload:
+        r.payload && typeof r.payload === "object"
+          ? (r.payload as Record<string, unknown>)
+          : {},
+      is_published: r.is_published !== false,
+      is_deleted: Boolean(r.is_deleted),
+      collection_status: String(r.collection_status || "partial"),
+      updated_by: typeof r.updated_by === "string" ? r.updated_by : null,
+      updated_at: toIsoOrNull(r.updated_at) || new Date().toISOString(),
+    };
+  });
+}
+
+export async function dbUpsertCatalogUniversity(
+  id: string,
+  payload: Record<string, unknown>,
+  isPublished: boolean,
+  collectionStatus: string,
+  updatedBy: string,
+): Promise<void> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return;
+  await pool.query(
+    `INSERT INTO catalog_universities (
+      id,
+      payload,
+      is_published,
+      is_deleted,
+      collection_status,
+      updated_by,
+      updated_at
+    ) VALUES ($1, $2::jsonb, $3, FALSE, $4, $5, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      payload = EXCLUDED.payload,
+      is_published = EXCLUDED.is_published,
+      is_deleted = FALSE,
+      collection_status = EXCLUDED.collection_status,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = NOW()`,
+    [id, JSON.stringify(payload), isPublished, collectionStatus, updatedBy],
+  );
+}
+
+export async function dbMarkCatalogUniversityDeleted(
+  id: string,
+  updatedBy: string,
+): Promise<void> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return;
+  await pool.query(
+    `INSERT INTO catalog_universities (
+      id,
+      payload,
+      is_published,
+      is_deleted,
+      collection_status,
+      updated_by,
+      updated_at
+    ) VALUES ($1, '{}'::jsonb, FALSE, TRUE, 'pending', $2, NOW())
+    ON CONFLICT (id) DO UPDATE SET
+      is_published = FALSE,
+      is_deleted = TRUE,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = NOW()`,
+    [id, updatedBy],
+  );
+}
+
+export async function dbInsertCatalogRun(run: PgCatalogRunRow): Promise<void> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return;
+  await pool.query(
+    `INSERT INTO catalog_collection_runs (
+      id,
+      university_id,
+      university_name,
+      mode,
+      status,
+      fetched_url_count,
+      program_count,
+      conflict_count,
+      robots_summary,
+      notes,
+      actor_email,
+      created_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    ON CONFLICT (id) DO NOTHING`,
+    [
+      run.id,
+      run.university_id,
+      run.university_name,
+      run.mode,
+      run.status,
+      run.fetched_url_count,
+      run.program_count,
+      run.conflict_count,
+      run.robots_summary,
+      run.notes,
+      run.actor_email,
+      run.created_at,
+    ],
+  );
+}
+
+export async function dbLoadCatalogRuns(limit = 30): Promise<PgCatalogRunRow[]> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return [];
+  const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+  const result = await pool.query(
+    `SELECT id, university_id, university_name, mode, status,
+            fetched_url_count, program_count, conflict_count,
+            robots_summary, notes, actor_email, created_at
+       FROM catalog_collection_runs
+      ORDER BY created_at DESC
+      LIMIT $1`,
+    [safeLimit],
+  );
+  return result.rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      id: String(r.id),
+      university_id: String(r.university_id),
+      university_name: String(r.university_name),
+      mode: String(r.mode || "manual-edit"),
+      status: String(r.status || "completed"),
+      fetched_url_count: Number(r.fetched_url_count || 0),
+      program_count: Number(r.program_count || 0),
+      conflict_count: Number(r.conflict_count || 0),
+      robots_summary: String(r.robots_summary || ""),
+      notes: String(r.notes || ""),
+      actor_email: String(r.actor_email || ""),
+      created_at: toIsoOrNull(r.created_at) || new Date().toISOString(),
+    };
+  });
+}
+
+// --- Centralized Admission Schedules & Student Tracking persistence ---
+
+export interface PgAdmissionEventRow {
+  event_id: string;
+  university_id: string;
+  event_name: string;
+  event_type: string;
+  start_date: string | null;
+  end_date: string | null;
+  exam_time: string | null;
+  venue: string | null;
+  official_source_url: string | null;
+  description: string;
+  verification_status: "verified" | "unverified" | "tba";
+  updated_by: string;
+  created_at: string;
+  last_updated_at: string;
+}
+
+export interface PgUserApplicationStatusRow {
+  user_id: string;
+  university_id: string;
+  status: string;
+  updated_at: string;
+}
+
+export interface PgUserEventReminderRow {
+  user_id: string;
+  event_id: string;
+  enabled: boolean;
+  intervals_days: number[];
+  channels: string[];
+  dismissed_keys: string[];
+  updated_at: string;
+}
+
+export async function dbLoadAdmissionEvents(): Promise<PgAdmissionEventRow[]> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return [];
+  const result = await pool.query(
+    `SELECT event_id, university_id, event_name, event_type,
+            start_date, end_date, exam_time, venue,
+            official_source_url, description, verification_status,
+            updated_by, created_at, last_updated_at
+       FROM admission_events
+      ORDER BY start_date ASC NULLS LAST, university_id ASC, event_name ASC`,
+  );
+  return result.rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    const rawVer = String(r.verification_status || "tba");
+    const verification_status: "verified" | "unverified" | "tba" =
+      rawVer === "verified" || rawVer === "unverified" ? rawVer : "tba";
+    return {
+      event_id: String(r.event_id),
+      university_id: String(r.university_id),
+      event_name: String(r.event_name),
+      event_type: String(r.event_type),
+      start_date: typeof r.start_date === "string" && r.start_date ? r.start_date : null,
+      end_date: typeof r.end_date === "string" && r.end_date ? r.end_date : null,
+      exam_time: typeof r.exam_time === "string" && r.exam_time ? r.exam_time : null,
+      venue: typeof r.venue === "string" && r.venue ? r.venue : null,
+      official_source_url:
+        typeof r.official_source_url === "string" && r.official_source_url
+          ? r.official_source_url
+          : null,
+      description: String(r.description || ""),
+      verification_status,
+      updated_by: String(r.updated_by || "system"),
+      created_at: toIsoOrNull(r.created_at) || new Date().toISOString(),
+      last_updated_at: toIsoOrNull(r.last_updated_at) || new Date().toISOString(),
+    };
+  });
+}
+
+export async function dbUpsertAdmissionEvent(
+  event: PgAdmissionEventRow,
+): Promise<void> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return;
+  await pool.query(
+    `INSERT INTO admission_events (
+      event_id, university_id, event_name, event_type,
+      start_date, end_date, exam_time, venue,
+      official_source_url, description, verification_status,
+      updated_by, created_at, last_updated_at
+    ) VALUES (
+      $1, $2, $3, $4,
+      $5, $6, $7, $8,
+      $9, $10, $11,
+      $12, $13, $14
+    )
+    ON CONFLICT (event_id) DO UPDATE SET
+      university_id = EXCLUDED.university_id,
+      event_name = EXCLUDED.event_name,
+      event_type = EXCLUDED.event_type,
+      start_date = EXCLUDED.start_date,
+      end_date = EXCLUDED.end_date,
+      exam_time = EXCLUDED.exam_time,
+      venue = EXCLUDED.venue,
+      official_source_url = EXCLUDED.official_source_url,
+      description = EXCLUDED.description,
+      verification_status = EXCLUDED.verification_status,
+      updated_by = EXCLUDED.updated_by,
+      last_updated_at = EXCLUDED.last_updated_at`,
+    [
+      event.event_id,
+      event.university_id,
+      event.event_name,
+      event.event_type,
+      event.start_date,
+      event.end_date,
+      event.exam_time,
+      event.venue,
+      event.official_source_url,
+      event.description,
+      event.verification_status,
+      event.updated_by,
+      event.created_at,
+      event.last_updated_at,
+    ],
+  );
+}
+
+export async function dbDeleteAdmissionEvent(eventId: string): Promise<void> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return;
+  await pool.query(`DELETE FROM user_event_reminders WHERE event_id = $1`, [
+    eventId,
+  ]);
+  await pool.query(`DELETE FROM admission_events WHERE event_id = $1`, [
+    eventId,
+  ]);
+}
+
+export async function dbLoadAllUserApplicationTracking(): Promise<
+  PgUserApplicationStatusRow[]
+> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return [];
+  const result = await pool.query(
+    `SELECT user_id, university_id, status, updated_at
+       FROM user_application_tracking`,
+  );
+  return result.rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      user_id: String(r.user_id),
+      university_id: String(r.university_id),
+      status: String(r.status || "Interested"),
+      updated_at: toIsoOrNull(r.updated_at) || new Date().toISOString(),
+    };
+  });
+}
+
+export async function dbUpsertUserApplicationStatus(
+  userId: string,
+  universityId: string,
+  status: string,
+  updatedAt: string,
+): Promise<void> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return;
+  await pool.query(
+    `INSERT INTO user_application_tracking (user_id, university_id, status, updated_at)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id, university_id) DO UPDATE SET
+       status = EXCLUDED.status,
+       updated_at = EXCLUDED.updated_at`,
+    [userId, universityId, status, updatedAt],
+  );
+}
+
+export async function dbLoadAllUserEventReminders(): Promise<
+  PgUserEventReminderRow[]
+> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return [];
+  const result = await pool.query(
+    `SELECT user_id, event_id, enabled, intervals_days, channels, dismissed_keys, updated_at
+       FROM user_event_reminders`,
+  );
+  return result.rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      user_id: String(r.user_id),
+      event_id: String(r.event_id),
+      enabled: Boolean(r.enabled),
+      intervals_days: Array.isArray(r.intervals_days)
+        ? r.intervals_days.map((v) => Number(v)).filter((n) => Number.isFinite(n))
+        : [7, 3, 1],
+      channels: Array.isArray(r.channels)
+        ? r.channels.map((v) => String(v))
+        : ["in_app"],
+      dismissed_keys: Array.isArray(r.dismissed_keys)
+        ? r.dismissed_keys.map((v) => String(v))
+        : [],
+      updated_at: toIsoOrNull(r.updated_at) || new Date().toISOString(),
+    };
+  });
+}
+
+export async function dbUpsertUserEventReminder(
+  reminder: PgUserEventReminderRow,
+): Promise<void> {
+  const pool = getPool();
+  if (!pool || !schemaReady) return;
+  await pool.query(
+    `INSERT INTO user_event_reminders (
+      user_id, event_id, enabled, intervals_days, channels, dismissed_keys, updated_at
+    ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7)
+    ON CONFLICT (user_id, event_id) DO UPDATE SET
+      enabled = EXCLUDED.enabled,
+      intervals_days = EXCLUDED.intervals_days,
+      channels = EXCLUDED.channels,
+      dismissed_keys = EXCLUDED.dismissed_keys,
+      updated_at = EXCLUDED.updated_at`,
+    [
+      reminder.user_id,
+      reminder.event_id,
+      reminder.enabled,
+      JSON.stringify(reminder.intervals_days),
+      JSON.stringify(reminder.channels),
+      JSON.stringify(reminder.dismissed_keys),
+      reminder.updated_at,
+    ],
+  );
+}
+
+

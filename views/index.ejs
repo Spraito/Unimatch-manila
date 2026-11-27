@@ -21,7 +21,11 @@
     <script type="module" src="/static/app.js"></script>
     <script type="module" src="/static/firebase-client.js"></script>
   </head>
-  <body data-account="<%= currentUser ? currentUser.id : 'guest' %>">
+  <body
+    data-account="<%= currentUser ? currentUser.id : 'guest' %>"
+    data-csrf-token="<%= csrfToken() %>"
+    data-initial-view="<%= typeof initialView !== 'undefined' && initialView ? initialView : '' %>"
+  >
     <a class="skip-link" href="#main">Skip to content</a>
     <%- include('_icons') %>
     <button
@@ -64,6 +68,13 @@
             >0</span
           >
         </button>
+        <button class="nav-item" data-view="calendar">
+          <svg class="icon"><use href="#i-calendar" /></svg>Calendar<span
+            class="nav-count"
+            id="calendar-count"
+            >0</span
+          >
+        </button>
       </nav>
 
       <div class="sidebar-bottom">
@@ -78,14 +89,14 @@
               <span class="sidebar-account-links">
                 <a href="/profile">My profile</a>
                 <% if (currentUser.role === 'admin') { %>
-                  <a href="/admin/accounts"> · Admin</a>
+                  <a href="/admin/dashboard"> · Admin</a>
                 <% } %>
               </span>
             <% } else { %>
               <strong data-cloud-signed-in data-cloud-display-name hidden>Student</strong>
               <span class="sidebar-account-links" data-cloud-signed-in hidden>
                 <a href="/cloud-profile">Profile</a>
-                <a href="/admin" data-cloud-admin-only hidden> · Admin</a>
+                <a href="/admin/dashboard" data-cloud-admin-only hidden> · Admin</a>
               </span>
               <strong data-cloud-signed-out>Guest mode</strong>
               <span class="sidebar-account-links" data-cloud-signed-out>
@@ -111,10 +122,24 @@
           ><strong id="breadcrumb-view">Explore colleges</strong>
         </div>
         <div class="topbar-right">
+          <button
+            type="button"
+            class="topbar-notif-btn"
+            id="topbar-notif-btn"
+            data-action="open-notifications"
+            aria-label="Open admission reminder notifications"
+          >
+            <svg class="icon"><use href="#i-bell" /></svg>
+            <span class="topbar-notif-label">Reminders</span>
+            <span class="topbar-notif-count" id="notif-count" hidden>0</span>
+          </button>
           <% if (currentUser) { %>
+            <% if (currentUser.role === 'admin') { %>
+              <a class="topbar-account" href="/admin/dashboard">Admin dashboard</a>
+            <% } %>
             <a class="topbar-account" href="/profile"><%= accountName() %></a>
           <% } else { %>
-            <a class="topbar-account" href="/admin" data-cloud-admin-only hidden>Manage catalog</a>
+            <a class="topbar-account" href="/admin/dashboard" data-cloud-admin-only hidden>Admin dashboard</a>
             <a class="topbar-account" href="/cloud-profile" data-cloud-signed-in hidden><span data-cloud-display-name>Student</span></a>
             <a class="topbar-account" href="/login" data-cloud-signed-out>Log in</a>
           <% } %>

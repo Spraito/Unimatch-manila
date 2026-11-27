@@ -17,6 +17,17 @@ import express, { type NextFunction, type Request, type Response } from "express
 import type { DecodedIdToken } from "firebase-admin/auth";
 import { getProfile, getUser } from "../accounts.js";
 import {
+  ADMISSION_EVENT_TYPES,
+  ADMISSION_EVENT_TYPE_LABELS,
+  AdmissionScheduleValidationError,
+  VERIFICATION_STATUSES,
+  createAdmissionEvent,
+  deleteAdmissionEvent,
+  listAdmissionEvents,
+  todayManilaIso,
+  updateAdmissionEvent,
+} from "../admissionScheduleStore.js";
+import {
   AdminAccountError,
   createAdminAccount,
   isActiveAdminUser,
@@ -24,6 +35,17 @@ import {
   removeAdminAccount,
   type AdminActor,
 } from "../adminAccounts.js";
+import { universities } from "../store.js";
+import {
+  CatalogValidationError,
+  buildAdminDashboardSummary,
+  deleteAdminCatalogUniversity,
+  listAdminCatalogRuns,
+  listAdminCatalogUniversities,
+  saveAdminCatalogUniversity,
+  seedBaselineCatalogUniversities,
+  type SaveCatalogAuditOptions,
+} from "../catalogStore.js";
 import {
   collectUniversityPolite,
   exportBaselineCatalog,
@@ -61,6 +83,12 @@ const adminAccountWriteLimiter = new SlidingFixedWindowLimiter({
   windowMs: 15 * 60 * 1000,
   max: 25,
   keyPrefix: "admin-accounts-write",
+});
+
+const catalogWriteLimiter = new SlidingFixedWindowLimiter({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  keyPrefix: "admin-catalog-write",
 });
 
 function resolveSessionAdminActor(req: Request): AdminActor | null {
@@ -175,6 +203,29 @@ function requireCsrfForSessionAdmin(
 }
 
 // --- Protected Admin Pages ---
+
+adminRouter.get("/admin/dashboard", (req, res) => {
+  const sessionUser = res.locals.currentUser;
+  if (sessionUser && !isActiveAdminUser(sessionUser)) {
+    return res.status(403).render("admin_dashboard", {
+      title: "Access restricted",
+      error: null,
+      flashes: consumeFlashes(req),
+      sessionAccessDenied: true,
+      isSessionAdmin: false,
+      sessionAdmin: null,
+    });
+  }
+  const sessionAdmin = resolveSessionAdminActor(req);
+  return res.render("admin_dashboard", {
+    title: "Admin dashboard",
+    error: null,
+    flashes: consumeFlashes(req),
+    sessionAccessDenied: false,
+    isSessionAdmin: Boolean(sessionAdmin),
+    sessionAdmin,
+  });
+});
 
 adminRouter.get("/admin", (req, res) => {
   const sessionUser = res.locals.currentUser;
@@ -291,7 +342,133 @@ adminRouter.delete(
   },
 );
 
-// --- Existing Admin Catalog & Collector APIs (unified admin guard) ---
+// --- Admin Dashboard & Unified Catalog Management APIs ---
+
+adminRouter.get(
+  "/api/admin/dashboard",
+  requireAdmin,
+  (req: AdminRequest, res: Response) => {
+    try {
+      return res.json(buildAdminDashboardSummary(req.adminActor!));
+    } catch (err) {
+      console.error("[admin] Failed to build admin dashboard summary:", err);
+      return res
+        .status(500)
+        .json({ error: "Could not load administrator dashboard summary." });
+    }
+  },
+);
+
+adminRouter.get(
+  "/api/admin/catalog",
+  requireAdmin,
+  (req: AdminRequest, res: Response) => {
+    try {
+      return res.json({
+        universities: listAdminCatalogUniversities(),
+        runs: listAdminCatalogRuns(30),
+        collector: getCollectorConfig(),
+        actor: {
+          email: req.adminActor!.email,
+          displayName: req.adminActor!.displayName,
+          source: req.adminActor!.source,
+        },
+      });
+    } catch (err) {
+      console.error("[admin] Failed to load admin catalog:", err);
+      return res
+        .status(500)
+        .json({ error: "Could not load the university catalog." });
+    }
+  },
+);
+
+adminRouter.put(
+  "/api/admin/catalog/:universityId",
+  createRateLimitMiddleware(catalogWriteLimiter),
+  requireAdmin,
+  requireCsrfForSessionAdmin,
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const paramId = String(req.params.universityId || "").trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9_-]{1,127}$/.test(paramId)) {
+        return res.status(400).json({
+          error:
+            "University slug ID must be 2–128 lowercase letters, numbers, hyphens, or underscores.",
+        });
+      }
+      const body = (req.body || {}) as Record<string, unknown>;
+      const rawUniversity =
+        body.university && typeof body.university === "object"
+          ? (body.university as Record<string, unknown>)
+          : body;
+      const auditInput =
+        body.audit && typeof body.audit === "object"
+          ? (body.audit as SaveCatalogAuditOptions)
+          : undefined;
+
+      const result = await saveAdminCatalogUniversity(
+        { ...rawUniversity, id: paramId },
+        req.adminActor!,
+        auditInput,
+      );
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof CatalogValidationError) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      console.error("[admin] Failed to save catalog university:", err);
+      return res
+        .status(500)
+        .json({ error: "Could not save university catalog changes." });
+    }
+  },
+);
+
+adminRouter.delete(
+  "/api/admin/catalog/:universityId",
+  createRateLimitMiddleware(catalogWriteLimiter),
+  requireAdmin,
+  requireCsrfForSessionAdmin,
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const paramId = String(req.params.universityId || "").trim().toLowerCase();
+      const result = await deleteAdminCatalogUniversity(paramId, req.adminActor!);
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof CatalogValidationError) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      console.error("[admin] Failed to delete catalog university:", err);
+      return res
+        .status(500)
+        .json({ error: "Could not delete university from catalog." });
+    }
+  },
+);
+
+adminRouter.post(
+  "/api/admin/catalog/seed",
+  createRateLimitMiddleware(catalogWriteLimiter),
+  requireAdmin,
+  requireCsrfForSessionAdmin,
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const body = (req.body || {}) as Record<string, unknown>;
+      const overwrite = Boolean(body.overwrite);
+      const result = await seedBaselineCatalogUniversities(
+        overwrite,
+        req.adminActor!,
+      );
+      return res.json(result);
+    } catch (err) {
+      console.error("[admin] Failed to seed baseline catalog:", err);
+      return res
+        .status(500)
+        .json({ error: "Could not seed baseline universities." });
+    }
+  },
+);
 
 adminRouter.get("/api/admin/baseline", requireAdmin, (_req, res) => {
   try {
@@ -403,3 +580,200 @@ adminRouter.post(
     }
   },
 );
+
+// --- Administrator Admission Schedule Management ---
+
+adminRouter.get("/admin/schedules", (req: Request, res: Response) => {
+  const sessionUser = res.locals.currentUser;
+  if (sessionUser && !isActiveAdminUser(sessionUser)) {
+    return res.status(403).render("admin_schedules", {
+      title: "Access restricted",
+      error: null,
+      flashes: consumeFlashes(req),
+      sessionAccessDenied: true,
+      isSessionAdmin: false,
+      sessionAdmin: null,
+    });
+  }
+  const sessionAdmin = resolveSessionAdminActor(req);
+  return res.render("admin_schedules", {
+    title: "Admission schedules",
+    error: null,
+    flashes: consumeFlashes(req),
+    sessionAccessDenied: false,
+    isSessionAdmin: Boolean(sessionAdmin),
+    sessionAdmin,
+  });
+});
+
+adminRouter.get(
+  "/api/admin/admission-events",
+  requireAdmin,
+  (req: AdminRequest, res: Response) => {
+    const today = todayManilaIso();
+    const universityId =
+      typeof req.query.university_id === "string"
+        ? req.query.university_id.trim()
+        : "";
+    const eventType =
+      typeof req.query.event_type === "string" ? req.query.event_type.trim() : "";
+    const verificationStatus =
+      typeof req.query.verification_status === "string"
+        ? req.query.verification_status.trim()
+        : "";
+
+    const items = listAdmissionEvents({
+      universityId: universityId || undefined,
+      eventType: eventType || undefined,
+      verificationStatus: verificationStatus || undefined,
+      includeUnverified: true,
+      includeExpired: true,
+      todayIso: today,
+    });
+
+    const allEvents = listAdmissionEvents({
+      includeUnverified: true,
+      includeExpired: true,
+      todayIso: today,
+    });
+
+    const universityOptions = Array.from(universities.values())
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        short_name: u.short_name,
+        official_url: u.official_url,
+      }));
+
+    return res.json({
+      actor: req.adminActor
+        ? {
+            email: req.adminActor.email,
+            displayName: req.adminActor.displayName,
+            source: req.adminActor.source,
+          }
+        : null,
+      today,
+      items,
+      total: items.length,
+      summary: {
+        total: allEvents.length,
+        verified_upcoming: allEvents.filter((e) => e.is_upcoming).length,
+        unverified_or_tba: allEvents.filter(
+          (e) => !e.is_confirmed && !e.is_expired,
+        ).length,
+        expired: allEvents.filter((e) => e.is_expired).length,
+      },
+      universities: universityOptions,
+      event_types: ADMISSION_EVENT_TYPES,
+      event_type_labels: ADMISSION_EVENT_TYPE_LABELS,
+      verification_statuses: VERIFICATION_STATUSES,
+    });
+  },
+);
+
+adminRouter.post(
+  "/api/admin/admission-events",
+  createRateLimitMiddleware(catalogWriteLimiter),
+  requireAdmin,
+  requireCsrfForSessionAdmin,
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const body = (req.body || {}) as Record<string, unknown>;
+      const actorEmail = req.adminActor?.email || "admin";
+      const created = await createAdmissionEvent(
+        {
+          university_id: body.university_id,
+          event_name: body.event_name,
+          event_type: body.event_type,
+          start_date: body.start_date,
+          end_date: body.end_date,
+          exam_time: body.exam_time,
+          venue: body.venue,
+          official_source_url: body.official_source_url,
+          description: body.description,
+          verification_status: body.verification_status,
+        },
+        actorEmail,
+      );
+      return res.status(201).json({ event: created });
+    } catch (err) {
+      if (err instanceof AdmissionScheduleValidationError) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      return res
+        .status(500)
+        .json({ error: "Could not create admission event." });
+    }
+  },
+);
+
+adminRouter.put(
+  "/api/admin/admission-events/:eventId",
+  createRateLimitMiddleware(catalogWriteLimiter),
+  requireAdmin,
+  requireCsrfForSessionAdmin,
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const eventId = String(req.params.eventId || "").trim();
+      if (!/^[a-zA-Z0-9_-]{1,128}$/.test(eventId)) {
+        return res.status(400).json({ error: "Invalid event identifier." });
+      }
+      const body = (req.body || {}) as Record<string, unknown>;
+      const actorEmail = req.adminActor?.email || "admin";
+      const updated = await updateAdmissionEvent(
+        eventId,
+        {
+          university_id: body.university_id,
+          event_name: body.event_name,
+          event_type: body.event_type,
+          start_date: body.start_date,
+          end_date: body.end_date,
+          exam_time: body.exam_time,
+          venue: body.venue,
+          official_source_url: body.official_source_url,
+          description: body.description,
+          verification_status: body.verification_status,
+        },
+        actorEmail,
+      );
+      return res.json({ event: updated });
+    } catch (err) {
+      if (err instanceof AdmissionScheduleValidationError) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      return res
+        .status(500)
+        .json({ error: "Could not update admission event." });
+    }
+  },
+);
+
+adminRouter.delete(
+  "/api/admin/admission-events/:eventId",
+  createRateLimitMiddleware(catalogWriteLimiter),
+  requireAdmin,
+  requireCsrfForSessionAdmin,
+  async (req: AdminRequest, res: Response) => {
+    try {
+      const eventId = String(req.params.eventId || "").trim();
+      if (!/^[a-zA-Z0-9_-]{1,128}$/.test(eventId)) {
+        return res.status(400).json({ error: "Invalid event identifier." });
+      }
+      const removed = await deleteAdmissionEvent(eventId);
+      if (!removed) {
+        return res.status(404).json({ error: "Admission event not found." });
+      }
+      return res.json({ deleted: true, event_id: eventId });
+    } catch (err) {
+      if (err instanceof AdmissionScheduleValidationError) {
+        return res.status(err.statusCode).json({ error: err.message });
+      }
+      return res
+        .status(500)
+        .json({ error: "Could not delete admission event." });
+    }
+  },
+);
+

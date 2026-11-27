@@ -213,7 +213,7 @@ function buildProfileContext(req: Request, res: Response, error?: string | null)
 authRouter.get("/login", (req, res) => {
   if (res.locals.currentUser) {
     return res.redirect(
-      res.locals.currentUser.role === "admin" ? "/admin/accounts" : "/profile",
+      res.locals.currentUser.role === "admin" ? "/admin/dashboard" : "/profile",
     );
   }
   return res.render("login", {
@@ -266,7 +266,7 @@ authRouter.post("/login", loginLimitMiddleware, async (req, res) => {
     });
   }
 
-  const defaultTarget = user.role === "admin" ? "/admin/accounts" : "/profile";
+  const defaultTarget = user.role === "admin" ? "/admin/dashboard" : "/profile";
   const target = nextUrl(req, defaultTarget);
   if (user.totp_enabled) {
     return regenerateAndRedirect(

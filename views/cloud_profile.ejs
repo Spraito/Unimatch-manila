@@ -1,9 +1,9 @@
 <%- include('_account_header') %>
   <p class="account-alert" data-firebase-auth-error role="alert" hidden></p>
-  <p class="account-help" id="cloud-loading">Checking your cloud account session…</p>
+  <p class="account-help" id="cloud-loading">Checking your account session…</p>
 
   <section class="account-card account-card-narrow" id="cloud-signed-out" hidden>
-    <span class="account-eyebrow">PERSISTENT CLOUD ACCOUNT</span>
+    <span class="account-eyebrow">STUDENT ACCOUNT</span>
     <h1>Sign in with Google</h1>
     <p class="account-lead">
       Save your profile, match preferences, and university shortlist securely across devices and sessions.
@@ -29,10 +29,10 @@
   <div id="cloud-signed-in" hidden>
     <section class="account-intro">
       <div>
-        <span class="account-eyebrow">YOUR CLOUD MATCH PROFILE</span>
+        <span class="account-eyebrow">YOUR MATCH PROFILE</span>
         <h1>Hello, <span id="cloud-greeting-name">Student</span>.</h1>
         <p class="account-lead">
-          Your preferences and saved schools stay synced to your private cloud account across visits.
+          Your preferences and saved schools stay saved to your private account across visits.
         </p>
       </div>
       <div class="account-logout">
@@ -42,7 +42,7 @@
 
     <div class="account-grid">
       <section class="account-card">
-        <span class="account-eyebrow">CLOUD ACCOUNT</span>
+        <span class="account-eyebrow">ACCOUNT</span>
         <h2>Profile details</h2>
         <form id="cloud-profile-form" class="account-form" novalidate>
           <label for="cloud-display-name">Display name</label>

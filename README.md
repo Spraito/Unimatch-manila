@@ -150,7 +150,7 @@ Every authentication flow normalizes emails via `normalizeEmail()` (`trim().toLo
 - **Brute-Force Lockout**: `authenticate()` locks local accounts for **15 minutes** after **5 consecutive failed password attempts** (`MAX_FAILED_LOGINS = 5`, `LOCKOUT_MS = 15 * 60 * 1000`).
 
 #### Password Reset via Brevo HTTPS REST API (`src/mailer.ts`, `src/routes/auth.ts`)
-- Replaced raw SMTP sockets (ports 587/465) with Brevo's v3 HTTPS REST API (`POST https://api.brevo.com/v3/smtp/email`), authenticated via `process.env.BREVO_API_KEY` in the `api-key` header and sending strictly from **`UniMatch PH <unimatchph@gmail.com>`**.
+- Replaced raw SMTP sockets (ports 587/465) with Brevo's v3 HTTPS REST API (`POST https://api.brevo.com/v3/smtp/email`), authenticated via `process.env.BREVO_API_KEY` in the `api-key` header and sending strictly from **`UniMatch PH <spraitospraito@gmail.com>`**.
 - `POST /forgot-password` returns a neutral confirmation message to the browser (anti-enumeration) while logging every server-side step:
   1. Normalized email lookup in Neon PostgreSQL (`dbFindUserByEmail`) and local fallback store.
   2. Provider routing:
@@ -247,7 +247,7 @@ UniMatch PH is designed to align with **Republic Act No. 10173 (Data Privacy Act
 ### Prerequisites
 - **Node.js 20+** and **npm**
 - A **Neon PostgreSQL** database connection string (`DATABASE_URL`)
-- A **Brevo** API key (`BREVO_API_KEY`) with `unimatchph@gmail.com` authorized as sender
+- A **Brevo** API key (`BREVO_API_KEY`) with `spraitospraito@gmail.com` authorized as sender
 - Firebase project configuration (`firebase-applet-config.json`) for Google Sign-In & Firestore features
 
 ### Environment Variables
@@ -268,7 +268,7 @@ UNIMATCH_DATA_KEY=
 UNIMATCH_LOOKUP_KEY=
 
 # Brevo HTTPS REST API key for transactional emails
-# Endpoint: POST https://api.brevo.com/v3/smtp/email | Sender: UniMatch PH <unimatchph@gmail.com>
+# Endpoint: POST https://api.brevo.com/v3/smtp/email | Sender: UniMatch PH <spraitospraito@gmail.com>
 BREVO_API_KEY=
 ```
 
@@ -316,7 +316,7 @@ The server listens on `http://0.0.0.0:3000` (configurable via `PORT`).
    - Student PII is encrypted at rest using **AES-256-GCM** (`UNIMATCH_DATA_KEY`), while deterministic lookups use a separate **HMAC-SHA256** blind-index key (`UNIMATCH_LOOKUP_KEY`), and passwords use **`bcryptjs`**. Even if a database dump were exposed, plaintext passwords and encrypted PII fields cannot be recovered without the runtime environment keys.
 4. **Fail-Safe `UNIMATCH_ENV=production` Default & Brevo HTTPS REST Email (`src/env.ts`, `src/mailer.ts`, `src/routes/auth.ts`)**:
    - `src/env.ts` loads `.env` at startup and defaults `UNIMATCH_ENV` to `"production"` whenever unset, guaranteeing development-only `dev_reset_link` tokens never appear in the browser UI.
-   - Instead of raw SMTP (ports 587/465, often blocked in cloud containers), password resets and Google-only sign-in reminders are sent via **Brevo's HTTPS REST API** (`POST https://api.brevo.com/v3/smtp/email`) strictly from `UniMatch PH <unimatchph@gmail.com>`, with step-by-step server diagnostics logging PostgreSQL lookups and exact Brevo HTTP responses.
+   - Instead of raw SMTP (ports 587/465, often blocked in cloud containers), password resets and Google-only sign-in reminders are sent via **Brevo's HTTPS REST API** (`POST https://api.brevo.com/v3/smtp/email`) strictly from `UniMatch PH <spraitospraito@gmail.com>`, with step-by-step server diagnostics logging PostgreSQL lookups and exact Brevo HTTP responses.
 
 ---
 

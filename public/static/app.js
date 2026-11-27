@@ -1,3 +1,5 @@
+import { createCalendarManager } from "/static/calendar.js";
+
 const $ = (selector, root = document) => root.querySelector(selector);
 const escapeHTML = (value) =>
   String(value ?? "").replace(
@@ -14,6 +16,7 @@ const viewTitles = {
   universities: "Explore colleges",
   programs: "Degree programs",
   saved: "Saved schools",
+  calendar: "Application calendar",
   compare: "Compare schools",
   recommend: "Find my match",
 };
@@ -43,6 +46,12 @@ const state = {
   page: 1,
   saved: storedList("saved"),
   compare: storedList("compare").slice(0, 3),
+  compareItems: [],
+  compareOptions: {
+    showThird: false,
+    onlyDifferences: false,
+    programQuery: "",
+  },
   schools: [],
   stats: null,
   detail: null,
@@ -54,6 +63,7 @@ const state = {
     sector: "",
     budget: "",
     budgetBasis: "semester",
+    limit: 20,
     weights: {
       program: 0.45,
       location: 0.2,
@@ -69,6 +79,25 @@ let renderVersion = 0,
   searchTimer,
   toastTimer,
   detailVersion = 0;
+
+const calendarManager = createCalendarManager({
+  getSavedIds: () => state.saved,
+  getCompareIds: () => state.compare,
+  getSchoolById: (id) => state.schools.find((s) => s.id === id) || null,
+  schoolMark: (school) => schoolMark(school),
+  toast: (msg) => toast(msg),
+  setView: (view) => setView(view),
+  rerenderIfView: (view) => {
+    if (state.view === view) {
+      const results = $("#results");
+      if (results && view === "calendar") {
+        calendarManager.renderCalendarView(results);
+      } else {
+        render();
+      }
+    }
+  },
+});
 
 function liveCatalogApi(path, params = {}) {
   const live = window.__unimatchLiveCatalog;
@@ -437,17 +466,18 @@ function controls() {
   const universitiesView = state.view === "universities",
     programs = state.view === "programs",
     compare = state.view === "compare",
-    recommend = state.view === "recommend";
+    recommend = state.view === "recommend",
+    calendar = state.view === "calendar";
   $("#hero").hidden = !universitiesView;
   $("#section-heading").hidden = universitiesView;
-  $("#filter-bar").hidden = compare || recommend;
-  $("#results-meta").hidden = compare || recommend;
+  $("#filter-bar").hidden = compare || recommend || calendar;
+  $("#results-meta").hidden = compare || recommend || calendar;
   const multiCity = (state.stats?.cities?.length || 0) > 1;
-  $("#city-wrap").hidden = !multiCity || programs || recommend;
-  $("#sector-wrap").hidden = universitiesView || programs || recommend;
+  $("#city-wrap").hidden = !multiCity || programs || recommend || calendar;
+  $("#sector-wrap").hidden = universitiesView || programs || recommend || calendar;
   $("#school-wrap").hidden = !programs;
   $("#topic-wrap").hidden = true;
-  $("#sort-wrap").hidden = programs || recommend;
+  $("#sort-wrap").hidden = programs || recommend || calendar;
   $("#search").placeholder = programs
     ? "Search a degree or subject (e.g. Nursing, Computer Science)…"
     : "Search a university, degree, or exam (e.g. USTET, Nursing)…";
@@ -462,15 +492,19 @@ function controls() {
     ],
     saved: [
       "Saved schools",
-      "Your personal shortlist for quick access and comparison.",
+      "Track your application status, upcoming entrance exams, deadlines, and official portals for every university you saved.",
+    ],
+    calendar: [
+      "Application calendar",
+      "View confirmed entrance examination dates, application openings, and deadlines from all your saved universities in one calendar.",
     ],
     compare: [
       "Compare schools",
-      "Review up to three universities side by side.",
+      "Select two universities (or up to three) to compare tuition, entrance exams, programs, and admissions side by side.",
     ],
     recommend: [
       "Find my match",
-      "Tell us your preferred program, budget, or school type to see ranked matches.",
+      "Tell us your preferred program, campus area, budget, or school type to see ranked matches.",
     ],
   };
   $("#section-title").textContent = descriptions[state.view][0];
@@ -521,25 +555,27 @@ async function render() {
   results.setAttribute("aria-busy", "true");
   $("#pagination").hidden = true;
   try {
+    if (state.view === "calendar") {
+      await calendarManager.refreshData();
+      if (version !== renderVersion) return;
+      calendarManager.renderCalendarView(results);
+      return;
+    }
     if (state.view === "recommend") {
       renderRecommend();
       return;
     }
     if (state.view === "compare") {
       if (!state.compare.length) {
-        results.innerHTML = emptyState(
-          "A clearer choice starts with a pair",
-          "Select Compare on any university card to add it here. You can compare up to three schools.",
-          "browse",
-          "Explore colleges",
-          "compare",
-        );
+        state.compareItems = [];
+        renderComparison([]);
       } else {
         const data = await api("/api/compare", {
           ids: state.compare.join(","),
         });
         if (version !== renderVersion) return;
-        renderComparison(data.items);
+        state.compareItems = data.items || [];
+        renderComparison(state.compareItems);
       }
       return;
     }
@@ -566,6 +602,21 @@ async function render() {
         $("#pagination").innerHTML =
           `<button data-action="previous" ${data.page === 1 ? "disabled" : ""}>Previous</button><span>Page ${data.page} of ${pages}</span><button data-action="next" ${data.page === pages ? "disabled" : ""}>Next</button>`;
       }
+    } else if (state.view === "saved") {
+      const [data] = await Promise.all([
+        api("/api/universities", {
+          search: state.query,
+          city: state.city,
+          sector: state.sector,
+          sort: state.sort,
+        }),
+        calendarManager.refreshData(),
+      ]);
+      if (version !== renderVersion) return;
+      const schools = data.items.filter((s) => state.saved.includes(s.id));
+      $("#results-count").innerHTML =
+        `<strong>${schools.length}</strong> ${schools.length === 1 ? "university" : "universities"} on your shortlist`;
+      calendarManager.renderSavedDashboardView(results, schools);
     } else {
       const data = await api("/api/universities", {
         search: state.query,
@@ -574,26 +625,15 @@ async function render() {
         sort: state.sort,
       });
       if (version !== renderVersion) return;
-      const schools =
-        state.view === "saved"
-          ? data.items.filter((s) => state.saved.includes(s.id))
-          : data.items;
+      const schools = data.items;
       $("#results-count").innerHTML =
-        `<strong>${schools.length}</strong> ${schools.length === 1 ? "university" : "universities"} ${state.view === "saved" ? "on your shortlist" : "to explore"}`;
+        `<strong>${schools.length}</strong> ${schools.length === 1 ? "university" : "universities"} to explore`;
       results.innerHTML = schools.length
         ? `<div class="school-grid">${schools.map(schoolCard).join("")}</div>`
-        : state.view === "saved" && !state.saved.length
-          ? emptyState(
-              "Keep a few possibilities close",
-              "Tap the bookmark on a university card to build your shortlist. It stays in this browser.",
-              "browse",
-              "Explore colleges",
-              "save",
-            )
-          : emptyState(
-              "A different search might open a door",
-              "Try a university name, degree, or another location to explore more possibilities.",
-            );
+        : emptyState(
+            "A different search might open a door",
+            "Try a university name, degree, or another location to explore more possibilities.",
+          );
     }
   } catch (error) {
     if (version !== renderVersion) return;
@@ -604,19 +644,174 @@ async function render() {
   }
 }
 
-function renderComparison(schools) {
-  const structuredField = (school, key, render, emptyText = "Check official portal") => {
+function extractCampusArea(campusLocation, city) {
+  const parts = String(campusLocation || "")
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p && !/^metro manila$/i.test(p));
+  if (parts.length >= 2) {
+    const cityPart = parts[parts.length - 1];
+    const districtPart = parts[parts.length - 2];
+    if (cityPart.toLowerCase() === String(city || "Manila").toLowerCase()) {
+      return districtPart;
+    }
+    return `${districtPart}, ${cityPart}`;
+  }
+  return parts[0] || city || "";
+}
+
+function getMatchLocations() {
+  const cities = state.stats?.cities || [];
+  const areas = new Set();
+  for (const s of state.schools) {
+    const area = extractCampusArea(s.campus_location, s.city);
+    if (area) areas.add(area);
+  }
+  const items = [];
+  if (cities.length > 1) {
+    cities.forEach((c) => items.push({ value: c, label: `${c} (all campuses)` }));
+  }
+  [...areas]
+    .sort((a, b) => a.localeCompare(b))
+    .forEach((area) => items.push({ value: area, label: area }));
+  return items;
+}
+
+const QUICK_COMPARE_PAIRS = [
+  ["up-manila", "dlsu-manila", "UP Manila vs. DLSU"],
+  ["ust-manila", "feu-manila", "UST vs. FEU"],
+  ["pup-sta-mesa", "plm-manila", "PUP vs. PLM"],
+  ["mapua-manila", "tup-manila", "Mapúa vs. TUP"],
+];
+
+function renderCompareSelectorBar() {
+  const sortedSchools = [...state.schools].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const showThird =
+    state.compare.length >= 3 || state.compareOptions.showThird;
+  const slotCount = showThird ? 3 : 2;
+  const slotSelect = (slotIdx) => {
+    const currentId = state.compare[slotIdx] || "";
+    const otherIds = new Set(
+      state.compare.filter((id, idx) => idx !== slotIdx && id),
+    );
+    const options = sortedSchools
+      .map((s) => {
+        const disabled = otherIds.has(s.id) ? "disabled" : "";
+        const selected = s.id === currentId ? "selected" : "";
+        return `<option value="${e(s.id)}" ${selected} ${disabled}>${e(s.name)} (${e(s.sector)})</option>`;
+      })
+      .join("");
+    return `<label class="compare-slot-field">
+      <span>University ${slotIdx + 1}</span>
+      <select class="compare-slot-select" id="compare-slot-${slotIdx}" data-compare-slot="${slotIdx}" aria-label="Select university ${slotIdx + 1}">
+        <option value="">Choose a university…</option>
+        ${options}
+      </select>
+    </label>`;
+  };
+
+  const canSwap = state.compare.length >= 2;
+  const hasAny = state.compare.length > 0;
+
+  return `<section class="compare-picker" aria-label="Select universities to compare">
+    <div class="compare-picker-slots ${showThird ? "has-three" : ""}">
+      ${slotSelect(0)}
+      <button type="button" class="compare-swap-btn" data-action="compare-swap" ${canSwap ? "" : "disabled"} title="Swap University 1 and University 2" aria-label="Swap University 1 and University 2">
+        ${icon("compare")}<span>Swap</span>
+      </button>
+      ${slotSelect(1)}
+      ${showThird ? slotSelect(2) : ""}
+    </div>
+    <div class="compare-picker-actions">
+      ${
+        !showThird && state.schools.length >= 3
+          ? `<button type="button" class="text-button" data-action="compare-add-third">+ Add 3rd university</button>`
+          : ""
+      }
+      ${
+        hasAny
+          ? `<button type="button" class="compare-clear-btn" data-action="compare-clear">Clear selection</button>`
+          : ""
+      }
+    </div>
+  </section>`;
+}
+
+function buildCompareInsights(schools) {
+  if (schools.length < 2) return "";
+  const highlights = [];
+
+  const freeSchools = schools.filter((s) => s.free_tuition);
+  const paidSchools = schools.filter((s) => !s.free_tuition);
+  if (freeSchools.length > 0 && paidSchools.length > 0) {
+    highlights.push(
+      `Tuition: Free under RA 10931 at ${freeSchools.map((s) => s.short_name).join(" & ")}`,
+    );
+  } else if (freeSchools.length === schools.length) {
+    highlights.push("Tuition: All selected schools offer free tuition (RA 10931)");
+  }
+
+  const byProgs = [...schools].sort(
+    (a, b) => (b.program_count || 0) - (a.program_count || 0),
+  );
+  const diffProgs = (byProgs[0].program_count || 0) - (byProgs[byProgs.length - 1].program_count || 0);
+  if (diffProgs > 0) {
+    highlights.push(
+      `Programs: ${byProgs[0].short_name} lists ${diffProgs} more ${diffProgs === 1 ? "degree" : "degrees"}`,
+    );
+  }
+
+  const topicSets = schools.map(
+    (s) => new Set((s.programs || []).map((p) => p.topic).filter(Boolean)),
+  );
+  if (topicSets.every((set) => set.size > 0)) {
+    const shared = [...topicSets[0]].filter((t) =>
+      topicSets.every((set) => set.has(t)),
+    );
+    const union = new Set(topicSets.flatMap((set) => [...set]));
+    highlights.push(`Shared fields: ${shared.length} of ${union.size} subject areas`);
+  }
+
+  const sectors = new Set(schools.map((s) => s.sector).filter(Boolean));
+  if (sectors.size > 1) {
+    highlights.push("Mix: Public vs. Private");
+  }
+
+  if (!highlights.length) return "";
+  return `<div class="compare-insights" aria-label="Comparison highlights">
+    ${highlights
+      .map((item) => `<span>${e(item)}</span>`)
+      .join('<span class="compare-insight-sep" aria-hidden="true">·</span>')}
+  </div>`;
+}
+
+function renderCompareTableHtml(schools) {
+  const query = state.compareOptions.programQuery.trim().toLowerCase();
+  const onlyDiffs = Boolean(state.compareOptions.onlyDifferences);
+
+  const structuredField = (
+    school,
+    key,
+    renderFn,
+    emptyText = "Check official portal",
+  ) => {
     const rows = school.structured?.[key] || [];
     return rows.length
-      ? rows.map(render).join("")
+      ? rows.map(renderFn).join("")
       : `<span class="muted">${e(emptyText)}</span>`;
   };
+
   const feeText = (fee) => {
     if (fee.amount_min === 0 && fee.amount_max === 0) {
       return '<p class="is-free-text"><strong>Free tuition (RA 10931)</strong></p>';
     }
-    if (typeof fee.amount_min === "number" && typeof fee.amount_max === "number") {
-      return `<p>PHP ${Number(fee.amount_min).toLocaleString("en-PH")}${
+    if (
+      typeof fee.amount_min === "number" &&
+      typeof fee.amount_max === "number"
+    ) {
+      return `<p class="compare-num">PHP ${Number(fee.amount_min).toLocaleString("en-PH")}${
         fee.amount_max === fee.amount_min
           ? ""
           : `–${Number(fee.amount_max).toLocaleString("en-PH")}`
@@ -624,45 +819,310 @@ function renderComparison(schools) {
     }
     return '<p class="muted">Not published yet</p>';
   };
+
+  const allTopicSets = schools.map(
+    (s) => new Set((s.programs || []).map((p) => p.topic).filter(Boolean)),
+  );
+  const sharedTopics =
+    schools.length >= 2 && allTopicSets.every((set) => set.size > 0)
+      ? new Set(
+          [...allTopicSets[0]].filter((t) =>
+            allTopicSets.every((set) => set.has(t)),
+          ),
+        )
+      : new Set();
+
+  const programCell = (school) => {
+    const progs = school.programs || [];
+    const count = school.program_count || progs.length || 0;
+    const topics = [...new Set(progs.map((p) => p.topic).filter(Boolean))].sort();
+
+    if (query) {
+      const matched = progs.filter((p) =>
+        `${p.name} ${p.topic || ""}`.toLowerCase().includes(query),
+      );
+      if (matched.length === 0) {
+        return `<p class="compare-prog-status is-none">No listed degrees matching “${e(state.compareOptions.programQuery.trim())}”</p>
+          <p class="muted compare-num">${count} total listed degrees</p>`;
+      }
+      const preview = matched.slice(0, 6);
+      const extra = matched.length - preview.length;
+      return `<p class="compare-prog-status is-found"><strong>${matched.length}</strong> matching ${matched.length === 1 ? "degree" : "degrees"}</p>
+        <ul class="compare-list compare-prog-matches">${preview.map((p) => `<li>${e(p.name)}</li>`).join("")}</ul>
+        ${extra > 0 ? `<p class="muted">+ ${extra} more matching degrees · <button type="button" class="compare-inline-link" data-action="details" data-school="${e(school.id)}" data-tab="programs">View all</button></p>` : ""}`;
+    }
+
+    const topicText = topics.length
+      ? `<p class="compare-topics">${topics
+          .map((t) =>
+            sharedTopics.has(t)
+              ? `<span>${e(t)}</span>`
+              : `<strong>${e(t)}</strong>`,
+          )
+          .join('<span aria-hidden="true"> · </span>')}</p>`
+      : "";
+    return count
+      ? `<p class="compare-num"><strong>${count}</strong> listed degrees</p>${topicText}`
+      : '<span class="muted">Not listed yet</span>';
+  };
+
+  const requirementsCell = (school) => {
+    const reqs = school.structured?.admission_requirements || [];
+    if (!reqs.length) return '<span class="muted">Check official portal</span>';
+    const visible = reqs.slice(0, 4);
+    const hidden = reqs.slice(4);
+    return `<ul class="compare-list">${visible.map((r) => `<li>${e(r.text)}</li>`).join("")}</ul>${
+      hidden.length
+        ? `<details class="compare-more"><summary>Show ${hidden.length} more requirement${hidden.length === 1 ? "" : "s"}</summary><ul class="compare-list">${hidden.map((r) => `<li>${e(r.text)}</li>`).join("")}</ul></details>`
+        : ""
+    }`;
+  };
+
+  const deadlinesCell = (school) => {
+    const deadlines = school.structured?.application_deadlines || [];
+    if (!deadlines.length) {
+      return '<span class="muted">Confirm dates on official portal</span>';
+    }
+    return `<ul class="compare-list">${deadlines
+      .slice(0, 4)
+      .map(
+        (d) =>
+          `<li><strong>${e(d.label || "Application date")}</strong>${d.date_iso ? ` — <span class="compare-num">${e(dateLabel(d.date_iso))}</span>` : d.raw_text ? `: ${e(d.raw_text)}` : ""}</li>`,
+      )
+      .join("")}</ul>`;
+  };
+
   const rows = [
-    ["Campus", (school) => e(school.campus_location)],
-    ["Type", (school) => e(`${school.sector} university`)],
-    [
-      "Degree programs",
-      (school) =>
-        school.program_count
-          ? `<strong>${school.program_count}</strong> listed degrees`
-          : "Not listed yet",
-    ],
-    [
-      "Entrance exam",
-      (school) =>
-        structuredField(
-          school,
-          "entrance_examinations",
-          (row) => `<p><strong>${e(row.exam_name || "Entrance exam")}</strong>${row.coverage ? `<br><span class="muted">${e(row.coverage)}</span>` : ""}</p>`,
-        ),
-    ],
-    [
-      "Tuition",
-      (school) => structuredField(school, "tuition_fees", feeText, "Not published yet"),
-    ],
-    [
-      "Requirements",
-      (school) => {
-        const reqs = school.structured?.admission_requirements || [];
-        return reqs.length
-          ? `<ul class="compare-list">${reqs.map((r) => `<li>${e(r.text)}</li>`).join("")}</ul>`
-          : '<span class="muted">Check official portal</span>';
+    {
+      label: "Campus & district",
+      key: (s) => String(s.campus_location || s.city || "").toLowerCase(),
+      render: (s) => e(s.campus_location || s.city || "Not specified"),
+    },
+    {
+      label: "University type",
+      key: (s) => String(s.sector || "").toLowerCase(),
+      render: (s) => `<strong>${e(s.sector)}</strong> university`,
+    },
+    {
+      label: "Tuition & cost",
+      key: (s) => {
+        if (s.free_tuition) return "free";
+        const fees = s.structured?.tuition_fees || [];
+        return fees.map((f) => `${f.amount_min}-${f.amount_max}-${f.basis}`).join("|") || "unknown";
       },
-    ],
-    [
-      "Official links",
-      (school) => applicationLinkList(school.structured),
-    ],
+      render: (s) => {
+        if (s.free_tuition) {
+          return '<p class="is-free-text"><strong>Free tuition (RA 10931)</strong></p><p class="muted">Eligible Filipino undergraduates</p>';
+        }
+        return structuredField(s, "tuition_fees", feeText, "Not published yet — check portal");
+      },
+    },
+    {
+      label: "Entrance exam",
+      key: (s) =>
+        (s.structured?.entrance_examinations || [])
+          .map((r) => `${r.exam_name || ""}|${r.coverage || ""}`)
+          .join(";")
+          .toLowerCase() || (s.exam_summary || "").toLowerCase(),
+      render: (s) =>
+        structuredField(
+          s,
+          "entrance_examinations",
+          (row) =>
+            `<p><strong>${e(row.exam_name || "Entrance exam")}</strong>${row.coverage ? `<br><span class="muted">${e(row.coverage)}</span>` : ""}</p>`,
+        ),
+    },
+    {
+      label: query ? "Matching programs" : "Degree programs",
+      key: (s) =>
+        query
+          ? String(
+              (s.programs || []).filter((p) =>
+                `${p.name} ${p.topic || ""}`.toLowerCase().includes(query),
+              ).length,
+            )
+          : `${s.program_count || 0}|${[...new Set((s.programs || []).map((p) => p.topic))].sort().join(",")}`,
+      render: programCell,
+    },
+    {
+      label: "Application dates",
+      key: (s) =>
+        (s.structured?.application_deadlines || [])
+          .map((d) => `${d.label}|${d.date_iso || d.raw_text}`)
+          .join(";")
+          .toLowerCase(),
+      render: deadlinesCell,
+    },
+    {
+      label: "Freshman requirements",
+      key: (s) =>
+        (s.structured?.admission_requirements || [])
+          .map((r) => r.text)
+          .join(";")
+          .toLowerCase(),
+      render: requirementsCell,
+    },
+    {
+      label: "Academic year",
+      key: (s) => `${structuredYear(s.structured)}|${dateLabel(s.structured?.last_verified_at || s.collected_at)}`,
+      render: (s) =>
+        `<p class="compare-num"><strong>${e(structuredYear(s.structured))}</strong></p><p class="muted compare-num">Checked ${e(dateLabel(s.structured?.last_verified_at || s.collected_at))}</p>`,
+    },
+    {
+      label: "Official links",
+      key: (s) =>
+        (s.structured?.application_links || []).map((l) => l.url).join("|"),
+      render: (s) => applicationLinkList(s.structured),
+    },
   ];
-  $("#results").innerHTML =
-    `<div class="compare-scroll" role="region" aria-label="University comparison" tabindex="0"><table class="compare-table"><thead><tr><th scope="col">Criteria</th>${schools.map((school) => `<th scope="col" class="compare-school">${schoolMark(school)}<h3>${e(school.name)}</h3><div class="compare-head-actions"><button class="text-button" data-action="details" data-school="${e(school.id)}">View details ${icon("arrow")}</button><button class="compare-remove" data-action="compare" data-school="${e(school.id)}" aria-label="Remove ${e(school.short_name)} from comparison">Remove</button></div></th>`).join("")}</tr></thead><tbody>${rows.map(([label, value]) => `<tr><th scope="row">${e(label)}</th>${schools.map((school) => `<td>${value(school)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="compare-footer-action"><button class="button secondary" data-action="browse">Add another school ${icon("arrow")}</button></div>`;
+
+  const evaluatedRows = rows.map((row) => {
+    const keys = new Set(schools.map((s) => row.key(s)));
+    return { ...row, differs: schools.length >= 2 && keys.size > 1 };
+  });
+
+  const visibleRows = onlyDiffs
+    ? evaluatedRows.filter((row) => row.differs)
+    : evaluatedRows;
+
+  if (onlyDiffs && visibleRows.length === 0) {
+    return `<div class="empty-state compare-no-diffs">
+      <h3>All compared fields match</h3>
+      <p>Switch back to All criteria to review the complete details side by side.</p>
+      <button type="button" class="button secondary" data-action="compare-diff-mode" data-value="all">Show all criteria</button>
+    </div>`;
+  }
+
+  return `<div class="compare-scroll" role="region" aria-label="University comparison table" tabindex="0">
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th scope="col" class="compare-sticky-col">Criteria</th>
+          ${schools
+            .map(
+              (school) => `<th scope="col" class="compare-school">
+                <div class="compare-school-top">
+                  ${schoolMark(school)}
+                  <div class="compare-school-titles">
+                    <h3>${e(school.name)}</h3>
+                    <p class="compare-school-sub">${e(school.sector)} <span aria-hidden="true">·</span> ${e(shortLocation(school.campus_location, school.city))}</p>
+                  </div>
+                </div>
+                <div class="compare-head-actions">
+                  <button type="button" class="text-button" data-action="details" data-school="${e(school.id)}">View details ${icon("arrow")}</button>
+                  <button type="button" class="compare-remove" data-action="compare" data-school="${e(school.id)}" aria-label="Remove ${e(school.short_name)} from comparison">Remove</button>
+                </div>
+              </th>`,
+            )
+            .join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${visibleRows
+          .map(
+            (row) => `<tr class="${row.differs ? "is-diff" : ""}">
+              <th scope="row" class="compare-sticky-col">
+                <span>${e(row.label)}</span>
+                ${row.differs && schools.length >= 2 ? '<span class="compare-diff-note">Differs</span>' : ""}
+              </th>
+              ${schools.map((school) => `<td>${row.render(school)}</td>`).join("")}
+            </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function updateCompareTableOnly() {
+  const host = $("#compare-table-host");
+  if (!host || !state.compareItems.length) return;
+  host.innerHTML = renderCompareTableHtml(state.compareItems);
+}
+
+function renderComparison(schools) {
+  const pickerHtml = renderCompareSelectorBar();
+
+  if (!schools.length) {
+    const validPairs = QUICK_COMPARE_PAIRS.filter(
+      ([a, b]) =>
+        state.schools.some((s) => s.id === a) &&
+        state.schools.some((s) => s.id === b),
+    );
+    $("#results").innerHTML = `${pickerHtml}
+      <div class="empty-state compare-empty">
+        <div class="empty-icon">${icon("compare")}</div>
+        <h3>Pick two universities above to compare side by side</h3>
+        <p>Select any two Metro Manila universities from the dropdowns above, or start with a popular comparison below.</p>
+        ${
+          validPairs.length
+            ? `<div class="compare-quick-pairs">
+                ${validPairs
+                  .map(
+                    ([a, b, label]) =>
+                      `<button type="button" class="filter-chip" data-action="compare-pair" data-pair="${e(`${a},${b}`)}">${e(label)}</button>`,
+                  )
+                  .join("")}
+              </div>`
+            : ""
+        }
+      </div>`;
+    return;
+  }
+
+  const singleSchoolHint =
+    schools.length === 1
+      ? (() => {
+          const picked = schools[0];
+          const counterCandidates = state.schools
+            .filter((s) => s.id !== picked.id && s.sector !== picked.sector)
+            .slice(0, 3);
+          return `<div class="compare-single-banner">
+            <div>
+              <strong>Add a second university</strong>
+              <p>Choose University 2 in the selector above to compare ${e(picked.short_name)} side by side.</p>
+            </div>
+            ${
+              counterCandidates.length
+                ? `<div class="compare-quick-pairs">
+                    ${counterCandidates
+                      .map(
+                        (other) =>
+                          `<button type="button" class="filter-chip" data-action="compare-pair" data-pair="${e(`${picked.id},${other.id}`)}">Compare with ${e(other.short_name)}</button>`,
+                      )
+                      .join("")}
+                  </div>`
+                : ""
+            }
+          </div>`;
+        })()
+      : "";
+
+  const toolbarHtml =
+    schools.length >= 2
+      ? `<div class="compare-toolbar">
+          <label class="compare-program-search">
+            ${icon("search")}
+            <span class="sr-only">Check a degree program across compared universities</span>
+            <input
+              id="compare-program-search"
+              type="search"
+              maxlength="120"
+              autocomplete="off"
+              placeholder="Check a degree across these schools (e.g. Computer Science, Nursing)…"
+              value="${e(state.compareOptions.programQuery)}"
+            />
+          </label>
+          <div class="compare-segmented" role="group" aria-label="Filter comparison rows">
+            <button type="button" data-action="compare-diff-mode" data-value="all" aria-pressed="${!state.compareOptions.onlyDifferences}">All criteria</button>
+            <button type="button" data-action="compare-diff-mode" data-value="diff" aria-pressed="${state.compareOptions.onlyDifferences}">Only differences</button>
+          </div>
+        </div>`
+      : "";
+
+  const insightsHtml = buildCompareInsights(schools);
+
+  $("#results").innerHTML = `${pickerHtml}${singleSchoolHint}${insightsHtml}${toolbarHtml}<div id="compare-table-host">${renderCompareTableHtml(schools)}</div>`;
 }
 
 const EXPLANATION_STATUS = {
@@ -709,7 +1169,7 @@ function recommendationRow(item, rank) {
       <div class="match-head">
         <div>
           <h4>${e(program)}</h4>
-          <p class="match-program">${e(item.topic || "Topic not available")}${item.unknown ? ' <span class="tag neutral">Some data unknown</span>' : ""}</p>
+          <p class="match-program"><span>${e(item.topic || "University-wide match")}</span>${item.unknown ? '<span aria-hidden="true">·</span><span class="match-unknown-note">Some source data unknown</span>' : ""}</p>
         </div>
         <div class="match-score" aria-label="Match score ${e(item.score)} out of 100">
           <strong>${e(item.score)}</strong><span>match score</span>
@@ -718,8 +1178,8 @@ function recommendationRow(item, rank) {
       <progress class="score-track" max="100" value="${Math.max(0, Math.min(100, Number(item.score) || 0))}" aria-hidden="true"></progress>
       <ul class="explain-list">${explanations}</ul>
       <div class="match-actions">
-        <button class="text-button" data-action="details" data-school="${e(item.university_id)}">View university ${icon("arrow")}</button>
-        <button class="compare-button" data-action="compare" data-school="${e(item.university_id)}" aria-pressed="${compared}" aria-label="${compared ? "Remove" : "Add"} ${e(item.short_name || item.university_name)} ${compared ? "from" : "to"} comparison"><span class="compare-check">${icon("check")}</span>Compare</button>
+        <button type="button" class="text-button" data-action="details" data-school="${e(item.university_id)}">View university ${icon("arrow")}</button>
+        <button type="button" class="compare-button" data-action="compare" data-school="${e(item.university_id)}" aria-pressed="${compared}" aria-label="${compared ? "Remove" : "Add"} ${e(item.short_name || item.university_name)} ${compared ? "from" : "to"} comparison"><span class="compare-check">${icon("check")}</span>Compare</button>
       </div>
     </div>
   </article>`;
@@ -737,6 +1197,10 @@ function recommendationGroup(group) {
     short_name: group.short_name,
     color: "green",
   };
+  const programCountLabel =
+    group.items.length === 1 && !group.items[0].program_name
+      ? "University match"
+      : `${group.items.length} matching ${group.items.length === 1 ? "program" : "programs"}`;
   return `<section class="match-group">
     <header class="match-group-head">
       <div class="match-group-title-row">
@@ -748,7 +1212,7 @@ function recommendationGroup(group) {
       </div>
       <div class="match-group-meta">
         <strong>${e(best)}<span>/100 best</span></strong>
-        <span class="tag">${group.items.length} program${group.items.length === 1 ? "" : "s"}</span>
+        <span class="match-group-count">${e(programCountLabel)}</span>
       </div>
     </header>
     <div class="match-group-list">${group.items.map((item) => recommendationRow(item, item.rank)).join("")}</div>
@@ -763,11 +1227,18 @@ function recommendationOutput(result, error, loading) {
     return `<div class="error-state"><p>${e(error)}</p><p>Adjust a preference or try again.</p></div>`;
   }
   if (!result) {
-    const picks = ["Computer Science", "Nursing", "Accountancy", "Architecture", "Psychology"];
+    const picks = [
+      "Computer Science",
+      "Nursing",
+      "Accountancy",
+      "Architecture",
+      "Psychology",
+      "Engineering",
+    ];
     return `<div class="empty-state recommend-placeholder">
       <div class="empty-icon">${icon("spark")}</div>
       <h3>See which universities fit you best</h3>
-      <p>Enter a degree, budget, or school type — or try a popular program below.</p>
+      <p>Enter a degree, campus area, budget, or school type — or try a popular program below.</p>
       <div class="match-quick-picks">
         ${picks.map((p) => `<button type="button" class="filter-chip" data-action="quick-match" data-value="${e(p)}">${e(p)}</button>`).join("")}
       </div>
@@ -776,26 +1247,80 @@ function recommendationOutput(result, error, loading) {
   if (!result.items?.length) {
     return emptyState(
       "No matches found",
-      "Try a broader degree keyword or clear one of your filters.",
-      "reset",
-      "Reset filters",
+      "Try a broader degree keyword (e.g. Engineering, Nursing, Computer Science) or adjust one of your filters.",
+      "recommend-reset",
+      "Reset preferences",
       "spark",
     );
   }
   const groups = groupRecommendations(result.items);
+  const topTwoIds = groups.slice(0, 2).map((g) => g.university_id).filter(Boolean);
+  const showingAll = result.items.length >= result.total;
+  const headingText = showingAll
+    ? `${result.items.length} ${result.items.length === 1 ? "match" : "matches"} across ${groups.length} universit${groups.length === 1 ? "y" : "ies"}`
+    : `Showing top ${result.items.length} of ${result.total} matches across ${groups.length} universit${groups.length === 1 ? "y" : "ies"}`;
+  const canShowMore = result.total > result.items.length && result.limit < 60;
+
   return `<div class="recommend-summary">
-      <h3>${result.items.length} matches across ${groups.length} universit${groups.length === 1 ? "y" : "ies"}</h3>
-      <details class="score-info-toggle">
-        <summary>How scores work</summary>
-        <p>${e(result.unknown_policy || "Missing source data scores 0 and is labeled unknown.")}</p>
-      </details>
+      <div>
+        <h3>${e(headingText)}</h3>
+        <details class="score-info-toggle">
+          <summary>How scores work</summary>
+          <p>${e(result.formula || "")} ${e(result.unknown_policy || "Missing source data scores 0 and is labeled unknown.")}</p>
+        </details>
+      </div>
+      ${
+        topTwoIds.length === 2
+          ? `<button type="button" class="button secondary compare-top-btn" data-action="compare-pair" data-pair="${e(topTwoIds.join(","))}">${icon("compare")}Compare top 2</button>`
+          : ""
+      }
     </div>
-    <div class="match-list">${groups.map(recommendationGroup).join("")}</div>`;
+    <div class="match-list">${groups.map(recommendationGroup).join("")}</div>
+    ${
+      canShowMore
+        ? `<div class="recommend-more-wrap"><button type="button" class="button secondary" data-action="recommend-more">Show more matches (${Math.min(60, result.total)} max)</button></div>`
+        : ""
+    }`;
+}
+
+function updateWeightSumLabel() {
+  const el = $("#rec-weight-sum");
+  if (!el) return;
+  let sum = 0;
+  for (const name of ["program", "location", "budget", "sector"]) {
+    const val = Number($("#rec-weight-" + name)?.value || 0);
+    if (Number.isFinite(val) && val > 0) sum += val;
+  }
+  if (sum <= 0) {
+    el.textContent = "Total: 0% — set at least one weight above 0";
+    el.classList.add("is-invalid");
+  } else if (Math.round(sum) === 100) {
+    el.textContent = "Total: 100%";
+    el.classList.remove("is-invalid");
+  } else {
+    el.textContent = `Total: ${Math.round(sum)}% (auto-normalized to 100%)`;
+    el.classList.remove("is-invalid");
+  }
+}
+
+function updateRecommendOutput() {
+  const out = $(".recommend-output");
+  if (!out) {
+    renderRecommend();
+    return;
+  }
+  out.innerHTML = recommendationOutput(
+    state.recommend.result,
+    state.recommend.error,
+    state.recommend.loading,
+  );
+  const submit = $(".recommend-submit");
+  if (submit) submit.disabled = Boolean(state.recommend.loading);
 }
 
 function renderRecommend() {
   const rec = state.recommend;
-  const cities = state.stats?.cities || [];
+  const locations = getMatchLocations();
   const weightInput = (name, label) => `<label class="weight-field"><span>${e(label)}</span><input id="rec-weight-${e(name)}" type="number" min="0" max="100" step="5" value="${Math.round(Number(rec.weights[name] || 0) * 100)}" aria-label="${e(label)} weight in percent"><span class="weight-unit">%</span></label>`;
   $("#results").innerHTML = `<div class="recommend-layout">
     <form class="recommend-form" id="recommend-form" novalidate>
@@ -803,8 +1328,8 @@ function renderRecommend() {
         <h3>Your preferences</h3>
         <p>Fill in at least one field. Leave anything blank if it doesn’t matter.</p>
       </div>
-      <label class="recommend-field"><span>Preferred degree or field</span><input id="rec-program" type="search" maxlength="200" autocomplete="off" placeholder="e.g. Computer Science, Nursing" value="${e(rec.program)}"></label>
-      ${cities.length > 1 ? `<label class="recommend-field"><span>Location</span><select id="rec-city"><option value="">Any location</option>${cities.map((city) => `<option value="${e(city)}" ${city === rec.city ? "selected" : ""}>${e(city)}</option>`).join("")}</select></label>` : `<input id="rec-city" type="hidden" value="">`}
+      <label class="recommend-field"><span>Preferred degree or field</span><input id="rec-program" type="search" maxlength="200" autocomplete="off" placeholder="e.g. Computer Science, Nursing, BS Accountancy, IT" value="${e(rec.program)}"></label>
+      <label class="recommend-field"><span>Campus area</span><select id="rec-city"><option value="">Any Manila campus</option>${locations.map((loc) => `<option value="${e(loc.value)}" ${loc.value === rec.city ? "selected" : ""}>${e(loc.label)}</option>`).join("")}</select></label>
       <label class="recommend-field"><span>University type</span><select id="rec-sector"><option value="">Public or Private</option><option value="Public" ${rec.sector === "Public" ? "selected" : ""}>Public (Free tuition via RA 10931)</option><option value="Private" ${rec.sector === "Private" ? "selected" : ""}>Private</option></select></label>
       <div class="recommend-budget">
         <label class="recommend-field"><span>Budget (PHP)</span><input id="rec-budget" type="number" min="0" max="10000000" step="1000" inputmode="numeric" placeholder="Optional" value="${e(rec.budget)}"></label>
@@ -819,57 +1344,76 @@ function renderRecommend() {
           ${weightInput("budget", "Budget")}
           ${weightInput("sector", "School type")}
         </div>
+        <p class="weight-sum" id="rec-weight-sum">Total: 100%</p>
       </details>
-      <button class="button primary recommend-submit" type="submit" ${rec.loading ? "disabled" : ""}>${icon("spark")}Find my matches</button>
+      <div class="recommend-form-actions">
+        <button class="button primary recommend-submit" type="submit" ${rec.loading ? "disabled" : ""}>${icon("spark")}Find my matches</button>
+        <button class="button secondary recommend-reset-btn" type="button" data-action="recommend-reset">Clear</button>
+      </div>
     </form>
     <div class="recommend-output" aria-live="polite">${recommendationOutput(rec.result, rec.error, rec.loading)}</div>
   </div>`;
+  updateWeightSumLabel();
   $("#results").setAttribute("aria-busy", "false");
 }
 
-async function runRecommendation() {
+async function runRecommendation(resetLimit = true) {
   const rec = state.recommend;
   const read = (id) => ($("#" + id)?.value || "").trim();
-  rec.program = read("rec-program");
-  rec.city = read("rec-city");
-  rec.sector = read("rec-sector");
-  rec.budget = read("rec-budget");
-  rec.budgetBasis = read("rec-basis") || "semester";
-  const weights = {};
-  for (const name of ["program", "location", "budget", "sector"]) {
-    const raw = Number(read("rec-weight-" + name));
-    if (!Number.isFinite(raw) || raw < 0 || raw > 100) {
-      rec.error = "Each criterion weight must be a number from 0 to 100.";
+  if ($("#recommend-form")) {
+    rec.program = read("rec-program");
+    rec.city = read("rec-city");
+    rec.sector = read("rec-sector");
+    rec.budget = read("rec-budget");
+    rec.budgetBasis = read("rec-basis") || "semester";
+    const weights = {};
+    let weightTotal = 0;
+    for (const name of ["program", "location", "budget", "sector"]) {
+      const raw = Number(read("rec-weight-" + name));
+      if (!Number.isFinite(raw) || raw < 0 || raw > 100) {
+        rec.error = "Each criterion weight must be a number from 0 to 100.";
+        rec.result = null;
+        updateRecommendOutput();
+        return;
+      }
+      weights[name] = raw / 100;
+      weightTotal += raw;
+    }
+    if (weightTotal <= 0) {
+      rec.error = "At least one criterion weight must be greater than 0%.";
       rec.result = null;
-      renderRecommend();
+      updateRecommendOutput();
       return;
     }
-    weights[name] = raw / 100;
+    rec.weights = weights;
   }
-  rec.weights = weights;
+  if (resetLimit) rec.limit = 20;
   if (!rec.program && !rec.city && !rec.sector && rec.budget === "") {
     rec.error =
-      "Add at least one preference: a program, location, budget, or university type.";
+      "Add at least one preference: a program, campus area, budget, or university type.";
     rec.result = null;
-    renderRecommend();
+    updateRecommendOutput();
     return;
   }
-  if (rec.budget !== "" && (!Number.isFinite(Number(rec.budget)) || Number(rec.budget) < 0)) {
+  if (
+    rec.budget !== "" &&
+    (!Number.isFinite(Number(rec.budget)) || Number(rec.budget) < 0)
+  ) {
     rec.error = "Budget must be a non-negative number.";
     rec.result = null;
-    renderRecommend();
+    updateRecommendOutput();
     return;
   }
   rec.loading = true;
   rec.error = "";
   rec.result = null;
-  renderRecommend();
+  updateRecommendOutput();
   const params = {
     program: rec.program,
     city: rec.city,
     sector: rec.sector,
-    limit: 20,
-    weights: Object.entries(weights)
+    limit: rec.limit || 20,
+    weights: Object.entries(rec.weights)
       .map(([name, value]) => `${name}:${value}`)
       .join(","),
   };
@@ -883,7 +1427,7 @@ async function runRecommendation() {
     rec.error = error.message;
   } finally {
     rec.loading = false;
-    renderRecommend();
+    updateRecommendOutput();
   }
 }
 
@@ -1214,7 +1758,11 @@ document.addEventListener("click", (event) => {
         else
           item.innerHTML = `${icon("save")}${saved ? "Saved" : "Save school"}`;
       });
-      if (state.view === "saved") render();
+      if (state.view === "saved" || state.view === "calendar") {
+        render();
+      } else {
+        void calendarManager.refreshData();
+      }
       break;
     }
     case "compare": {
@@ -1226,19 +1774,87 @@ document.addEventListener("click", (event) => {
         );
         return;
       } else state.compare.push(id);
+      if (state.compare.length < 3) state.compareOptions.showThird = false;
       persist();
-      render();
-      document.querySelectorAll('#school-dialog [data-action="compare"]').forEach((item) => {
-        if (item.dataset.school !== id) return;
-        const compared = state.compare.includes(id);
-        item.setAttribute("aria-pressed", String(compared));
-        item.textContent = compared ? "In comparison" : "Compare";
-      });
+      if (state.view === "compare") {
+        render();
+      } else {
+        document.querySelectorAll('[data-action="compare"]').forEach((item) => {
+          if (item.dataset.school !== id) return;
+          const compared = state.compare.includes(id);
+          item.setAttribute("aria-pressed", String(compared));
+          if (item.closest("#school-dialog")) {
+            item.textContent = compared ? "In comparison" : "Compare";
+          }
+        });
+      }
       toast(
         index >= 0
           ? "School removed from comparison."
           : "Added to Compare schools in the sidebar.",
       );
+      break;
+    }
+    case "compare-swap": {
+      if (state.compare.length >= 2) {
+        [state.compare[0], state.compare[1]] = [
+          state.compare[1],
+          state.compare[0],
+        ];
+        persist();
+        render();
+      }
+      break;
+    }
+    case "compare-add-third": {
+      state.compareOptions.showThird = true;
+      renderComparison(state.compareItems);
+      $("#compare-slot-2")?.focus();
+      break;
+    }
+    case "compare-clear": {
+      state.compare = [];
+      state.compareItems = [];
+      state.compareOptions = {
+        showThird: false,
+        onlyDifferences: false,
+        programQuery: "",
+      };
+      persist();
+      renderComparison([]);
+      toast("Comparison cleared.");
+      break;
+    }
+    case "compare-pair": {
+      const pairIds = String(button.dataset.pair || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter((sid) => state.schools.some((s) => s.id === sid))
+        .slice(0, 3);
+      if (pairIds.length) {
+        state.compare = pairIds;
+        state.compareOptions.showThird = pairIds.length >= 3;
+        state.compareOptions.onlyDifferences = false;
+        persist();
+        if (state.view !== "compare") {
+          setView("compare");
+        } else {
+          render();
+        }
+      }
+      break;
+    }
+    case "compare-diff-mode": {
+      state.compareOptions.onlyDifferences = button.dataset.value === "diff";
+      document
+        .querySelectorAll('[data-action="compare-diff-mode"]')
+        .forEach((btn) => {
+          const active =
+            (btn.dataset.value === "diff") ===
+            state.compareOptions.onlyDifferences;
+          btn.setAttribute("aria-pressed", String(active));
+        });
+      updateCompareTableOnly();
       break;
     }
     case "tab":
@@ -1281,7 +1897,33 @@ document.addEventListener("click", (event) => {
       const input = $("#rec-program");
       if (input) input.value = val;
       state.recommend.program = val;
-      runRecommendation();
+      runRecommendation(true);
+      break;
+    }
+    case "recommend-reset": {
+      state.recommend = {
+        program: "",
+        city: "",
+        sector: "",
+        budget: "",
+        budgetBasis: "semester",
+        limit: 20,
+        weights: {
+          program: 0.45,
+          location: 0.2,
+          budget: 0.2,
+          sector: 0.15,
+        },
+        result: null,
+        error: "",
+        loading: false,
+      };
+      renderRecommend();
+      break;
+    }
+    case "recommend-more": {
+      state.recommend.limit = Math.min(60, (state.recommend.limit || 20) + 20);
+      runRecommendation(false);
       break;
     }
     case "detail-topic": {
@@ -1299,13 +1941,46 @@ document.addEventListener("click", (event) => {
         render();
       }
       break;
+    default:
+      calendarManager.handleAction(button.dataset.action, button);
+      break;
+  }
+});
+
+document.addEventListener("change", (event) => {
+  const target = event.target;
+  if (calendarManager.handleChange(target)) return;
+  if (
+    target instanceof HTMLSelectElement &&
+    target.dataset.compareSlot !== undefined
+  ) {
+    const slotIdx = Number(target.dataset.compareSlot);
+    const chosenId = target.value.trim();
+    const next = [...state.compare];
+    if (chosenId) {
+      // Remove if already present at another slot
+      const existing = next.indexOf(chosenId);
+      if (existing >= 0 && existing !== slotIdx) {
+        next.splice(existing, 1);
+      }
+      if (slotIdx < next.length) next[slotIdx] = chosenId;
+      else next.push(chosenId);
+    } else if (slotIdx < next.length) {
+      next.splice(slotIdx, 1);
+    }
+    state.compare = [...new Set(next.filter(Boolean))].slice(0, 3);
+    if (state.compare.length < 3 && slotIdx === 2 && !chosenId) {
+      state.compareOptions.showThird = false;
+    }
+    persist();
+    render();
   }
 });
 
 document.addEventListener("submit", (event) => {
   if (event.target.id !== "recommend-form") return;
   event.preventDefault();
-  runRecommendation();
+  runRecommendation(true);
 });
 
 $("#search").addEventListener("input", (event) => {
@@ -1331,6 +2006,16 @@ document.addEventListener("input", (event) => {
     $("#detail-program-results").innerHTML = detailPrograms(
       base.filter((p) => p.name.toLowerCase().includes(query)),
     );
+  }
+  if (event.target.id === "compare-program-search") {
+    state.compareOptions.programQuery = event.target.value;
+    updateCompareTableOnly();
+  }
+  if (
+    typeof event.target.id === "string" &&
+    event.target.id.startsWith("rec-weight-")
+  ) {
+    updateWeightSumLabel();
   }
 });
 document.addEventListener("keydown", (event) => {
@@ -1396,8 +2081,20 @@ async function initialize() {
       .map((s) => `<option value="${e(s.id)}">${e(s.short_name)}</option>`)
       .join("");
     const params = new URLSearchParams(location.search);
-    const requestedView = params.get("view") || location.hash.slice(1);
+    const bodyInitialView = document.body.dataset.initialView || "";
+    const requestedView =
+      params.get("view") || location.hash.slice(1) || bodyInitialView;
     if (viewTitles[requestedView]) state.view = requestedView;
+    const requestedCompareIds = (params.get("ids") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((sid) => ids.has(sid))
+      .slice(0, 3);
+    if (requestedCompareIds.length) {
+      state.compare = [...new Set(requestedCompareIds)];
+      state.compareOptions.showThird = state.compare.length >= 3;
+      persist(false);
+    }
     state.query = (params.get("search") || "").slice(0, 200);
     state.city = (params.get("city") || "").slice(0, 200);
     state.sector = (params.get("sector") || "").slice(0, 200);
@@ -1414,6 +2111,9 @@ async function initialize() {
     $("#sort").value = state.sort;
     controls();
     await render();
+    if (state.view !== "calendar" && state.view !== "saved") {
+      void calendarManager.refreshData();
+    }
 
     if (state.school && state.view !== "programs") {
       await openDetails(
@@ -1462,6 +2162,9 @@ window.addEventListener("unimatch:cloud-hydrate", (event) => {
     }
   }
   render();
+  if (state.view !== "calendar" && state.view !== "saved") {
+    void calendarManager.refreshData();
+  }
 });
 
 window.addEventListener("unimatch:catalog-updated", async (event) => {

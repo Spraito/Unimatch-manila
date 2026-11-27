@@ -24,16 +24,21 @@
       <nav class="account-nav" aria-label="Account navigation">
         <%- include('_theme_toggle') %>
         <a href="/explore">Explore colleges</a>
+        <a href="/calendar">Calendar</a>
         <% if (currentUser) { %>
           <% if (currentUser.role === 'admin') { %>
-            <a href="/admin/accounts">Admin accounts</a>
+            <a href="/admin/dashboard">Admin dashboard</a>
+            <a href="/admin/schedules">Admission schedules</a>
             <a href="/admin">Manage catalog</a>
+            <a href="/admin/accounts">Admin accounts</a>
           <% } %>
           <a href="/profile">My profile</a>
         <% } else { %>
-          <a href="/cloud-profile" data-cloud-signed-in hidden>My cloud profile</a>
-          <a href="/admin/accounts" data-cloud-admin-only hidden>Admin accounts</a>
+          <a href="/cloud-profile" data-cloud-signed-in hidden>My profile</a>
+          <a href="/admin/dashboard" data-cloud-admin-only hidden>Admin dashboard</a>
+          <a href="/admin/schedules" data-cloud-admin-only hidden>Admission schedules</a>
           <a href="/admin" data-cloud-admin-only hidden>Manage catalog</a>
+          <a href="/admin/accounts" data-cloud-admin-only hidden>Admin accounts</a>
           <a href="/login" data-cloud-signed-out>Log in</a>
           <a class="account-nav-cta" href="/register" data-cloud-signed-out>Create account</a>
         <% } %>

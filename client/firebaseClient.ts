@@ -25,7 +25,9 @@ import {
 } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 import { AdminAccountsController } from "./adminAccounts.js";
+import { AdminDashboardController } from "./adminDashboard.js";
 import { AdminCatalogController } from "./adminPanel.js";
+import { AdminSchedulesController } from "./adminSchedules.js";
 import {
   CatalogOpType,
   catalogRecordToExplorerDetail,
@@ -567,6 +569,10 @@ let liveCatalogRecords: CatalogUniversityRecord[] = [];
 
 declare global {
   interface Window {
+    __unimatchAuth?: {
+      getIdToken: () => Promise<string | null>;
+      getUid: () => string | null;
+    };
     __unimatchLiveCatalog?: {
       records: CatalogUniversityRecord[];
       detailsById: Map<string, ReturnType<typeof catalogRecordToExplorerDetail>>;
@@ -577,19 +583,26 @@ declare global {
 
 async function hydratePublishedCatalog(): Promise<void> {
   try {
-    const [firestoreRecords, baselineRecords] = await Promise.all([
-      loadPublishedCatalogUniversities(db, (error, op, path) =>
-        handleFirestoreError(error, op as unknown as OperationType, path),
-      ),
-      fetch("/api/catalog-baseline", { headers: { Accept: "application/json" } })
-        .then(async (resp) => {
-          if (!resp.ok) return [] as CatalogUniversityRecord[];
-          const payload = (await resp.json()) as { items?: CatalogUniversityRecord[] };
-          return Array.isArray(payload.items) ? payload.items : [];
-        })
-        .catch(() => [] as CatalogUniversityRecord[]),
-    ]);
-    const records = mergeLiveAndBaselineCatalog(firestoreRecords, baselineRecords);
+    const serverRecords = await fetch("/api/catalog-baseline", {
+      headers: { Accept: "application/json" },
+    })
+      .then(async (resp) => {
+        if (!resp.ok) return [] as CatalogUniversityRecord[];
+        const payload = (await resp.json()) as { items?: CatalogUniversityRecord[] };
+        return Array.isArray(payload.items) ? payload.items : [];
+      })
+      .catch(() => [] as CatalogUniversityRecord[]);
+
+    let records = serverRecords;
+    if (!records.length) {
+      const firestoreRecords = await loadPublishedCatalogUniversities(
+        db,
+        (error, op, path) =>
+          handleFirestoreError(error, op as unknown as OperationType, path),
+      ).catch(() => [] as CatalogUniversityRecord[]);
+      records = mergeLiveAndBaselineCatalog(firestoreRecords, serverRecords);
+    }
+
     liveCatalogRecords = records;
     const detailsById = new Map(
       records.map((r) => [r.id, catalogRecordToExplorerDetail(r)]),
@@ -845,7 +858,7 @@ async function hydrateCloudProfilePage(user: User): Promise<void> {
     await refreshCloudRecommendations(prefs);
   } catch {
     showAuthFeedback(
-      "Could not load your saved cloud profile. Please check your connection and reload.",
+      "Could not load your saved profile. Please check your connection and reload.",
     );
   } finally {
     if (loadingNotice) loadingNotice.hidden = true;
@@ -926,7 +939,7 @@ function wireCloudProfileForms(): void {
         },
       });
       showAuthFeedback(
-        "Preferences saved to cloud storage. Your matches have been refreshed.",
+        "Preferences saved. Your matches have been refreshed.",
         false,
       );
       await refreshCloudRecommendations(saved);
@@ -975,13 +988,18 @@ function wireGoogleButtons(): void {
 }
 
 function boot(): void {
+  window.__unimatchAuth = {
+    getIdToken: async () => (activeUser ? activeUser.getIdToken() : null),
+    getUid: () => activeUser?.uid || null,
+  };
+
   wireGoogleButtons();
   wireCloudProfileForms();
   wireExploreShortlistSync();
 
-  const isAdminPage = Boolean(document.getElementById("admin-workspace"));
-  const adminController = isAdminPage
-    ? new AdminCatalogController(db, auth, (error, op, path) =>
+  const adminCatalogRoot = document.getElementById("admin-catalog-page");
+  const adminController = adminCatalogRoot
+    ? new AdminCatalogController(db, auth, adminCatalogRoot, (error, op, path) =>
         handleFirestoreError(
           error,
           (op as unknown as OperationType) || OperationType.WRITE,
@@ -995,7 +1013,22 @@ function boot(): void {
     ? new AdminAccountsController(auth, adminAccountsRoot)
     : null;
 
-  if (!isAdminPage && !adminAccountsRoot) {
+  const adminDashboardRoot = document.getElementById("admin-dashboard-page");
+  const adminDashboardController = adminDashboardRoot
+    ? new AdminDashboardController(auth, adminDashboardRoot)
+    : null;
+
+  const adminSchedulesRoot = document.getElementById("admin-schedules-page");
+  const adminSchedulesController = adminSchedulesRoot
+    ? new AdminSchedulesController(auth, adminSchedulesRoot)
+    : null;
+
+  if (
+    !adminCatalogRoot &&
+    !adminAccountsRoot &&
+    !adminDashboardRoot &&
+    !adminSchedulesRoot
+  ) {
     void hydratePublishedCatalog();
   }
 
@@ -1013,6 +1046,12 @@ function boot(): void {
       }
       if (adminAccountsController) {
         await adminAccountsController.onAuthChanged(null);
+      }
+      if (adminDashboardController) {
+        await adminDashboardController.onAuthChanged(null);
+      }
+      if (adminSchedulesController) {
+        await adminSchedulesController.onAuthChanged(null);
       }
       if (isCloudProfilePage) {
         const signedOutSection = document.getElementById("cloud-signed-out");
@@ -1050,6 +1089,14 @@ function boot(): void {
       await adminAccountsController.onAuthChanged(user);
     }
 
+    if (adminDashboardController) {
+      await adminDashboardController.onAuthChanged(user);
+    }
+
+    if (adminSchedulesController) {
+      await adminSchedulesController.onAuthChanged(user);
+    }
+
     if (adminController) {
       await adminController.onAuthChanged(user);
       try {
@@ -1064,7 +1111,11 @@ function boot(): void {
       return;
     }
 
-    if (adminAccountsController) {
+    if (
+      adminAccountsController ||
+      adminDashboardController ||
+      adminSchedulesController
+    ) {
       updateHeaderLinksForCloudUser(
         sanitizeDisplayName(user.displayName || user.email?.split("@")[0] || "Admin"),
       );

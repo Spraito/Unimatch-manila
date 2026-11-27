@@ -1,4 +1,10 @@
 <%- include('_account_header') %>
+<div
+  id="admin-catalog-page"
+  data-session-admin="<%= isSessionAdmin ? 'true' : 'false' %>"
+  data-session-denied="<%= sessionAccessDenied ? 'true' : 'false' %>"
+  data-csrf-token="<%= csrfToken() %>"
+>
   <p class="account-alert" id="admin-feedback" role="alert" hidden></p>
   <% if (typeof sessionAccessDenied !== 'undefined' && sessionAccessDenied) { %>
     <section class="account-card account-card-narrow" id="admin-gate-denied">
@@ -12,46 +18,29 @@
       </p>
     </section>
   <% } else { %>
-  <p class="account-help" id="admin-loading">Checking catalog manager permissions…</p>
+  <p class="account-help" id="admin-loading" <%= isSessionAdmin ? 'hidden' : '' %>>
+    Checking catalog manager permissions…
+  </p>
 
   <section class="account-card account-card-narrow" id="admin-gate-signed-out" hidden>
     <span class="account-eyebrow">CATALOG ADMINISTRATION</span>
     <h1>Admin sign-in required</h1>
-    <% if (typeof isSessionAdmin !== 'undefined' && isSessionAdmin) { %>
-      <p class="account-lead">
-        You are signed in as local administrator <strong><%= sessionAdmin ? sessionAdmin.email : '' %></strong>. Manage administrator accounts below, or sign in with Google to sync cloud catalog entries.
-      </p>
-      <div class="account-form">
-        <a class="button primary google-signin-button" href="/admin/accounts">
-          Open Admin Account Management
-        </a>
-        <button
-          class="button secondary google-signin-button"
-          type="button"
-          data-firebase-google-signin
-          data-next="/admin"
-        >
-          Continue with Google (cloud catalog)
-        </button>
-      </div>
-    <% } else { %>
-      <p class="account-lead">
-        Sign in with your authorized Google account to manage Metro Manila universities, or log in with an administrator account to manage admin access.
-      </p>
-      <div class="account-form">
-        <button
-          class="button primary google-signin-button"
-          type="button"
-          data-firebase-google-signin
-          data-next="/admin"
-        >
-          Continue with Google
-        </button>
-        <a class="button secondary google-signin-button" href="/login?next=%2Fadmin%2Faccounts">
-          Log in with admin username or email
-        </a>
-      </div>
-    <% } %>
+    <p class="account-lead">
+      Log in with a local administrator account or sign in with your authorized Google Admin account to manage Metro Manila universities and admissions records.
+    </p>
+    <div class="account-form">
+      <a class="button primary google-signin-button" href="/login?next=%2Fadmin">
+        Log in with admin username or email
+      </a>
+      <button
+        class="button secondary google-signin-button"
+        type="button"
+        data-firebase-google-signin
+        data-next="/admin"
+      >
+        Continue with Google Admin
+      </button>
+    </div>
     <p class="account-switch">
       Looking for colleges as a student? <a href="/explore">Return to explorer</a>.
     </p>
@@ -68,7 +57,7 @@
     </p>
   </section>
 
-  <div id="admin-workspace" hidden>
+  <div id="admin-workspace" <%= isSessionAdmin ? '' : 'hidden' %>>
     <section class="account-intro">
       <div>
         <span class="account-eyebrow">CATALOG MANAGEMENT</span>
@@ -78,9 +67,17 @@
         </p>
       </div>
       <div class="admin-header-meta">
-        <span class="account-pill" id="admin-account-email">Admin</span>
+        <span class="account-pill" id="admin-account-email"><%= sessionAdmin ? sessionAdmin.email : 'Admin' %></span>
+        <a class="button secondary" href="/admin/dashboard">Admin dashboard</a>
+        <a class="button secondary" href="/admin/schedules">Admission schedules</a>
         <a class="button secondary" href="/admin/accounts">Admin accounts</a>
         <a class="button secondary" href="/explore">View public explorer</a>
+        <% if (isSessionAdmin) { %>
+          <form method="post" action="/logout" class="account-logout">
+            <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+            <button class="button secondary" type="submit">Log out</button>
+          </form>
+        <% } %>
       </div>
     </section>
 
@@ -435,4 +432,5 @@
     </section>
   </div>
   <% } %>
+</div>
 <%- include('_account_footer') %>

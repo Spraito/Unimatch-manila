@@ -1,0 +1,236 @@
+<%- include('_account_header') %>
+<div
+  id="admin-dashboard-page"
+  data-session-admin="<%= isSessionAdmin ? 'true' : 'false' %>"
+  data-session-denied="<%= sessionAccessDenied ? 'true' : 'false' %>"
+  data-csrf-token="<%= csrfToken() %>"
+>
+  <p class="account-alert" id="admin-dash-feedback" role="alert" hidden></p>
+
+  <% if (sessionAccessDenied) { %>
+    <section class="account-card account-card-narrow" id="admin-dash-denied">
+      <span class="account-eyebrow">ACCESS RESTRICTED</span>
+      <h1>Administrator access required</h1>
+      <p class="account-lead">
+        Your signed-in student account does not have permission to view the administrator dashboard.
+      </p>
+      <p class="account-switch">
+        <a href="/profile">Return to your profile</a> · <a href="/explore">Explore colleges</a>
+      </p>
+    </section>
+  <% } else { %>
+    <p class="account-help" id="admin-dash-loading" <%= isSessionAdmin ? 'hidden' : '' %>>
+      Verifying administrator permissions…
+    </p>
+
+    <section class="account-card account-card-narrow" id="admin-dash-signed-out" hidden>
+      <span class="account-eyebrow">ADMINISTRATION</span>
+      <h1>Administrator sign-in required</h1>
+      <p class="account-lead">
+        Sign in with a local administrator account or authorized Google Admin account to open the dashboard.
+      </p>
+      <div class="account-form">
+        <a class="button primary google-signin-button" href="/login?next=%2Fadmin%2Fdashboard">
+          Log in with admin username or email
+        </a>
+        <button
+          class="button secondary google-signin-button"
+          type="button"
+          data-firebase-google-signin
+          data-next="/admin/dashboard"
+        >
+          Continue with Google Admin
+        </button>
+      </div>
+      <p class="account-switch">
+        Looking for colleges as a student? <a href="/explore">Return to explorer</a>.
+      </p>
+    </section>
+
+    <section class="account-card account-card-narrow" id="admin-dash-denied" hidden>
+      <span class="account-eyebrow">ACCESS RESTRICTED</span>
+      <h1>Administrator access required</h1>
+      <p class="account-lead">
+        Your signed-in account does not have permission to view the administrator dashboard.
+      </p>
+      <p class="account-switch">
+        <a href="/cloud-profile">Go to your student profile</a> · <a href="/explore">Explore colleges</a>
+      </p>
+    </section>
+
+    <div id="admin-dash-workspace" <%= isSessionAdmin ? '' : 'hidden' %>>
+      <section class="account-intro">
+        <div>
+          <span class="account-eyebrow">ADMINISTRATION / OVERVIEW</span>
+          <h1>Admin Dashboard</h1>
+          <p class="account-lead">
+            Monitor Metro Manila catalog completeness, review verification queues, inspect recent admin activity, and manage team access.
+          </p>
+          <p class="admin-dash-actor-line" id="admin-dash-actor">
+            <%= sessionAdmin ? (sessionAdmin.email + ' · Local admin session') : 'Verifying administrator session…' %>
+          </p>
+        </div>
+        <div class="admin-header-meta">
+          <a class="button primary" href="/admin">Manage catalog</a>
+          <a class="button secondary" href="/admin/schedules">Admission schedules</a>
+          <a class="button secondary" href="/admin/accounts">Admin accounts</a>
+          <a class="button secondary" href="/explore">Public explorer</a>
+          <% if (isSessionAdmin) { %>
+            <form method="post" action="/logout" class="account-logout">
+              <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
+              <button class="button secondary" type="submit">Log out</button>
+            </form>
+          <% } %>
+        </div>
+      </section>
+
+      <!-- KPI summary strip -->
+      <section class="admin-dash-kpis" aria-label="Platform metrics">
+        <div class="admin-dash-kpi">
+          <span class="admin-summary-label">Published universities</span>
+          <strong class="admin-summary-value admin-tabular" id="dash-kpi-universities">—</strong>
+          <span class="admin-dash-kpi-sub" id="dash-kpi-universities-sub">Loading…</span>
+        </div>
+        <div class="admin-dash-kpi">
+          <span class="admin-summary-label">Degree programs</span>
+          <strong class="admin-summary-value admin-tabular" id="dash-kpi-programs">—</strong>
+          <span class="admin-dash-kpi-sub" id="dash-kpi-programs-sub">Indexed across directory</span>
+        </div>
+        <div class="admin-dash-kpi">
+          <span class="admin-summary-label">Needs review</span>
+          <strong class="admin-summary-value admin-tabular" id="dash-kpi-review">—</strong>
+          <span class="admin-dash-kpi-sub" id="dash-kpi-review-sub">Partial or pending verification</span>
+        </div>
+        <div class="admin-dash-kpi">
+          <span class="admin-summary-label">Administrators</span>
+          <strong class="admin-summary-value admin-tabular" id="dash-kpi-admins">—</strong>
+          <span class="admin-dash-kpi-sub" id="dash-kpi-admins-sub">Local and Google admins</span>
+        </div>
+        <div class="admin-dash-kpi">
+          <span class="admin-summary-label">Student accounts</span>
+          <strong class="admin-summary-value admin-tabular" id="dash-kpi-students">—</strong>
+          <span class="admin-dash-kpi-sub" id="dash-kpi-students-sub">Aggregate count only</span>
+        </div>
+      </section>
+
+      <!-- Main 2-column operational grid -->
+      <div class="admin-dash-grid">
+        <section class="account-card admin-dash-main-panel">
+          <div class="admin-toolbar">
+            <div>
+              <span class="account-eyebrow">DIRECTORY HEALTH</span>
+              <h2>University catalog coverage</h2>
+              <p class="account-help" id="dash-catalog-subtitle">Loading university records…</p>
+            </div>
+            <div class="admin-toolbar-actions">
+              <button type="button" class="button secondary admin-btn-sm" id="dash-refresh-btn">
+                Refresh
+              </button>
+              <a class="button primary admin-btn-sm" href="/admin?tab=editor">Add university</a>
+            </div>
+          </div>
+
+          <div class="admin-dash-filters">
+            <div class="admin-dash-filter-tabs" role="tablist" aria-label="Filter universities by verification status">
+              <button type="button" class="admin-dash-filter-btn active" role="tab" aria-selected="true" data-dash-status="all">All</button>
+              <button type="button" class="admin-dash-filter-btn" role="tab" aria-selected="false" data-dash-status="verified">Verified</button>
+              <button type="button" class="admin-dash-filter-btn" role="tab" aria-selected="false" data-dash-status="partial">Partial</button>
+              <button type="button" class="admin-dash-filter-btn" role="tab" aria-selected="false" data-dash-status="pending">Pending</button>
+            </div>
+            <div class="admin-dash-search">
+              <label for="dash-university-search" class="sr-only">Filter universities</label>
+              <input
+                id="dash-university-search"
+                type="search"
+                maxlength="120"
+                placeholder="Search university or city…"
+              />
+            </div>
+          </div>
+
+          <div id="dash-university-table">
+            <p class="account-help">Loading directory coverage…</p>
+          </div>
+        </section>
+
+        <div class="admin-dash-rail">
+          <section class="account-card">
+            <span class="account-eyebrow">DATA COMPLETENESS</span>
+            <h2>Catalog readiness</h2>
+            <div class="admin-dash-meters" id="dash-coverage-meters">
+              <p class="account-help">Calculating coverage…</p>
+            </div>
+          </section>
+
+          <section class="account-card">
+            <span class="account-eyebrow">ACCOUNTS &amp; SECURITY</span>
+            <h2>Access summary</h2>
+            <dl class="admin-dash-dl" id="dash-security-summary">
+              <div class="admin-dash-dl-row">
+                <dt>Local admin accounts</dt>
+                <dd class="admin-tabular" id="dash-sec-local-admins">—</dd>
+              </div>
+              <div class="admin-dash-dl-row">
+                <dt>Google admin accounts</dt>
+                <dd class="admin-tabular" id="dash-sec-google-admins">—</dd>
+              </div>
+              <div class="admin-dash-dl-row">
+                <dt>Local / Google students</dt>
+                <dd class="admin-tabular" id="dash-sec-students">—</dd>
+              </div>
+              <div class="admin-dash-dl-row">
+                <dt>Accounts with 2FA enabled</dt>
+                <dd class="admin-tabular" id="dash-sec-2fa">—</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="account-card">
+            <span class="account-eyebrow">QUICK ACTIONS</span>
+            <h2>Admin shortcuts</h2>
+            <div class="admin-dash-shortcuts">
+              <a class="admin-dash-shortcut" href="/admin">
+                <strong>Open Catalog Manager</strong>
+                <span>Edit programs, tuition fees, deadlines, and links</span>
+              </a>
+              <a class="admin-dash-shortcut" href="/admin/schedules">
+                <strong>Manage Admission Schedules</strong>
+                <span>Add or verify exam dates, deadlines, and official URLs</span>
+              </a>
+              <a class="admin-dash-shortcut" href="/admin?tab=collector">
+                <strong>Run Polite Web Collector</strong>
+                <span>Fetch updates from approved .edu.ph portals</span>
+              </a>
+              <a class="admin-dash-shortcut" href="/admin?tab=import">
+                <strong>Import JSON Snapshot</strong>
+                <span>Structure offline exports with Algorithm 1</span>
+              </a>
+              <a class="admin-dash-shortcut" href="/admin/accounts">
+                <strong>Manage Admin Accounts</strong>
+                <span>Add co-administrators or revoke access</span>
+              </a>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Recent Audit & Collection Activity -->
+      <section class="account-card admin-dash-activity">
+        <div class="admin-toolbar">
+          <div>
+            <span class="account-eyebrow">AUDIT LOG</span>
+            <h2>Recent catalog edits &amp; collection runs</h2>
+            <p class="account-help">
+              Every catalog edit, baseline sync, polite collection, JSON import, and removal is attributed to the responsible administrator.
+            </p>
+          </div>
+          <a class="button secondary admin-btn-sm" href="/admin?tab=import">Full history</a>
+        </div>
+        <div id="dash-recent-activity">
+          <p class="account-help">Loading recent activity…</p>
+        </div>
+      </section>
+    </div>
+  <% } %>
+</div>
+<%- include('_account_footer') %>

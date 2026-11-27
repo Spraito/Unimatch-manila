@@ -11,5 +11,11 @@ test-results/
 secrets/
 data/accounts.json
 data/accounts.json.tmp
+data/catalog_store.json
+data/catalog_store.json.*.tmp
+data/admission_schedules.json
+data/admission_schedules.json.*.tmp
+data/student_tracking.json
+data/student_tracking.json.*.tmp
 .neon
 node_modules/

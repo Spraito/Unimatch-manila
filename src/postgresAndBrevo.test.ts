@@ -197,9 +197,9 @@ test("PostgreSQL schema defines auto-created users and user_preferences tables w
   }
 });
 
-test("Brevo REST mailer sends HTTPS POST with api-key header strictly from unimatchph@gmail.com and escapes HTML", async () => {
+test("Brevo REST mailer sends HTTPS POST with api-key header strictly from spraitospraito@gmail.com and escapes HTML", async () => {
   assert.equal(getSenderEmail(), STRICT_SENDER_EMAIL);
-  assert.equal(STRICT_SENDER_EMAIL, "unimatchph@gmail.com");
+  assert.equal(STRICT_SENDER_EMAIL, "spraitospraito@gmail.com");
   assert.equal(STRICT_SENDER_NAME, "UniMatch PH");
 
   let capturedUrl = "";
@@ -241,7 +241,7 @@ test("Brevo REST mailer sends HTTPS POST with api-key header strictly from unima
   assert.equal(capturedHeaders["Content-Type"], "application/json");
   assert.deepEqual(capturedBody.sender, {
     name: "UniMatch PH",
-    email: "unimatchph@gmail.com",
+    email: "spraitospraito@gmail.com",
   });
   assert.deepEqual(capturedBody.to, [
     {
@@ -253,7 +253,7 @@ test("Brevo REST mailer sends HTTPS POST with api-key header strictly from unima
   assert.ok(String(capturedBody.htmlContent).includes("&lt;script&gt;"));
 });
 
-test("Brevo Google Sign-In reminder email sends strictly from unimatchph@gmail.com with Google guidance", async () => {
+test("Brevo Google Sign-In reminder email sends strictly from spraitospraito@gmail.com with Google guidance", async () => {
   let capturedBody: Record<string, unknown> = {};
   const mockFetch = (async (_input: string | URL | Request, init?: RequestInit) => {
     capturedBody = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>;
@@ -279,7 +279,7 @@ test("Brevo Google Sign-In reminder email sends strictly from unimatchph@gmail.c
   assert.equal(result.status, 201);
   assert.deepEqual(capturedBody.sender, {
     name: "UniMatch PH",
-    email: "unimatchph@gmail.com",
+    email: "spraitospraito@gmail.com",
   });
   assert.match(String(capturedBody.subject), /Google/i);
   assert.match(String(capturedBody.htmlContent), /Continue with Google/i);

@@ -4,7 +4,7 @@
  * Ranks candidates via our hand-written stable merge sort (mergeSort.ts).
  */
 import { cleanText, normalizeKey } from "./extraction.js";
-import { mergeSortByScore } from "./mergeSort.js";
+import { mergeSort, mergeSortByScore } from "./mergeSort.js";
 
 export const CRITERIA = ["program", "location", "budget", "sector"] as const;
 export type Criterion = (typeof CRITERIA)[number];
@@ -28,32 +28,183 @@ export const BUDGET_BASES = ["semester", "trimester", "year", "unit"] as const;
 export const FORMULA =
   "score = 100 × Σ(weight[c] × points[c]) / Σ(weight[c]) over the criteria the student supplied. Missing data scores 0 and is labelled unknown.";
 
+/**
+ * Only grammatical filler words — discipline words like "science" and "arts"
+ * are intentionally NOT stripped because degree prefixes ("Bachelor of Science in")
+ * are removed separately before tokenization.
+ */
 const STOP_WORDS = new Set([
   "a",
   "an",
   "and",
-  "arts",
   "bachelor",
   "bs",
   "ba",
+  "ab",
   "degree",
   "for",
   "in",
   "major",
   "of",
   "program",
-  "science",
   "the",
+  "with",
 ]);
+
+/**
+ * Common Philippine undergraduate degree abbreviations & aliases mapped to
+ * canonical discipline names so student queries match official catalog titles.
+ */
+const PROGRAM_ALIASES: Record<string, string> = {
+  cs: "computer science",
+  compsci: "computer science",
+  "comp sci": "computer science",
+  bscs: "computer science",
+  it: "information technology",
+  bsit: "information technology",
+  is: "information systems",
+  bsis: "information systems",
+  ce: "civil engineering",
+  bsce: "civil engineering",
+  cpe: "computer engineering",
+  bscpe: "computer engineering",
+  ee: "electrical engineering",
+  bsee: "electrical engineering",
+  ece: "electronics engineering",
+  bsece: "electronics engineering",
+  me: "mechanical engineering",
+  bsme: "mechanical engineering",
+  ie: "industrial engineering",
+  bsie: "industrial engineering",
+  che: "chemical engineering",
+  bsche: "chemical engineering",
+  bsa: "accountancy",
+  accounting: "accountancy",
+  bsn: "nursing",
+  medtech: "medical technology",
+  "med tech": "medical technology",
+  bsmt: "medical technology",
+  psych: "psychology",
+  archi: "architecture",
+  bsarch: "architecture",
+  pharma: "pharmacy",
+  dentistry: "dental medicine",
+  dmd: "dental medicine",
+  polsci: "political science",
+  "pol sci": "political science",
+  bio: "biology",
+  chem: "chemistry",
+  econ: "economics",
+  educ: "education",
+  beed: "elementary education",
+  bsed: "secondary education",
+  hrm: "hospitality management",
+  hm: "hospitality management",
+  bshm: "hospitality management",
+  tm: "tourism management",
+  bstm: "tourism management",
+  bsba: "business administration",
+  crim: "criminology",
+  comm: "communication",
+  masscomm: "communication",
+  "mass comm": "communication",
+  pt: "physical therapy",
+  ot: "occupational therapy",
+  slp: "speech language pathology",
+  "fine arts": "fine arts",
+  mma: "multimedia arts",
+};
+
+const DEGREE_PREFIX_PATTERNS: RegExp[] = [
+  /^bachelor\s+of\s+science\s+in\s+/,
+  /^bachelor\s+of\s+arts\s+in\s+/,
+  /^bachelor\s+of\s+fine\s+arts\s+in\s+/,
+  /^bachelor\s+of\s+music\s+in\s+/,
+  /^bachelor\s+of\s+laws\s+in\s+/,
+  /^bachelor\s+of\s+[a-z]+\s+in\s+/,
+  /^bachelor\s+of\s+/,
+  /^doctor\s+of\s+/,
+  /^bs\s+in\s+/,
+  /^ba\s+in\s+/,
+  /^ab\s+in\s+/,
+  /^bfa\s+in\s+/,
+  /^bs\s+/,
+  /^ba\s+/,
+  /^ab\s+/,
+  /^bfa\s+/,
+];
+
+const TERMS_PER_YEAR: Record<string, number> = {
+  year: 1,
+  semester: 2,
+  trimester: 3,
+  quarter: 4,
+};
 
 function textOf(value: unknown): string {
   return typeof value === "string" ? cleanText(value) : "";
+}
+
+function stripDegreePrefix(normalized: string): string {
+  let current = normalized.trim();
+  for (const pattern of DEGREE_PREFIX_PATTERNS) {
+    if (pattern.test(current)) {
+      const stripped = current.replace(pattern, "").trim();
+      if (stripped.length > 0) {
+        current = stripped;
+        break;
+      }
+    }
+  }
+  return current;
+}
+
+function expandProgramPreference(preference: string): string {
+  const key = normalizeKey(preference);
+  if (PROGRAM_ALIASES[key]) {
+    return PROGRAM_ALIASES[key];
+  }
+  const stripped = stripDegreePrefix(key);
+  if (PROGRAM_ALIASES[stripped]) {
+    return PROGRAM_ALIASES[stripped];
+  }
+  return stripped || key;
 }
 
 function tokensOf(value: string): Set<string> {
   const words = normalizeKey(value).split(/\s+/).filter(Boolean);
   const meaningful = new Set(words.filter((w) => !STOP_WORDS.has(w)));
   return meaningful.size > 0 ? meaningful : new Set(words);
+}
+
+function stemMatches(wantedWord: string, availableWord: string): boolean {
+  if (wantedWord === availableWord) return true;
+  if (wantedWord.length < 4 || availableWord.length < 4) return false;
+  // Simple plural/inflection tolerance without false positives on short words
+  if (
+    wantedWord + "s" === availableWord ||
+    availableWord + "s" === wantedWord ||
+    wantedWord + "es" === availableWord ||
+    availableWord + "es" === wantedWord
+  ) {
+    return true;
+  }
+  const minLen = Math.min(wantedWord.length, availableWord.length);
+  if (minLen >= 5) {
+    const prefixLen = Math.min(minLen, 6);
+    if (
+      wantedWord.startsWith(availableWord.slice(0, prefixLen)) &&
+      availableWord.startsWith(wantedWord.slice(0, prefixLen))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasWholePhrase(haystack: string, needle: string): boolean {
+  if (!haystack || !needle) return false;
+  return ` ${haystack} `.includes(` ${needle} `);
 }
 
 function roundTo(value: number, decimals: number): number {
@@ -184,9 +335,17 @@ interface CriterionResult {
   reason: string;
 }
 
+const GENERIC_DISCIPLINE_SUFFIXES = new Set([
+  "science",
+  "sciences",
+  "arts",
+  "studies",
+]);
+
 function programMatch(
   preference: string,
   programName: unknown,
+  topic?: unknown,
 ): CriterionResult {
   const name = textOf(programName);
   if (!name) {
@@ -198,36 +357,108 @@ function programMatch(
   }
   const prefKey = normalizeKey(preference);
   const nameKey = normalizeKey(name);
-  if (prefKey === nameKey) {
+  const prefCore = expandProgramPreference(preference);
+  const nameCore = stripDegreePrefix(nameKey);
+
+  // 1. Exact program title or exact core discipline match (e.g. "Nursing" == "BS in Nursing")
+  if (prefKey === nameKey || (prefCore && prefCore === nameCore)) {
     return {
       points: 1,
       unknown: false,
       reason: `Exact program match: ${name}.`,
     };
   }
-  const wanted = tokensOf(preference);
-  const available = tokensOf(name);
-  const matched = Array.from(wanted).filter((w) => available.has(w));
-  if (wanted.size > 0 && matched.length === wanted.size) {
+
+  // 2. Exact core discipline as a contiguous phrase inside a major/track/double degree
+  if (prefCore && prefCore.length >= 3 && hasWholePhrase(nameCore, prefCore)) {
+    const isSpecialization =
+      nameCore.startsWith(prefCore + " major") ||
+      nameCore.startsWith(prefCore + " specialization") ||
+      nameCore.startsWith(prefCore + " with") ||
+      nameCore.startsWith(prefCore + " track") ||
+      nameCore.startsWith(prefCore + " minor");
+    const points = isSpecialization ? 0.94 : 0.9;
     return {
-      points: 0.9,
+      points,
+      unknown: false,
+      reason: `Strong program match in '${name}'.`,
+    };
+  }
+
+  // 3. Token & stem matching against the core program name (degree prefix already stripped)
+  const wanted = tokensOf(prefCore || preference);
+  const availableArr = Array.from(tokensOf(nameCore || name));
+  const exactMatched: string[] = [];
+  const fuzzyMatched: string[] = [];
+
+  for (const w of wanted) {
+    if (availableArr.includes(w)) {
+      exactMatched.push(w);
+    } else if (availableArr.some((a) => stemMatches(w, a))) {
+      fuzzyMatched.push(w);
+    }
+  }
+
+  const totalMatched = exactMatched.length + fuzzyMatched.length;
+  if (wanted.size > 0 && exactMatched.length === wanted.size) {
+    return {
+      points: 0.88,
       unknown: false,
       reason: `All preferred keywords appear in '${name}'.`,
     };
   }
-  if (matched.length > 0) {
-    const ratio = matched.length / wanted.size;
-    const points = roundTo(Math.min(0.85, 0.85 * ratio), 3);
+  if (wanted.size > 0 && totalMatched === wanted.size) {
     return {
-      points,
+      points: 0.82,
       unknown: false,
-      reason: `Partial program match in '${name}' (${matched.sort().join(", ")} of ${Array.from(wanted).sort().join(", ")}).`,
+      reason: `Closely related program match in '${name}'.`,
     };
   }
+  if (totalMatched > 0) {
+    const matchedLabels = [...exactMatched, ...fuzzyMatched];
+    // For multi-word queries (e.g. "Computer Science"), matching ONLY a generic
+    // suffix like "science" or "arts" in an unrelated degree (e.g. "Political Science")
+    // is not a genuine match.
+    const hasNonGenericMatch =
+      wanted.size === 1 ||
+      matchedLabels.some((word) => !GENERIC_DISCIPLINE_SUFFIXES.has(word));
+    if (hasNonGenericMatch) {
+      const weightedMatch = exactMatched.length + fuzzyMatched.length * 0.85;
+      const ratio = weightedMatch / wanted.size;
+      const points = roundTo(Math.min(0.75, 0.75 * ratio), 3);
+      return {
+        points,
+        unknown: false,
+        reason: `Partial program match in '${name}' (${matchedLabels.sort().join(", ")} of ${Array.from(wanted).sort().join(", ")}).`,
+      };
+    }
+  }
+
+  // 4. Fallback: check broad topic field (e.g., "Computing", "Business", "Health")
+  const topicText = textOf(topic);
+  if (topicText && wanted.size > 0) {
+    const topicTokens = Array.from(tokensOf(topicText));
+    const topicHit = Array.from(wanted).filter((w) =>
+      topicTokens.some((t) => stemMatches(w, t)),
+    );
+    const meaningfulTopicHit =
+      topicHit.length === wanted.size ||
+      (wanted.size === 1 && topicHit.length > 0);
+    if (meaningfulTopicHit) {
+      const ratio = topicHit.length / wanted.size;
+      const points = roundTo(Math.min(0.55, 0.55 * ratio), 3);
+      return {
+        points,
+        unknown: false,
+        reason: `Matches the '${topicText}' field (${name}).`,
+      };
+    }
+  }
+
   return {
     points: 0,
     unknown: false,
-    reason: `The program name '${name}' does not contain the preferred keywords.`,
+    reason: `The program name '${name}' does not match the preferred field.`,
   };
 }
 
@@ -262,18 +493,23 @@ function locationMatch(
   const prefKey = normalizeKey(preference);
   const cityKey = normalizeKey(cityText);
   const campusKey = normalizeKey(campusFocus);
-  if (prefKey && prefKey === cityKey) {
+  const campusSegments = campusFocus
+    .split(",")
+    .map((segment) => normalizeKey(segment))
+    .filter(Boolean);
+
+  if (prefKey && (prefKey === cityKey || campusSegments.includes(prefKey))) {
     return {
       points: 1,
       unknown: false,
-      reason: `Campus city matches ${cityText}.`,
+      reason: `Campus location matches ${preference} (${campusText || cityText}).`,
     };
   }
   if (prefKey && (cityKey.includes(prefKey) || campusKey.includes(prefKey))) {
     return {
       points: 0.85,
       unknown: false,
-      reason: `Preferred location appears in '${available}'.`,
+      reason: `Preferred location appears in '${campusText || available}'.`,
     };
   }
   const wanted = tokensOf(preference);
@@ -283,18 +519,28 @@ function locationMatch(
     return {
       points: 0.5,
       unknown: false,
-      reason: `Partial location match in '${available}'.`,
+      reason: `Partial location match in '${campusText || available}'.`,
     };
   }
   return {
     points: 0,
     unknown: false,
-    reason: `'${available}' is outside the preferred location.`,
+    reason: `'${campusText || available}' is outside the preferred location.`,
   };
 }
 
 function formatPhp(n: number): string {
   return Math.round(n).toLocaleString("en-US");
+}
+
+function formatFeeRange(min: number, max: number, basis: string): string {
+  if (min === 0 && max === 0) {
+    return "Free tuition (RA 10931)";
+  }
+  if (min === max) {
+    return `PHP ${formatPhp(min)} per ${basis}`;
+  }
+  return `PHP ${formatPhp(min)}–${formatPhp(max)} per ${basis}`;
 }
 
 function budgetMatch(
@@ -306,7 +552,25 @@ function budgetMatch(
     basis?: string;
   }>,
 ): CriterionResult {
-  const comparable: Array<{ min: number; max: number }> = [];
+  // 1. Free tuition (PHP 0, e.g., RA 10931) is PHP 0 regardless of billing basis.
+  const hasFreeTuition = fees.some(
+    (fee) =>
+      fee &&
+      typeof fee.amount_min === "number" &&
+      typeof fee.amount_max === "number" &&
+      fee.amount_min === 0 &&
+      fee.amount_max === 0,
+  );
+  if (hasFreeTuition) {
+    return {
+      points: 1,
+      unknown: false,
+      reason: "Free tuition (RA 10931) is within your budget.",
+    };
+  }
+
+  // 2. Exact billing basis comparison
+  const exactComparable: Array<{ min: number; max: number }> = [];
   for (const fee of fees) {
     if (!fee || fee.basis !== basis) continue;
     const low = fee.amount_min;
@@ -314,36 +578,96 @@ function budgetMatch(
     if (typeof low !== "number" || typeof high !== "number") continue;
     if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high < low)
       continue;
-    comparable.push({ min: low, max: high });
+    exactComparable.push({ min: low, max: high });
   }
-  if (comparable.length === 0) {
+  if (exactComparable.length > 0) {
+    exactComparable.sort((a, b) => a.min - b.min || a.max - b.max);
+    const cheapest = exactComparable[0];
+    const amount = formatFeeRange(cheapest.min, cheapest.max, basis);
+    if (cheapest.max <= budget) {
+      return {
+        points: 1,
+        unknown: false,
+        reason: `Published tuition (${amount}) is within the budget.`,
+      };
+    }
+    if (cheapest.min <= budget) {
+      return {
+        points: 0.5,
+        unknown: false,
+        reason: `Published tuition (${amount}) straddles the budget.`,
+      };
+    }
     return {
       points: 0,
-      unknown: true,
-      reason: `No published tuition amount with a '${basis}' basis is available; budget fit cannot be confirmed.`,
-    };
-  }
-  comparable.sort((a, b) => a.min - b.min || a.max - b.max);
-  const cheapest = comparable[0];
-  const amount = `PHP ${formatPhp(cheapest.min)}–${formatPhp(cheapest.max)} per ${basis}`;
-  if (cheapest.max <= budget) {
-    return {
-      points: 1,
       unknown: false,
-      reason: `Published tuition (${amount}) is within the budget.`,
+      reason: `Published tuition (${amount}) exceeds the budget.`,
     };
   }
-  if (cheapest.min <= budget) {
-    return {
-      points: 0.5,
-      unknown: false,
-      reason: `Published tuition (${amount}) straddles the budget.`,
-    };
+
+  // 3. Transparent calendar-term conversion (semester <-> trimester <-> quarter <-> year)
+  const targetTermsPerYear = TERMS_PER_YEAR[basis];
+  if (targetTermsPerYear) {
+    const converted: Array<{
+      min: number;
+      max: number;
+      sourceBasis: string;
+      origMin: number;
+      origMax: number;
+    }> = [];
+    for (const fee of fees) {
+      if (!fee || !fee.basis) continue;
+      const sourceTermsPerYear = TERMS_PER_YEAR[fee.basis];
+      if (!sourceTermsPerYear) continue;
+      const low = fee.amount_min;
+      const high = fee.amount_max;
+      if (typeof low !== "number" || typeof high !== "number") continue;
+      if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high < low)
+        continue;
+      const factor = sourceTermsPerYear / targetTermsPerYear;
+      converted.push({
+        min: Math.round(low * factor),
+        max: Math.round(high * factor),
+        sourceBasis: fee.basis,
+        origMin: low,
+        origMax: high,
+      });
+    }
+    if (converted.length > 0) {
+      converted.sort((a, b) => a.min - b.min || a.max - b.max);
+      const cheapest = converted[0];
+      const est = formatFeeRange(cheapest.min, cheapest.max, basis);
+      const orig = formatFeeRange(
+        cheapest.origMin,
+        cheapest.origMax,
+        cheapest.sourceBasis,
+      );
+      if (cheapest.max <= budget) {
+        return {
+          points: 1,
+          unknown: false,
+          reason: `Estimated ${est} (from ${orig}) is within the budget.`,
+        };
+      }
+      if (cheapest.min <= budget) {
+        return {
+          points: 0.5,
+          unknown: false,
+          reason: `Estimated ${est} (from ${orig}) straddles the budget.`,
+        };
+      }
+      return {
+        points: 0,
+        unknown: false,
+        reason: `Estimated ${est} (from ${orig}) exceeds the budget.`,
+      };
+    }
   }
+
   return {
     points: 0,
-    unknown: false,
-    reason: `Published tuition (${amount}) exceeds the budget.`,
+    unknown: true,
+    reason: `No published tuition amount with a '${basis}' basis is available; budget fit cannot be confirmed.`,
   };
 }
 
@@ -443,7 +767,11 @@ export function scoreCandidate(
 
     let result: CriterionResult;
     if (criterion === "program") {
-      result = programMatch(String(preference), candidate.program_name);
+      result = programMatch(
+        String(preference),
+        candidate.program_name,
+        candidate.topic,
+      );
     } else if (criterion === "location") {
       result = locationMatch(
         String(preference),
@@ -515,6 +843,40 @@ export interface RecommendationResponse {
   limit: number;
 }
 
+/**
+ * Selects up to `limit` items while preventing a single large catalog
+ * (e.g. a university with 250+ double degrees) from crowding out all other
+ * matching universities. Always preserves strict descending score order
+ * via our hand-written stable merge sort.
+ */
+function selectDiverseTopMatches(
+  ranked: ScoredCandidate[],
+  limit: number,
+  perUniversityCap: number,
+): ScoredCandidate[] {
+  if (ranked.length <= limit) return ranked;
+  const picked: ScoredCandidate[] = [];
+  const overflow: ScoredCandidate[] = [];
+  const counts = new Map<string, number>();
+
+  for (const item of ranked) {
+    const seen = counts.get(item.university_id) ?? 0;
+    if (seen < perUniversityCap && picked.length < limit) {
+      picked.push(item);
+      counts.set(item.university_id, seen + 1);
+    } else {
+      overflow.push(item);
+    }
+  }
+
+  for (const item of overflow) {
+    if (picked.length >= limit) break;
+    picked.push(item);
+  }
+
+  return mergeSortByScore(picked);
+}
+
 export function recommend(
   candidates: CandidateInput[],
   preferences: Record<string, unknown> | null,
@@ -527,13 +889,45 @@ export function recommend(
     throw new Error("limit must be an integer between 1 and 100");
   }
 
-  const scored = candidates.map((candidate) =>
-    scoreCandidate(candidate, cleanedPreferences, normalizedWeights),
-  );
-  const ranked = mergeSortByScore(scored);
+  const scored = candidates
+    .map((candidate) =>
+      scoreCandidate(candidate, cleanedPreferences, normalizedWeights),
+    )
+    .filter((item) => {
+      // Never return 0-score non-matches
+      if (item.score <= 0) return false;
+      // When the student explicitly requested a program, exclude unrelated degrees
+      if (cleanedPreferences.program) {
+        const progExp = item.explanations.find(
+          (exp) => exp.criterion === "program",
+        );
+        if (!progExp || progExp.points <= 0) return false;
+      }
+      return true;
+    });
+
+  // Stable multi-key ranking using our hand-written top-down merge sort:
+  // 1) Fewer unknown criteria first (higher data confidence)
+  // 2) Stronger program fit first (when program preference is supplied)
+  // 3) Primary key: overall weighted score descending
+  const byCompleteness = mergeSort(scored, (item) => item.missing.length, false);
+  const byProgramFit = cleanedPreferences.program
+    ? mergeSort(
+        byCompleteness,
+        (item) =>
+          item.explanations.find((exp) => exp.criterion === "program")
+            ?.points ?? 0,
+        true,
+      )
+    : byCompleteness;
+  const ranked = mergeSortByScore(byProgramFit);
+
+  const items = cleanedPreferences.program
+    ? selectDiverseTopMatches(ranked, limit, 3)
+    : ranked.slice(0, limit);
 
   return {
-    items: ranked.slice(0, limit),
+    items,
     total: ranked.length,
     preferences: cleanedPreferences,
     weights: normalizedWeights,

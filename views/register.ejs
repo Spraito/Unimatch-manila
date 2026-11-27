@@ -11,10 +11,10 @@
         data-firebase-google-signin
         data-next="<%= next_url === '/profile' ? '/cloud-profile' : next_url %>"
       >
-        Continue with Google (cloud sync)
+        Continue with Google
       </button>
     </div>
-    <p class="account-divider" aria-hidden="true"><span>or create a session account with email</span></p>
+    <p class="account-divider" aria-hidden="true"><span>or create an account with email</span></p>
     <form method="post" action="/register" class="account-form" novalidate>
       <input type="hidden" name="csrf_token" value="<%= csrfToken() %>" />
       <input type="hidden" name="next" value="<%= next_url %>" />

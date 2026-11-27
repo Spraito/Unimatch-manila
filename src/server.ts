@@ -18,10 +18,21 @@ import {
   FORMULA,
   parseWeights,
 } from "./algorithms/matching.js";
-import { exportBaselineCatalog } from "./collector.js";
+import {
+  initCatalogStoreFromBaseline,
+  listPublishedCatalogUniversities,
+  loadCatalogFromPostgres,
+  loadPersistedCatalogLocal,
+} from "./catalogStore.js";
+import {
+  loadAdmissionDataFromPostgres,
+  loadPersistedAdmissionDataLocal,
+  seedBaselineAdmissionEvents,
+} from "./admissionScheduleStore.js";
 import { initPostgresSchema, isPostgresConfigured } from "./db/postgres.js";
 import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
+import { calendarRouter } from "./routes/calendar.js";
 import { SESSION_SECRET, getCsrfToken } from "./security.js";
 import {
   SlidingFixedWindowLimiter,
@@ -58,7 +69,11 @@ declare module "express-session" {
 }
 
 initStore();
+initCatalogStoreFromBaseline();
+loadPersistedCatalogLocal();
 loadPersistedAccounts();
+loadPersistedAdmissionDataLocal();
+seedBaselineAdmissionEvents();
 
 function loadFirebaseAuthDomain(): string | undefined {
   try {
@@ -88,6 +103,7 @@ app.set("views", path.join(ROOT, "views"));
 
 app.use(express.urlencoded({ extended: false, limit: "256kb" }));
 app.use("/api/admin/parse-import", express.json({ limit: "2mb" }));
+app.use("/api/admin/catalog", express.json({ limit: "2mb" }));
 app.use(express.json({ limit: "256kb" }));
 
 function isSecureClientRequest(req: Request): boolean {
@@ -194,7 +210,9 @@ app.use((req, res, next) => {
     "/profile",
     "/cloud-profile",
     "/admin",
+    "/admin/dashboard",
     "/admin/accounts",
+    "/admin/schedules",
     "/logout",
   ]);
   if (
@@ -250,6 +268,7 @@ app.use((req, res, next) => {
 
 app.use(authRouter);
 app.use(adminRouter);
+app.use(calendarRouter);
 
 function textQuery(req: Request, name: string): string {
   const raw = req.query[name];
@@ -266,12 +285,12 @@ app.get("/", (_req, res) => {
 });
 
 app.get("/explore", (_req, res) => {
-  res.render("index");
+  res.render("index", { initialView: "" });
 });
 
 app.get("/cloud-profile", (_req, res) => {
   res.render("cloud_profile", {
-    title: "Cloud profile",
+    title: "My profile",
     error: null,
     flashes: [],
   });
@@ -289,7 +308,7 @@ app.get("/api/stats", (_req, res) => {
 });
 
 app.get("/api/catalog-baseline", (_req, res) => {
-  const items = exportBaselineCatalog();
+  const items = listPublishedCatalogUniversities();
   res.json({ items, total: items.length });
 });
 
@@ -349,13 +368,11 @@ app.get("/api/compare", (req, res, next) => {
     }
     const items = [];
     for (const id of ids) {
-      const school = universities.get(id);
-      if (!school) {
+      const detail = getUniversityDetail(id);
+      if (!detail) {
         return res.status(404).json({ error: "University not found" });
       }
-      const serialized = serializeSchool(school, true);
-      serialized.structured = loadStructured(id);
-      items.push(serialized);
+      items.push(detail);
     }
     return res.json({ items });
   } catch (err) {
@@ -428,9 +445,14 @@ async function startServer(): Promise<void> {
   if (isPostgresConfigured()) {
     try {
       await initPostgresSchema();
-      const hydrated = await loadAccountsFromPostgres();
+      const [hydrated, catalogHydrated] = await Promise.all([
+        loadAccountsFromPostgres(),
+        loadCatalogFromPostgres(),
+        loadAdmissionDataFromPostgres(),
+      ]);
+      seedBaselineAdmissionEvents();
       console.log(
-        `[postgres] Connected to Neon PostgreSQL; schema verified (${hydrated.usersLoaded} account(s), ${hydrated.preferencesLoaded} preference record(s) loaded).`,
+        `[postgres] Connected to Neon PostgreSQL; schema verified (${hydrated.usersLoaded} account(s), ${hydrated.preferencesLoaded} preference record(s), ${catalogHydrated.universitiesLoaded} catalog override(s), ${catalogHydrated.runsLoaded} audit run(s) loaded).`,
       );
     } catch (err) {
       console.error(

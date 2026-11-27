@@ -18348,9 +18348,6 @@ function ua(e2, t) {
   }
   return e2;
 }
-function __PRIVATE_validatePositiveNumber(e2, t) {
-  if (t <= 0) throw new J(K.INVALID_ARGUMENT, `Function ${e2}() requires a positive number, but it was: ${t}.`);
-}
 function property(e2, t) {
   const n = {
     typeString: e2
@@ -33437,28 +33434,6 @@ var QueryCompositeFilterConstraint = class _QueryCompositeFilterConstraint exten
     return "and" === this.type ? "and" : "or";
   }
 };
-var QueryLimitConstraint = class _QueryLimitConstraint extends QueryConstraint {
-  /**
-   * @internal
-   */
-  constructor(e2, t, n) {
-    super(), this.type = e2, this._limit = t, this._limitType = n;
-  }
-  static _create(e2, t, n) {
-    return new _QueryLimitConstraint(e2, t, n);
-  }
-  _apply(e2) {
-    return new Query(e2.firestore, e2.converter, __PRIVATE_queryWithLimit(e2._query, this._limit, this._limitType));
-  }
-};
-function limit(e2) {
-  return __PRIVATE_validatePositiveNumber("limit", e2), QueryLimitConstraint._create(
-    "limit",
-    e2,
-    "F"
-    /* LimitType.First */
-  );
-}
 function __PRIVATE_parseDocumentIdValue(e2, t, n) {
   if ("string" == typeof (n = getModularInstance(n))) {
     if ("" === n) throw new J(K.INVALID_ARGUMENT, "Invalid query. When querying with documentId(), you must provide a valid document ID, but it was an empty string.");
@@ -34387,15 +34362,6 @@ async function loadPublishedCatalogUniversities(db2, reportError) {
     reportError(error, "list" /* LIST */, path);
   }
 }
-async function loadAllCatalogUniversitiesForAdmin(db2, reportError) {
-  const path = "catalogUniversities";
-  try {
-    const snap = await getDocs(collection(db2, path));
-    return snap.docs.map((d) => d.data()).sort((a, b2) => a.name.localeCompare(b2.name));
-  } catch (error) {
-    reportError(error, "list" /* LIST */, path);
-  }
-}
 async function saveCatalogUniversity(db2, user, draft, reportError) {
   const clean = sanitizeCatalogUniversity(draft, user.uid);
   const path = `catalogUniversities/${clean.id}`;
@@ -34456,37 +34422,6 @@ async function recordCollectionRun(db2, user, run, reportError) {
     return runId;
   } catch (error) {
     reportError(error, "create" /* CREATE */, path);
-  }
-}
-async function loadCollectionRunsForAdmin(db2, user, reportError) {
-  const path = "collectionRuns";
-  try {
-    const q = query(
-      collection(db2, path),
-      where("createdByUid", "==", user.uid),
-      limit(30)
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => {
-      const data = d.data();
-      const ts = data.createdAt;
-      return {
-        id: String(data.id || d.id),
-        universityId: String(data.universityId || ""),
-        universityName: String(data.universityName || ""),
-        mode: String(data.mode || "manual-edit"),
-        status: String(data.status || "completed"),
-        fetchedUrlCount: Number(data.fetchedUrlCount || 0),
-        programCount: Number(data.programCount || 0),
-        conflictCount: Number(data.conflictCount || 0),
-        robotsSummary: String(data.robotsSummary || ""),
-        notes: String(data.notes || ""),
-        createdByUid: String(data.createdByUid || ""),
-        createdAtMs: typeof ts?.toMillis === "function" ? ts.toMillis() : 0
-      };
-    }).sort((a, b2) => (b2.createdAtMs || 0) - (a.createdAtMs || 0));
-  } catch (error) {
-    reportError(error, "list" /* LIST */, path);
   }
 }
 async function getFreshIdToken(auth2) {
@@ -35120,6 +35055,393 @@ var AdminAccountsController = class {
   }
 };
 
+// client/adminDashboard.ts
+function escapeHTML2(value) {
+  return String(value ?? "").replace(
+    /[&<>"']/g,
+    (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[ch] || ch
+  );
+}
+function formatDateTime(isoOrMs) {
+  if (!isoOrMs) return "\u2014";
+  const date = new Date(isoOrMs);
+  if (Number.isNaN(date.getTime())) return "\u2014";
+  return date.toLocaleString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+function formatModeLabel(mode) {
+  switch (mode) {
+    case "manual-edit":
+      return "Manual edit";
+    case "polite-web":
+      return "Polite collect";
+    case "json-import":
+      return "JSON import";
+    case "baseline-seed":
+      return "Baseline seed";
+    case "delete":
+      return "Removed";
+    default:
+      return mode;
+  }
+}
+function formatStatusClass(status) {
+  if (status === "verified" || status === "completed") return "is-good";
+  if (status === "partial") return "is-warn";
+  return "is-muted";
+}
+var AdminDashboardController = class {
+  auth;
+  root;
+  isSessionAdmin;
+  sessionDenied;
+  firebaseUser = null;
+  data = null;
+  statusFilter = "all";
+  searchTerm = "";
+  constructor(auth2, root) {
+    this.auth = auth2;
+    this.root = root;
+    this.isSessionAdmin = root.dataset.sessionAdmin === "true";
+    this.sessionDenied = root.dataset.sessionDenied === "true";
+    this.bindEvents();
+    if (this.isSessionAdmin && !this.sessionDenied) {
+      this.showWorkspace();
+      void this.refreshDashboard();
+    }
+  }
+  setFeedback(message, isError = false) {
+    const el = document.getElementById("admin-dash-feedback");
+    if (!el) return;
+    el.textContent = message;
+    el.classList.toggle("error", isError);
+    el.classList.toggle("success", !isError);
+    el.hidden = !message;
+  }
+  showWorkspace() {
+    const loading = document.getElementById("admin-dash-loading");
+    const signedOut = document.getElementById("admin-dash-signed-out");
+    const denied = document.getElementById("admin-dash-denied");
+    const workspace = document.getElementById("admin-dash-workspace");
+    if (loading) loading.hidden = true;
+    if (signedOut) signedOut.hidden = true;
+    if (denied) denied.hidden = true;
+    if (workspace) workspace.hidden = false;
+  }
+  showSignedOut() {
+    const loading = document.getElementById("admin-dash-loading");
+    const signedOut = document.getElementById("admin-dash-signed-out");
+    const denied = document.getElementById("admin-dash-denied");
+    const workspace = document.getElementById("admin-dash-workspace");
+    if (loading) loading.hidden = true;
+    if (signedOut) signedOut.hidden = false;
+    if (denied) denied.hidden = true;
+    if (workspace) workspace.hidden = true;
+  }
+  showDenied() {
+    const loading = document.getElementById("admin-dash-loading");
+    const signedOut = document.getElementById("admin-dash-signed-out");
+    const denied = document.getElementById("admin-dash-denied");
+    const workspace = document.getElementById("admin-dash-workspace");
+    if (loading) loading.hidden = true;
+    if (signedOut) signedOut.hidden = true;
+    if (denied) denied.hidden = false;
+    if (workspace) workspace.hidden = true;
+  }
+  async onAuthChanged(user) {
+    this.firebaseUser = user;
+    if (this.sessionDenied) return;
+    if (this.isSessionAdmin) return;
+    if (!user) {
+      this.showSignedOut();
+      return;
+    }
+    await this.refreshDashboard();
+  }
+  async buildAuthHeaders() {
+    const headers = {
+      Accept: "application/json"
+    };
+    if (!this.isSessionAdmin && this.firebaseUser) {
+      const token = await this.firebaseUser.getIdToken();
+      headers.Authorization = `Bearer ${token}`;
+    } else if (!this.isSessionAdmin && this.auth.currentUser) {
+      const token = await this.auth.currentUser.getIdToken();
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  }
+  async refreshDashboard() {
+    try {
+      const headers = await this.buildAuthHeaders();
+      const resp = await fetch("/api/admin/dashboard", {
+        method: "GET",
+        credentials: "same-origin",
+        headers
+      });
+      if (resp.status === 401) {
+        if (!this.isSessionAdmin) this.showSignedOut();
+        else {
+          this.setFeedback(
+            "Your administrator session expired. Please sign in again.",
+            true
+          );
+        }
+        return;
+      }
+      if (resp.status === 403) {
+        this.showDenied();
+        return;
+      }
+      const payload = await resp.json();
+      if (!resp.ok) {
+        throw new Error(payload.error || "Could not load dashboard metrics.");
+      }
+      this.data = payload;
+      this.showWorkspace();
+      this.renderAll();
+    } catch (err) {
+      this.setFeedback(
+        err instanceof Error ? err.message : "Could not load administrator dashboard.",
+        true
+      );
+    }
+  }
+  renderAll() {
+    if (!this.data) return;
+    const { actor, metrics } = this.data;
+    const actorEl = document.getElementById("admin-dash-actor");
+    if (actorEl) {
+      const modeText = actor.source === "firebase" ? "Google Admin session" : "Local admin session";
+      actorEl.textContent = `${actor.email} \xB7 ${modeText}`;
+    }
+    const setText = (id, text) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    };
+    setText(
+      "dash-kpi-universities",
+      `${metrics.universitiesPublished} / ${metrics.universitiesTotal}`
+    );
+    setText(
+      "dash-kpi-universities-sub",
+      metrics.universitiesDraft > 0 ? `${metrics.universitiesDraft} unpublished draft${metrics.universitiesDraft === 1 ? "" : "s"}` : "All directory entries live"
+    );
+    setText("dash-kpi-programs", metrics.programsTotal.toLocaleString("en-PH"));
+    setText(
+      "dash-kpi-programs-sub",
+      `${metrics.feesTotal} tuition \xB7 ${metrics.deadlinesTotal} deadline records`
+    );
+    const reviewQueue = metrics.partialCount + metrics.pendingCount;
+    setText("dash-kpi-review", String(reviewQueue));
+    setText(
+      "dash-kpi-review-sub",
+      `${metrics.verifiedCount} verified \xB7 ${metrics.partialCount} partial \xB7 ${metrics.pendingCount} pending`
+    );
+    setText("dash-kpi-admins", String(metrics.adminsTotal));
+    setText(
+      "dash-kpi-admins-sub",
+      `${metrics.adminsLocal} local \xB7 ${metrics.adminsGoogle} Google`
+    );
+    setText("dash-kpi-students", String(metrics.studentsTotal));
+    setText(
+      "dash-kpi-students-sub",
+      `${metrics.studentsLocal} local \xB7 ${metrics.studentsGoogle} Google`
+    );
+    setText("dash-sec-local-admins", String(metrics.adminsLocal));
+    setText("dash-sec-google-admins", String(metrics.adminsGoogle));
+    setText(
+      "dash-sec-students",
+      `${metrics.studentsLocal} / ${metrics.studentsGoogle}`
+    );
+    setText(
+      "dash-sec-2fa",
+      `${metrics.totpEnabledTotal} of ${metrics.activeUsersTotal}`
+    );
+    this.renderMeters();
+    this.renderUniversitiesTable();
+    this.renderRecentActivity();
+  }
+  renderMeters() {
+    const container = document.getElementById("dash-coverage-meters");
+    if (!container || !this.data) return;
+    const m = this.data.metrics;
+    const total = Math.max(1, m.universitiesTotal);
+    const rows = [
+      {
+        label: "Verified universities",
+        count: m.verifiedCount,
+        total: m.universitiesTotal,
+        pct: Math.round(m.verifiedCount / total * 100)
+      },
+      {
+        label: "Tuition records available",
+        count: m.withTuitionCount,
+        total: m.universitiesTotal,
+        pct: Math.round(m.withTuitionCount / total * 100)
+      },
+      {
+        label: "Application deadlines listed",
+        count: m.withDeadlinesCount,
+        total: m.universitiesTotal,
+        pct: Math.round(m.withDeadlinesCount / total * 100)
+      },
+      {
+        label: "Entrance exam notes listed",
+        count: m.withExamsCount,
+        total: m.universitiesTotal,
+        pct: Math.round(m.withExamsCount / total * 100)
+      }
+    ];
+    container.innerHTML = rows.map(
+      (r) => `<div class="admin-dash-meter-row">
+        <div class="admin-dash-meter-head">
+          <span>${escapeHTML2(r.label)}</span>
+          <span class="admin-tabular"><strong>${r.count}</strong> / ${r.total} (${r.pct}%)</span>
+        </div>
+        <progress class="admin-dash-progress" value="${r.pct}" max="100" aria-label="${escapeHTML2(r.label)}"></progress>
+      </div>`
+    ).join("");
+  }
+  renderUniversitiesTable() {
+    const container = document.getElementById("dash-university-table");
+    const subtitle = document.getElementById("dash-catalog-subtitle");
+    if (!container || !this.data) return;
+    const q = this.searchTerm.toLowerCase();
+    const filtered = this.data.universities.filter((u) => {
+      if (this.statusFilter !== "all" && u.collectionStatus !== this.statusFilter) {
+        return false;
+      }
+      if (q) {
+        return `${u.name} ${u.shortName} ${u.city} ${u.id}`.toLowerCase().includes(q);
+      }
+      return true;
+    });
+    if (subtitle) {
+      subtitle.textContent = `Showing ${filtered.length} of ${this.data.universities.length} universities \xB7 ${this.data.metrics.conflictsTotal} flagged difference${this.data.metrics.conflictsTotal === 1 ? "" : "s"}`;
+    }
+    if (!filtered.length) {
+      container.innerHTML = '<p class="account-empty">No universities match the selected filter.</p>';
+      return;
+    }
+    container.innerHTML = `<div class="admin-table-wrap"><table class="admin-table">
+      <thead>
+        <tr>
+          <th>University</th>
+          <th>Programs</th>
+          <th>Coverage</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.map((u) => {
+      const visibility = u.isPublished ? "Published" : "Draft";
+      const statusClass = formatStatusClass(u.collectionStatus);
+      return `<tr>
+              <td>
+                <strong>${escapeHTML2(u.name)}</strong>
+                <div class="admin-cell-sub">${escapeHTML2(u.shortName)} \xB7 ${escapeHTML2(u.city)} \xB7 ${escapeHTML2(u.sector)} \xB7 ${visibility}</div>
+              </td>
+              <td class="admin-tabular">${u.programCount}</td>
+              <td class="admin-tabular">${u.feeCount} fee \xB7 ${u.deadlineCount} date \xB7 ${u.examCount} exam</td>
+              <td>
+                <span class="admin-dash-status ${statusClass}">${escapeHTML2(u.collectionStatus)}</span>
+                ${u.conflictCount > 0 ? `<div class="admin-cell-sub">${u.conflictCount} difference${u.conflictCount === 1 ? "" : "s"}</div>` : ""}
+              </td>
+              <td>
+                <a class="button secondary admin-btn-sm" href="/admin?edit=${encodeURIComponent(u.id)}">Edit</a>
+              </td>
+            </tr>`;
+    }).join("")}
+      </tbody>
+    </table></div>`;
+  }
+  renderRecentActivity() {
+    const container = document.getElementById("dash-recent-activity");
+    if (!container || !this.data) return;
+    const runs = this.data.recentRuns;
+    if (!runs.length) {
+      container.innerHTML = '<p class="account-empty">No catalog edits, seeds, or polite collections have been recorded yet. Open Manage Catalog to make your first update.</p>';
+      return;
+    }
+    container.innerHTML = `<div class="admin-table-wrap"><table class="admin-table">
+      <thead>
+        <tr>
+          <th>Target &amp; time</th>
+          <th>Administrator</th>
+          <th>Action</th>
+          <th>Summary</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${runs.map(
+      (r) => `<tr>
+              <td>
+                <strong>${escapeHTML2(r.universityName)}</strong>
+                <div class="admin-cell-sub">${escapeHTML2(formatDateTime(r.createdAt || r.createdAtMs))}</div>
+              </td>
+              <td>${escapeHTML2(r.actorEmail || "Administrator")}</td>
+              <td>
+                <span class="admin-dash-status ${formatStatusClass(r.status)}">${escapeHTML2(formatModeLabel(r.mode))}</span>
+                <div class="admin-cell-sub">${escapeHTML2(r.status)}</div>
+              </td>
+              <td>
+                <div>${escapeHTML2(r.notes)}</div>
+                <div class="admin-cell-sub admin-tabular">${r.programCount} programs \xB7 ${r.fetchedUrlCount} URLs \xB7 ${r.conflictCount} conflicts</div>
+              </td>
+            </tr>`
+    ).join("")}
+      </tbody>
+    </table></div>`;
+  }
+  bindEvents() {
+    this.root.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!target) return;
+      const filterBtn = target.closest("[data-dash-status]");
+      if (filterBtn?.dataset.dashStatus) {
+        this.statusFilter = filterBtn.dataset.dashStatus;
+        this.root.querySelectorAll("[data-dash-status]").forEach((btn) => {
+          const active = btn.dataset.dashStatus === this.statusFilter;
+          btn.classList.toggle("active", active);
+          btn.setAttribute("aria-selected", String(active));
+        });
+        this.renderUniversitiesTable();
+        return;
+      }
+      if (target.closest("#dash-refresh-btn")) {
+        const btn = document.getElementById(
+          "dash-refresh-btn"
+        );
+        if (btn) btn.disabled = true;
+        this.setFeedback("");
+        void this.refreshDashboard().finally(() => {
+          if (btn) btn.disabled = false;
+        });
+      }
+    });
+    const searchInput = document.getElementById(
+      "dash-university-search"
+    );
+    searchInput?.addEventListener("input", () => {
+      this.searchTerm = searchInput.value.trim();
+      this.renderUniversitiesTable();
+    });
+  }
+};
+
 // src/algorithms/collectorUrlQueue.ts
 function hostMatchesApprovedDomains(hostname, approvedDomains) {
   const host = hostname.trim().toLowerCase().replace(/\.$/, "");
@@ -35218,7 +35540,7 @@ function buildCollectorUrlQueue(checkedConfiguredUrls, pastedRawText, approvedDo
 }
 
 // client/adminPanel.ts
-function escapeHTML2(value) {
+function escapeHTML3(value) {
   return String(value ?? "").replace(
     /[&<>"']/g,
     (ch) => ({
@@ -35260,24 +35582,37 @@ function emptyDraft() {
 var AdminCatalogController = class {
   db;
   auth;
+  root;
   reportError;
+  isSessionAdmin;
+  sessionDenied;
+  csrfToken;
   user = null;
   isAdmin = false;
+  initialQueryApplied = false;
   activeTab = "catalog";
   universities = [];
   runs = [];
-  baselineCache = [];
   collectorConfig = null;
   editing = emptyDraft();
   editingIsExisting = false;
   pendingCollectResult = null;
   pendingImportResult = null;
   searchTerm = "";
-  constructor(db2, auth2, reportError) {
+  constructor(db2, auth2, root, reportError) {
     this.db = db2;
     this.auth = auth2;
+    this.root = root;
     this.reportError = reportError;
+    this.isSessionAdmin = root.dataset.sessionAdmin === "true";
+    this.sessionDenied = root.dataset.sessionDenied === "true";
+    this.csrfToken = root.dataset.csrfToken || "";
     this.bindEvents();
+    if (this.isSessionAdmin && !this.sessionDenied) {
+      this.isAdmin = true;
+      this.showWorkspace();
+      void this.refreshWorkspace();
+    }
   }
   setFeedback(message, isError = false) {
     const el = document.getElementById("admin-feedback");
@@ -35286,6 +35621,16 @@ var AdminCatalogController = class {
     el.classList.toggle("error", isError);
     el.classList.toggle("success", !isError);
     el.hidden = !message;
+  }
+  showWorkspace() {
+    const loading = document.getElementById("admin-loading");
+    const gateSignedOut = document.getElementById("admin-gate-signed-out");
+    const gateDenied = document.getElementById("admin-gate-denied");
+    const workspace = document.getElementById("admin-workspace");
+    if (loading) loading.hidden = true;
+    if (gateSignedOut) gateSignedOut.hidden = true;
+    if (gateDenied) gateDenied.hidden = true;
+    if (workspace) workspace.hidden = false;
   }
   setTab(tab) {
     this.activeTab = tab;
@@ -35298,8 +35643,30 @@ var AdminCatalogController = class {
       panel.hidden = panel.dataset.adminPanel !== tab;
     });
   }
+  async buildAuthHeaders(includeJson = false, includeCsrf = false) {
+    const headers = {
+      Accept: "application/json"
+    };
+    if (includeJson) {
+      headers["Content-Type"] = "application/json";
+    }
+    if (this.isSessionAdmin) {
+      if (includeCsrf && this.csrfToken) {
+        headers["X-CSRF-Token"] = this.csrfToken;
+      }
+      return headers;
+    }
+    const token = await getFreshIdToken(this.auth);
+    headers.Authorization = `Bearer ${token}`;
+    return headers;
+  }
   async onAuthChanged(user) {
     this.user = user;
+    if (this.sessionDenied) return;
+    if (this.isSessionAdmin) {
+      this.isAdmin = true;
+      return;
+    }
     const loading = document.getElementById("admin-loading");
     const gateSignedOut = document.getElementById("admin-gate-signed-out");
     const gateDenied = document.getElementById("admin-gate-denied");
@@ -35322,49 +35689,126 @@ var AdminCatalogController = class {
       workspace.hidden = true;
       return;
     }
-    if (gateSignedOut) gateSignedOut.hidden = true;
-    if (gateDenied) gateDenied.hidden = true;
-    workspace.hidden = false;
+    this.showWorkspace();
     const adminEmailEl = document.getElementById("admin-account-email");
     if (adminEmailEl) adminEmailEl.textContent = user.email || "";
     await this.refreshWorkspace();
   }
-  async fetchBaselineAndCollector() {
-    const token = await getFreshIdToken(this.auth);
-    const resp = await fetch("/api/admin/baseline", {
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`
+  applyInitialDeepLink() {
+    if (this.initialQueryApplied) return;
+    this.initialQueryApplied = true;
+    const params = new URLSearchParams(window.location.search);
+    const editSlug = (params.get("edit") || "").trim().toLowerCase();
+    const tabParam = (params.get("tab") || "").trim().toLowerCase();
+    if (editSlug) {
+      const found = this.universities.find((u) => u.id === editSlug);
+      if (found) {
+        this.editing = structuredClone(found);
+        this.editingIsExisting = true;
+        this.populateEditorForm();
+        this.setTab("editor");
+        return;
       }
-    });
-    if (!resp.ok) {
-      const problem = await resp.json().catch(() => ({}));
-      throw new Error(problem.error || "Could not load collector configuration.");
     }
-    const data = await resp.json();
-    this.baselineCache = data.universities || [];
-    this.collectorConfig = data.collector || null;
+    if (["catalog", "editor", "collector", "import"].includes(tabParam)) {
+      if (tabParam === "editor") {
+        this.editing = emptyDraft();
+        this.editingIsExisting = false;
+        this.populateEditorForm();
+      }
+      this.setTab(tabParam);
+    }
   }
   async refreshWorkspace() {
-    if (!this.user || !this.isAdmin) return;
+    if (!this.isAdmin) return;
     try {
-      const [catalogList, runList] = await Promise.all([
-        loadAllCatalogUniversitiesForAdmin(this.db, this.reportError),
-        loadCollectionRunsForAdmin(this.db, this.user, this.reportError).catch(() => []),
-        this.collectorConfig ? Promise.resolve() : this.fetchBaselineAndCollector()
-      ]);
-      this.universities = catalogList;
-      this.runs = runList;
+      const headers = await this.buildAuthHeaders(false, false);
+      const resp = await fetch("/api/admin/catalog", {
+        method: "GET",
+        credentials: "same-origin",
+        headers
+      });
+      if (resp.status === 401 || resp.status === 403) {
+        const problem = await resp.json().catch(() => ({}));
+        this.setFeedback(
+          problem.error || "Administrator sign-in is required to manage the catalog.",
+          true
+        );
+        return;
+      }
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.error || "Could not load the catalog manager.");
+      }
+      this.universities = Array.isArray(data.universities) ? data.universities : [];
+      this.runs = Array.isArray(data.runs) ? data.runs : [];
+      if (data.collector) {
+        this.collectorConfig = data.collector;
+      }
+      if (data.actor?.email) {
+        const adminEmailEl = document.getElementById("admin-account-email");
+        if (adminEmailEl) adminEmailEl.textContent = data.actor.email;
+      }
       this.renderCatalogList();
       this.renderCollectorControls();
       this.renderRunHistory();
       this.populateEditorForm();
+      this.applyInitialDeepLink();
     } catch (err) {
       this.setFeedback(
         err instanceof Error ? err.message : "Could not load the catalog manager.",
         true
       );
     }
+  }
+  async persistUniversityViaApi(record, audit) {
+    const cleanId = slugifyCatalogId(record.id || record.name);
+    if (!cleanId) {
+      throw new Error("Enter a valid university slug ID or full name first.");
+    }
+    const headers = await this.buildAuthHeaders(true, true);
+    const resp = await fetch(`/api/admin/catalog/${encodeURIComponent(cleanId)}`, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers,
+      body: JSON.stringify({
+        university: { ...record, id: cleanId },
+        audit
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.university) {
+      throw new Error(data.error || "Could not save university to the catalog.");
+    }
+    if (this.user && !this.isSessionAdmin) {
+      void saveCatalogUniversity(
+        this.db,
+        this.user,
+        data.university,
+        this.reportError
+      ).catch(() => {
+      });
+      if (audit) {
+        void recordCollectionRun(
+          this.db,
+          this.user,
+          {
+            universityId: data.university.id,
+            universityName: data.university.name,
+            mode: audit.mode || "manual-edit",
+            status: audit.status || "completed",
+            fetchedUrlCount: audit.fetchedUrlCount ?? data.university.sourceUrls.length,
+            programCount: data.university.programs.length,
+            conflictCount: data.university.declaredConflicts.length,
+            robotsSummary: audit.robotsSummary || "Direct verified admin catalog update.",
+            notes: audit.notes || `Saved ${data.university.name}.`
+          },
+          this.reportError
+        ).catch(() => {
+        });
+      }
+    }
+    return data.university;
   }
   renderCatalogList() {
     const listEl = document.getElementById("admin-university-list");
@@ -35401,16 +35845,16 @@ var AdminCatalogController = class {
         ${filtered.map(
       (u) => `<tr>
           <td>
-            <strong>${escapeHTML2(u.name)}</strong>
-            <div class="admin-cell-sub">${escapeHTML2(u.shortName)} \xB7 <code>${escapeHTML2(u.id)}</code></div>
+            <strong>${escapeHTML3(u.name)}</strong>
+            <div class="admin-cell-sub">${escapeHTML3(u.shortName)} \xB7 <code>${escapeHTML3(u.id)}</code></div>
           </td>
-          <td>${escapeHTML2(u.city)} \xB7 ${escapeHTML2(u.sector)}</td>
+          <td>${escapeHTML3(u.city)} \xB7 ${escapeHTML3(u.sector)}</td>
           <td>${u.programs.length}</td>
           <td>${u.tuitionFees.length} fee \xB7 ${u.applicationDeadlines.length} date</td>
-          <td><span class="account-pill">${escapeHTML2(u.collectionStatus)}</span></td>
+          <td><span class="account-pill">${escapeHTML3(u.collectionStatus)}</span></td>
           <td class="admin-row-actions">
-            <button type="button" class="button secondary admin-btn-sm" data-admin-edit="${escapeHTML2(u.id)}">Edit</button>
-            <button type="button" class="button secondary admin-btn-sm admin-btn-danger" data-admin-delete="${escapeHTML2(u.id)}">Delete</button>
+            <button type="button" class="button secondary admin-btn-sm" data-admin-edit="${escapeHTML3(u.id)}">Edit</button>
+            <button type="button" class="button secondary admin-btn-sm admin-btn-danger" data-admin-delete="${escapeHTML3(u.id)}">Delete</button>
           </td>
         </tr>`
     ).join("")}
@@ -35469,13 +35913,13 @@ var AdminCatalogController = class {
           <input
             type="checkbox"
             checked
-            data-collector-page-url="${escapeHTML2(page.url)}"
+            data-collector-page-url="${escapeHTML3(page.url)}"
           />
           <span class="admin-page-meta">
             <span class="admin-page-title">
-              <strong>${escapeHTML2(labelText)}</strong>${fieldSummary ? `<span class="admin-page-fields"> \xB7 ${escapeHTML2(fieldSummary)}</span>` : ""}
+              <strong>${escapeHTML3(labelText)}</strong>${fieldSummary ? `<span class="admin-page-fields"> \xB7 ${escapeHTML3(fieldSummary)}</span>` : ""}
             </span>
-            <code class="admin-page-url">${escapeHTML2(page.url)}</code>
+            <code class="admin-page-url">${escapeHTML3(page.url)}</code>
           </span>
         </label>`;
     }).join("");
@@ -35522,7 +35966,7 @@ var AdminCatalogController = class {
     }
     const hasError = errors.length > 0;
     statusEl.classList.toggle("has-error", hasError);
-    statusEl.innerHTML = `<div class="admin-url-counter">${escapeHTML2(parts.join(" \xB7 "))}</div>${hasError ? `<ul class="admin-url-errors">${errors.map((msg) => `<li>${escapeHTML2(msg)}</li>`).join("")}</ul>` : ""}`;
+    statusEl.innerHTML = `<div class="admin-url-counter">${escapeHTML3(parts.join(" \xB7 "))}</div>${hasError ? `<ul class="admin-url-errors">${errors.map((msg) => `<li>${escapeHTML3(msg)}</li>`).join("")}</ul>` : ""}`;
     if (runBtn && !runBtn.dataset.busy) {
       runBtn.disabled = !queue.canRun;
     }
@@ -35536,11 +35980,11 @@ var AdminCatalogController = class {
     if (!this.collectorConfig) return;
     if (select && select.options.length <= 1) {
       select.innerHTML = this.collectorConfig.targets.map(
-        (t) => `<option value="${escapeHTML2(t.universityId)}">${escapeHTML2(t.name)} (${t.pages.length} official page${t.pages.length === 1 ? "" : "s"})</option>`
+        (t) => `<option value="${escapeHTML3(t.universityId)}">${escapeHTML3(t.name)} (${t.pages.length} official page${t.pages.length === 1 ? "" : "s"})</option>`
       ).join("");
     }
     if (domainsEl) {
-      domainsEl.innerHTML = this.collectorConfig.approvedDomains.map((d) => `<span class="admin-domain-chip">${escapeHTML2(d)}</span>`).join("");
+      domainsEl.innerHTML = this.collectorConfig.approvedDomains.map((d) => `<span class="admin-domain-chip">${escapeHTML3(d)}</span>`).join("");
     }
     if (policyEl) {
       const maxPages = this.collectorConfig.maxPagesPerRun || 12;
@@ -35568,11 +36012,11 @@ var AdminCatalogController = class {
       <tbody>
         ${this.runs.map(
       (r) => `<tr>
-          <td><strong>${escapeHTML2(r.universityName)}</strong><div class="admin-cell-sub">${r.createdAtMs ? escapeHTML2(new Date(r.createdAtMs).toLocaleString("en-PH")) : "Just now"}</div></td>
-          <td><span class="account-status">${escapeHTML2(r.mode)}</span></td>
-          <td><span class="account-pill">${escapeHTML2(r.status)}</span></td>
+          <td><strong>${escapeHTML3(r.universityName)}</strong><div class="admin-cell-sub">${r.createdAtMs ? escapeHTML3(new Date(r.createdAtMs).toLocaleString("en-PH")) : "Just now"}</div></td>
+          <td><span class="account-status">${escapeHTML3(r.mode)}</span></td>
+          <td><span class="account-pill">${escapeHTML3(r.status)}</span></td>
           <td>${r.fetchedUrlCount} URLs \xB7 ${r.programCount} programs \xB7 ${r.conflictCount} conflicts</td>
-          <td><div>${escapeHTML2(r.notes)}</div>${r.robotsSummary ? `<div class="admin-cell-sub">${escapeHTML2(r.robotsSummary)}</div>` : ""}</td>
+          <td><div>${escapeHTML3(r.notes)}</div>${r.robotsSummary ? `<div class="admin-cell-sub">${escapeHTML3(r.robotsSummary)}</div>` : ""}</td>
         </tr>`
     ).join("")}
       </tbody>
@@ -35613,7 +36057,7 @@ var AdminCatalogController = class {
     if (progEl) {
       progEl.innerHTML = u.programs.length ? `<ul class="admin-item-list">${u.programs.map(
         (p2, idx) => `<li>
-            <div><strong>${escapeHTML2(p2.name)}</strong> <span class="account-status">${escapeHTML2(p2.topic)}</span>${p2.strandAlignment ? `<div class="admin-cell-sub">Strand: ${escapeHTML2(p2.strandAlignment)}</div>` : ""}</div>
+            <div><strong>${escapeHTML3(p2.name)}</strong> <span class="account-status">${escapeHTML3(p2.topic)}</span>${p2.strandAlignment ? `<div class="admin-cell-sub">Strand: ${escapeHTML3(p2.strandAlignment)}</div>` : ""}</div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-program="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No degree programs added yet.</p>';
@@ -35622,7 +36066,7 @@ var AdminCatalogController = class {
     if (feeEl) {
       feeEl.innerHTML = u.tuitionFees.length ? `<ul class="admin-item-list">${u.tuitionFees.map(
         (f2, idx) => `<li>
-            <div><strong>${f2.amountMin !== null ? `PHP ${f2.amountMin.toLocaleString("en-PH")}${f2.amountMax && f2.amountMax !== f2.amountMin ? `\u2013${f2.amountMax.toLocaleString("en-PH")}` : ""}` : "Note only"}</strong> (${escapeHTML2(f2.basis)})${f2.rawText ? `<div class="admin-cell-sub">${escapeHTML2(f2.rawText)}</div>` : ""}</div>
+            <div><strong>${f2.amountMin !== null ? `PHP ${f2.amountMin.toLocaleString("en-PH")}${f2.amountMax && f2.amountMax !== f2.amountMin ? `\u2013${f2.amountMax.toLocaleString("en-PH")}` : ""}` : "Note only"}</strong> (${escapeHTML3(f2.basis)})${f2.rawText ? `<div class="admin-cell-sub">${escapeHTML3(f2.rawText)}</div>` : ""}</div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-fee="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No tuition records added yet.</p>';
@@ -35631,7 +36075,7 @@ var AdminCatalogController = class {
     if (deadlineEl) {
       deadlineEl.innerHTML = u.applicationDeadlines.length ? `<ul class="admin-item-list">${u.applicationDeadlines.map(
         (d, idx) => `<li>
-            <div><strong>${escapeHTML2(d.label)}</strong>${d.dateIso ? ` \u2014 ${escapeHTML2(d.dateIso)}` : ""}${d.rawText ? `<div class="admin-cell-sub">${escapeHTML2(d.rawText)}</div>` : ""}</div>
+            <div><strong>${escapeHTML3(d.label)}</strong>${d.dateIso ? ` \u2014 ${escapeHTML3(d.dateIso)}` : ""}${d.rawText ? `<div class="admin-cell-sub">${escapeHTML3(d.rawText)}</div>` : ""}</div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-deadline="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No deadlines added yet.</p>';
@@ -35640,7 +36084,7 @@ var AdminCatalogController = class {
     if (reqEl) {
       reqEl.innerHTML = u.admissionRequirements.length ? `<ul class="admin-item-list">${u.admissionRequirements.map(
         (r, idx) => `<li>
-            <div><span class="account-status">${escapeHTML2(r.category)}</span> ${escapeHTML2(r.text)}</div>
+            <div><span class="account-status">${escapeHTML3(r.category)}</span> ${escapeHTML3(r.text)}</div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-req="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No admission requirements added yet.</p>';
@@ -35649,7 +36093,7 @@ var AdminCatalogController = class {
     if (examEl) {
       examEl.innerHTML = u.entranceExaminations.length ? `<ul class="admin-item-list">${u.entranceExaminations.map(
         (e2, idx) => `<li>
-            <div><strong>${escapeHTML2(e2.examName)}</strong><div class="admin-cell-sub">${escapeHTML2(e2.coverage)}</div></div>
+            <div><strong>${escapeHTML3(e2.examName)}</strong><div class="admin-cell-sub">${escapeHTML3(e2.coverage)}</div></div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-exam="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No entrance exam notes added yet.</p>';
@@ -35658,7 +36102,7 @@ var AdminCatalogController = class {
     if (linkEl) {
       linkEl.innerHTML = u.applicationLinks.length ? `<ul class="admin-item-list">${u.applicationLinks.map(
         (l2, idx) => `<li>
-            <div><strong>${escapeHTML2(l2.label)}</strong><div class="admin-cell-sub">${escapeHTML2(l2.url)}</div></div>
+            <div><strong>${escapeHTML3(l2.label)}</strong><div class="admin-cell-sub">${escapeHTML3(l2.url)}</div></div>
             <button type="button" class="button secondary admin-btn-sm" data-remove-link="${idx}">Remove</button>
           </li>`
       ).join("")}</ul>` : '<p class="account-help">No official application links added yet.</p>';
@@ -35680,10 +36124,10 @@ var AdminCatalogController = class {
     const urlRows = audit.urls.length ? `<ul class="admin-audit-urls">${audit.urls.map(
       (u) => `<li>
           <div class="admin-audit-url-head">
-            <code class="admin-page-url">${escapeHTML2(u.url)}</code>
-            <span class="admin-cell-sub">${escapeHTML2(formatSourceKind(u))} \xB7 ${escapeHTML2(u.status)}${u.httpStatus ? ` \xB7 HTTP ${u.httpStatus}` : ""}</span>
+            <code class="admin-page-url">${escapeHTML3(u.url)}</code>
+            <span class="admin-cell-sub">${escapeHTML3(formatSourceKind(u))} \xB7 ${escapeHTML3(u.status)}${u.httpStatus ? ` \xB7 HTTP ${u.httpStatus}` : ""}</span>
           </div>
-          <div class="admin-cell-sub">${escapeHTML2(u.robotsReason)} \xB7 ${escapeHTML2(u.detail)}</div>
+          <div class="admin-cell-sub">${escapeHTML3(u.robotsReason)} \xB7 ${escapeHTML3(u.detail)}</div>
         </li>`
     ).join("")}</ul>` : "";
     const conflictsSection = draft.declaredConflicts.length ? `<section class="admin-conflicts-box" aria-label="Flagged differences across official pages">
@@ -35696,78 +36140,78 @@ var AdminCatalogController = class {
           <ul class="admin-conflicts-list">
             ${draft.declaredConflicts.map(
       (c) => `<li class="admin-conflict-item">
-                  <div class="admin-conflict-field"><strong>${escapeHTML2(c.field.replace(/_/g, " "))}</strong></div>
+                  <div class="admin-conflict-field"><strong>${escapeHTML3(c.field.replace(/_/g, " "))}</strong></div>
                   <div class="admin-conflict-grid">
                     <div>
                       <span class="admin-conflict-label">Kept (official priority)</span>
-                      <div>${escapeHTML2(c.keptValue)}</div>
+                      <div>${escapeHTML3(c.keptValue)}</div>
                     </div>
                     <div>
                       <span class="admin-conflict-label">Other official page</span>
-                      <div>${escapeHTML2(c.discardedValue)}</div>
+                      <div>${escapeHTML3(c.discardedValue)}</div>
                     </div>
                   </div>
-                  <div class="admin-cell-sub">${escapeHTML2(c.reason)}</div>
+                  <div class="admin-cell-sub">${escapeHTML3(c.reason)}</div>
                 </li>`
     ).join("")}
           </ul>
         </section>` : "";
     const renderSectionDetails = (title, itemsHtml, count) => count > 0 ? `<details class="admin-preview-details">
-            <summary>${escapeHTML2(title)} (${count})</summary>
+            <summary>${escapeHTML3(title)} (${count})</summary>
             <ul class="admin-preview-list">${itemsHtml}</ul>
           </details>` : "";
     const programsPreview = renderSectionDetails(
       "Extracted degree programs",
       draft.programs.slice(0, 40).map(
-        (p2) => `<li><strong>${escapeHTML2(p2.name)}</strong> <span class="admin-cell-sub">\xB7 ${escapeHTML2(p2.topic)}${p2.strandAlignment ? ` \xB7 Strand: ${escapeHTML2(p2.strandAlignment)}` : ""}</span></li>`
+        (p2) => `<li><strong>${escapeHTML3(p2.name)}</strong> <span class="admin-cell-sub">\xB7 ${escapeHTML3(p2.topic)}${p2.strandAlignment ? ` \xB7 Strand: ${escapeHTML3(p2.strandAlignment)}` : ""}</span></li>`
       ).join("") + (draft.programs.length > 40 ? `<li class="admin-cell-sub">\u2026and ${draft.programs.length - 40} more programs (all viewable in Editor)</li>` : ""),
       draft.programs.length
     );
     const reqsPreview = renderSectionDetails(
       "Extracted admission requirements",
       draft.admissionRequirements.slice(0, 20).map(
-        (r) => `<li><span class="admin-cell-sub">${escapeHTML2(r.category)} \xB7</span> ${escapeHTML2(r.text)}</li>`
+        (r) => `<li><span class="admin-cell-sub">${escapeHTML3(r.category)} \xB7</span> ${escapeHTML3(r.text)}</li>`
       ).join(""),
       draft.admissionRequirements.length
     );
     const feesPreview = renderSectionDetails(
       "Extracted tuition & fee notes",
       draft.tuitionFees.slice(0, 15).map((f2) => {
-        const amt = f2.amountMin !== null ? f2.amountMin === 0 && f2.amountMax === 0 ? "Free Tuition (RA 10931)" : `PHP ${f2.amountMin.toLocaleString()}${f2.amountMax && f2.amountMax !== f2.amountMin ? ` \u2013 ${f2.amountMax.toLocaleString()}` : ""} (${escapeHTML2(f2.basis)})` : escapeHTML2(f2.basis);
-        return `<li><strong>${amt}</strong> \u2014 ${escapeHTML2(f2.rawText)}</li>`;
+        const amt = f2.amountMin !== null ? f2.amountMin === 0 && f2.amountMax === 0 ? "Free Tuition (RA 10931)" : `PHP ${f2.amountMin.toLocaleString()}${f2.amountMax && f2.amountMax !== f2.amountMin ? ` \u2013 ${f2.amountMax.toLocaleString()}` : ""} (${escapeHTML3(f2.basis)})` : escapeHTML3(f2.basis);
+        return `<li><strong>${amt}</strong> \u2014 ${escapeHTML3(f2.rawText)}</li>`;
       }).join(""),
       draft.tuitionFees.length
     );
     const deadlinesPreview = renderSectionDetails(
       "Extracted dates & deadlines",
       draft.applicationDeadlines.slice(0, 15).map(
-        (d) => `<li><strong>${escapeHTML2(d.label)}</strong>${d.dateIso ? ` (${escapeHTML2(d.dateIso)})` : ""} \u2014 ${escapeHTML2(d.rawText)}</li>`
+        (d) => `<li><strong>${escapeHTML3(d.label)}</strong>${d.dateIso ? ` (${escapeHTML3(d.dateIso)})` : ""} \u2014 ${escapeHTML3(d.rawText)}</li>`
       ).join(""),
       draft.applicationDeadlines.length
     );
     const examsPreview = renderSectionDetails(
       "Extracted entrance examinations",
       draft.entranceExaminations.slice(0, 10).map(
-        (e2) => `<li><strong>${escapeHTML2(e2.examName)}</strong> \u2014 ${escapeHTML2(e2.coverage)}</li>`
+        (e2) => `<li><strong>${escapeHTML3(e2.examName)}</strong> \u2014 ${escapeHTML3(e2.coverage)}</li>`
       ).join(""),
       draft.entranceExaminations.length
     );
     const linksPreview = renderSectionDetails(
       "Official portals & PDF guides",
       draft.applicationLinks.slice(0, 12).map(
-        (l2) => `<li><strong>${escapeHTML2(l2.label)}</strong> \u2014 <span class="admin-cell-sub">${escapeHTML2(l2.url)}</span></li>`
+        (l2) => `<li><strong>${escapeHTML3(l2.label)}</strong> \u2014 <span class="admin-cell-sub">${escapeHTML3(l2.url)}</span></li>`
       ).join(""),
       draft.applicationLinks.length
     );
     el.innerHTML = `<div class="admin-preview-card">
       <div class="admin-preview-head">
         <div>
-          <h3>${escapeHTML2(draft.name)}</h3>
-          <p class="account-help">${escapeHTML2(audit.notes)}</p>
+          <h3>${escapeHTML3(draft.name)}</h3>
+          <p class="account-help">${escapeHTML3(audit.notes)}</p>
         </div>
-        <span class="account-pill">${escapeHTML2(audit.status)}</span>
+        <span class="account-pill">${escapeHTML3(audit.status)}</span>
       </div>
-      <p class="admin-cell-sub">${escapeHTML2(audit.robotsSummary)}</p>
+      <p class="admin-cell-sub">${escapeHTML3(audit.robotsSummary)}</p>
       <div class="admin-preview-metrics">
         <span><strong>${draft.programs.length}</strong> programs</span>
         <span><strong>${draft.tuitionFees.length}</strong> tuition notes</span>
@@ -35814,7 +36258,7 @@ var AdminCatalogController = class {
     };
   }
   async handleSeedBaseline(button) {
-    if (!this.user || !this.isAdmin) return;
+    if (!this.isAdmin) return;
     const overwriteBox = document.getElementById(
       "admin-seed-overwrite"
     );
@@ -35824,40 +36268,19 @@ var AdminCatalogController = class {
     button.textContent = "Seeding catalog\u2026";
     this.setFeedback("");
     try {
-      if (!this.baselineCache.length) {
-        await this.fetchBaselineAndCollector();
+      const headers = await this.buildAuthHeaders(true, true);
+      const resp = await fetch("/api/admin/catalog/seed", {
+        method: "POST",
+        credentials: "same-origin",
+        headers,
+        body: JSON.stringify({ overwrite })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.error || "Could not seed baseline universities.");
       }
-      const existingById = new Map(this.universities.map((u) => [u.id, u]));
-      let written = 0;
-      let skipped = 0;
-      let totalProgs = 0;
-      for (const item of this.baselineCache) {
-        const existingRecord = existingById.get(item.id);
-        const isEmptyPlaceholder = existingRecord && existingRecord.programs.length === 0 && existingRecord.admissionRequirements.length === 0 && existingRecord.entranceExaminations.length === 0;
-        if (!overwrite && existingRecord && !isEmptyPlaceholder) {
-          skipped += 1;
-          continue;
-        }
-        await saveCatalogUniversity(this.db, this.user, item, this.reportError);
-        written += 1;
-        totalProgs += item.programs.length;
-      }
-      await recordCollectionRun(
-        this.db,
-        this.user,
-        {
-          universityId: "all-baseline",
-          universityName: "Metro Manila Baseline (15 schools)",
-          mode: "baseline-seed",
-          status: "completed",
-          fetchedUrlCount: written,
-          programCount: totalProgs,
-          conflictCount: 0,
-          robotsSummary: "Seeded from verified baseline JSON dataset.",
-          notes: `Saved ${written} universit${written === 1 ? "y" : "ies"} (${skipped} existing kept untouched).`
-        },
-        this.reportError
-      );
+      const written = Number(data.written || 0);
+      const skipped = Number(data.skipped || 0);
       this.setFeedback(
         `Baseline sync complete: saved ${written} universities (${skipped} existing entries preserved).`,
         false
@@ -35874,7 +36297,7 @@ var AdminCatalogController = class {
     }
   }
   async handleRunPoliteCollect(button) {
-    if (!this.user || !this.isAdmin) return;
+    if (!this.isAdmin) return;
     const discoverBox = document.getElementById(
       "collector-discover-subpages"
     );
@@ -35898,14 +36321,11 @@ var AdminCatalogController = class {
     button.textContent = `Checking robots.txt & collecting ${queue.queuedUrls.length} official page${queue.queuedUrls.length === 1 ? "" : "s"}\u2026`;
     this.setFeedback("");
     try {
-      const token = await getFreshIdToken(this.auth);
+      const headers = await this.buildAuthHeaders(true, true);
       const resp = await fetch("/api/admin/collect", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`
-        },
+        credentials: "same-origin",
+        headers,
         body: JSON.stringify({
           universityId: target.universityId,
           urls: queue.queuedUrls,
@@ -35936,7 +36356,7 @@ var AdminCatalogController = class {
     }
   }
   async handleParseJsonImport(button) {
-    if (!this.user || !this.isAdmin) return;
+    if (!this.isAdmin) return;
     const textarea = document.getElementById(
       "import-json-text"
     );
@@ -35957,14 +36377,11 @@ var AdminCatalogController = class {
     button.textContent = "Structuring with Algorithm 1\u2026";
     this.setFeedback("");
     try {
-      const token = await getFreshIdToken(this.auth);
+      const headers = await this.buildAuthHeaders(true, true);
       const resp = await fetch("/api/admin/parse-import", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`
-        },
+        credentials: "same-origin",
+        headers,
         body: JSON.stringify({ snapshot: parsed })
       });
       const data = await resp.json();
@@ -35990,7 +36407,7 @@ var AdminCatalogController = class {
     }
   }
   async publishCollectedOrImported(source, clearTarget) {
-    if (!this.user || !this.isAdmin || !source) return;
+    if (!this.isAdmin || !source) return;
     try {
       const existing = this.universities.find((u) => u.id === source.draft.id);
       const dedupeMerge = (fresh, prior, keyFn, maxLen) => {
@@ -36044,23 +36461,13 @@ var AdminCatalogController = class {
           50
         )
       };
-      await saveCatalogUniversity(this.db, this.user, merged, this.reportError);
-      await recordCollectionRun(
-        this.db,
-        this.user,
-        {
-          universityId: merged.id,
-          universityName: merged.name,
-          mode: source.audit.mode,
-          status: source.audit.status,
-          fetchedUrlCount: source.audit.fetchedUrlCount,
-          programCount: merged.programs.length,
-          conflictCount: merged.declaredConflicts.length,
-          robotsSummary: source.audit.robotsSummary,
-          notes: source.audit.notes
-        },
-        this.reportError
-      );
+      await this.persistUniversityViaApi(merged, {
+        mode: source.audit.mode,
+        status: source.audit.status,
+        fetchedUrlCount: source.audit.fetchedUrlCount,
+        robotsSummary: source.audit.robotsSummary,
+        notes: source.audit.notes
+      });
       if (clearTarget === "collect") {
         this.pendingCollectResult = null;
         this.renderAuditPreview("collector-preview-box", null, "", "");
@@ -36100,9 +36507,25 @@ var AdminCatalogController = class {
       const delBtn = target.closest("[data-admin-delete]");
       if (delBtn?.dataset.adminDelete) {
         const id = delBtn.dataset.adminDelete;
-        if (!this.user || !this.isAdmin) return;
+        if (!this.isAdmin) return;
         delBtn.disabled = true;
-        void deleteCatalogUniversity(this.db, id, this.reportError).then(() => {
+        void this.buildAuthHeaders(false, true).then(
+          (headers) => fetch(`/api/admin/catalog/${encodeURIComponent(id)}`, {
+            method: "DELETE",
+            credentials: "same-origin",
+            headers
+          })
+        ).then(async (resp) => {
+          const payload = await resp.json().catch(() => ({}));
+          if (!resp.ok) {
+            throw new Error(payload.error || "Could not delete university.");
+          }
+          if (this.user && !this.isSessionAdmin) {
+            void deleteCatalogUniversity(this.db, id, this.reportError).catch(
+              () => {
+              }
+            );
+          }
           this.setFeedback(`Removed "${id}" from the catalog.`, false);
           return this.refreshWorkspace();
         }).catch((err) => {
@@ -36374,7 +36797,7 @@ var AdminCatalogController = class {
     );
     editorForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!this.user || !this.isAdmin) return;
+      if (!this.isAdmin) return;
       const submitBtn = editorForm.querySelector(
         'button[type="submit"]'
       );
@@ -36382,28 +36805,13 @@ var AdminCatalogController = class {
       this.setFeedback("");
       try {
         this.readEditorMetadataIntoEditing();
-        const saved = await saveCatalogUniversity(
-          this.db,
-          this.user,
-          this.editing,
-          this.reportError
-        );
-        await recordCollectionRun(
-          this.db,
-          this.user,
-          {
-            universityId: saved.id,
-            universityName: saved.name,
-            mode: "manual-edit",
-            status: "completed",
-            fetchedUrlCount: saved.sourceUrls.length,
-            programCount: saved.programs.length,
-            conflictCount: saved.declaredConflicts.length,
-            robotsSummary: "Direct verified admin catalog update.",
-            notes: `Saved ${saved.name} (${saved.programs.length} programs, ${saved.tuitionFees.length} tuition records).`
-          },
-          this.reportError
-        );
+        const saved = await this.persistUniversityViaApi(this.editing, {
+          mode: "manual-edit",
+          status: "completed",
+          fetchedUrlCount: this.editing.sourceUrls.length,
+          robotsSummary: "Direct verified admin catalog update.",
+          notes: `Saved ${this.editing.name} (${this.editing.programs.length} programs, ${this.editing.tuitionFees.length} tuition records).`
+        });
         this.editingIsExisting = true;
         this.setFeedback(`Saved ${saved.name} to the live catalog.`, false);
         await this.refreshWorkspace();
@@ -36534,7 +36942,7 @@ function isSafeRedirect(value) {
   }
   return value;
 }
-function escapeHTML3(value) {
+function escapeHTML4(value) {
   return String(value ?? "").replace(
     /[&<>"']/g,
     (ch) => ({
@@ -36817,18 +37225,21 @@ function updateAdminLinksVisibility(isAdmin) {
 var liveCatalogRecords = [];
 async function hydratePublishedCatalog() {
   try {
-    const [firestoreRecords, baselineRecords] = await Promise.all([
-      loadPublishedCatalogUniversities(
+    const serverRecords = await fetch("/api/catalog-baseline", {
+      headers: { Accept: "application/json" }
+    }).then(async (resp) => {
+      if (!resp.ok) return [];
+      const payload = await resp.json();
+      return Array.isArray(payload.items) ? payload.items : [];
+    }).catch(() => []);
+    let records = serverRecords;
+    if (!records.length) {
+      const firestoreRecords = await loadPublishedCatalogUniversities(
         db,
         (error, op, path) => handleFirestoreError(error, op, path)
-      ),
-      fetch("/api/catalog-baseline", { headers: { Accept: "application/json" } }).then(async (resp) => {
-        if (!resp.ok) return [];
-        const payload = await resp.json();
-        return Array.isArray(payload.items) ? payload.items : [];
-      }).catch(() => [])
-    ]);
-    const records = mergeLiveAndBaselineCatalog(firestoreRecords, baselineRecords);
+      ).catch(() => []);
+      records = mergeLiveAndBaselineCatalog(firestoreRecords, serverRecords);
+    }
     liveCatalogRecords = records;
     const detailsById = new Map(
       records.map((r) => [r.id, catalogRecordToExplorerDetail(r)])
@@ -36923,8 +37334,8 @@ async function refreshCloudRecommendations(prefs) {
         <section class="account-match-group">
           <header class="account-match-group-head">
             <div>
-              <h3>${escapeHTML3(group.university_name)}</h3>
-              <p>${escapeHTML3(group.campus_location || "Campus not available")}</p>
+              <h3>${escapeHTML4(group.university_name)}</h3>
+              <p>${escapeHTML4(group.campus_location || "Campus not available")}</p>
             </div>
             <span class="account-pill">${group.items.length} program${group.items.length === 1 ? "" : "s"}</span>
           </header>
@@ -36934,16 +37345,16 @@ async function refreshCloudRecommendations(prefs) {
               <li class="account-match">
                 <div class="account-match-head">
                   <div>
-                    <h4>${escapeHTML3(item.program_name || "All collected programs at this university")}</h4>
-                    <p>#${item.rank} overall${item.topic ? ` \xB7 ${escapeHTML3(item.topic)}` : ""}</p>
+                    <h4>${escapeHTML4(item.program_name || "All collected programs at this university")}</h4>
+                    <p>#${item.rank} overall${item.topic ? ` \xB7 ${escapeHTML4(item.topic)}` : ""}</p>
                   </div>
-                  <strong class="account-score">${escapeHTML3(item.score)}<span>/100</span></strong>
+                  <strong class="account-score">${escapeHTML4(item.score)}<span>/100</span></strong>
                 </div>
                 <details>
                   <summary>Why this match?</summary>
                   <ul>
                     ${(item.explanations || []).map(
-          (ex) => `<li><strong>${escapeHTML3(ex.label)}:</strong> ${escapeHTML3(ex.reason)} <span class="account-status">${escapeHTML3(String(ex.status || "").replace(/_/g, " "))}</span></li>`
+          (ex) => `<li><strong>${escapeHTML4(ex.label)}:</strong> ${escapeHTML4(ex.reason)} <span class="account-status">${escapeHTML4(String(ex.status || "").replace(/_/g, " "))}</span></li>`
         ).join("")}
                   </ul>
                 </details>
@@ -36954,7 +37365,7 @@ async function refreshCloudRecommendations(prefs) {
     ).join("");
     container.innerHTML = `<p class="account-help">Grouped by university and ranked with the custom stable merge sort. Scores measure fit against your saved preferences, not admission chances.</p><div class="account-match-groups">${groupsHtml}</div>`;
   } catch (err) {
-    container.innerHTML = `<p class="account-alert error" role="alert">${escapeHTML3(err instanceof Error ? err.message : "Could not load recommendations.")}</p>`;
+    container.innerHTML = `<p class="account-alert error" role="alert">${escapeHTML4(err instanceof Error ? err.message : "Could not load recommendations.")}</p>`;
   }
 }
 async function hydrateCloudProfilePage(user) {
@@ -37125,10 +37536,11 @@ function boot() {
   wireGoogleButtons();
   wireCloudProfileForms();
   wireExploreShortlistSync();
-  const isAdminPage = Boolean(document.getElementById("admin-workspace"));
-  const adminController = isAdminPage ? new AdminCatalogController(
+  const adminCatalogRoot = document.getElementById("admin-catalog-page");
+  const adminController = adminCatalogRoot ? new AdminCatalogController(
     db,
     auth,
+    adminCatalogRoot,
     (error, op, path) => handleFirestoreError(
       error,
       op || "write" /* WRITE */,
@@ -37137,7 +37549,9 @@ function boot() {
   ) : null;
   const adminAccountsRoot = document.getElementById("admin-accounts-page");
   const adminAccountsController = adminAccountsRoot ? new AdminAccountsController(auth, adminAccountsRoot) : null;
-  if (!isAdminPage && !adminAccountsRoot) {
+  const adminDashboardRoot = document.getElementById("admin-dashboard-page");
+  const adminDashboardController = adminDashboardRoot ? new AdminDashboardController(auth, adminDashboardRoot) : null;
+  if (!adminCatalogRoot && !adminAccountsRoot && !adminDashboardRoot) {
     void hydratePublishedCatalog();
   }
   onAuthStateChanged(auth, async (user) => {
@@ -37153,6 +37567,9 @@ function boot() {
       }
       if (adminAccountsController) {
         await adminAccountsController.onAuthChanged(null);
+      }
+      if (adminDashboardController) {
+        await adminDashboardController.onAuthChanged(null);
       }
       if (isCloudProfilePage) {
         const signedOutSection = document.getElementById("cloud-signed-out");
@@ -37185,6 +37602,9 @@ function boot() {
     if (adminAccountsController) {
       await adminAccountsController.onAuthChanged(user);
     }
+    if (adminDashboardController) {
+      await adminDashboardController.onAuthChanged(user);
+    }
     if (adminController) {
       await adminController.onAuthChanged(user);
       try {
@@ -37198,7 +37618,7 @@ function boot() {
       }
       return;
     }
-    if (adminAccountsController) {
+    if (adminAccountsController || adminDashboardController) {
       updateHeaderLinksForCloudUser(
         sanitizeDisplayName(user.displayName || user.email?.split("@")[0] || "Admin")
       );
@@ -38019,6 +38439,7 @@ re2js/build/index.js:
 
 @firebase/firestore/dist/common-C7fSmnBW.esm.js:
 @firebase/firestore/dist/common-C7fSmnBW.esm.js:
+@firebase/firestore/dist/common-C7fSmnBW.esm.js:
   (**
    * @license
    * Copyright 2017 Google LLC
@@ -38088,38 +38509,6 @@ re2js/build/index.js:
    *)
 
 @firebase/firestore/dist/common-C7fSmnBW.esm.js:
-  (**
-   * @license
-   * Copyright 2017 Google LLC
-   *
-   * Licensed under the Apache License, Version 2.0 (the "License");
-   * you may not use this file except in compliance with the License.
-   * You may obtain a copy of the License at
-   *
-   *   http://www.apache.org/licenses/LICENSE-2.0
-   *
-   * Unless required by applicable law or agreed to in writing, software
-   * distributed under the License is distributed on an "AS IS" BASIS,
-   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   * See the License for the specific language governing permissions and
-   * limitations under the License.
-   *)
-  (**
-   * @license
-   * Copyright 2020 Google LLC
-   *
-   * Licensed under the Apache License, Version 2.0 (the "License");
-   * you may not use this file except in compliance with the License.
-   * You may obtain a copy of the License at
-   *
-   *   http://www.apache.org/licenses/LICENSE-2.0
-   *
-   * Unless required by applicable law or agreed to in writing, software
-   * distributed under the License is distributed on an "AS IS" BASIS,
-   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   * See the License for the specific language governing permissions and
-   * limitations under the License.
-   *)
   (**
    * @license
    * Copyright 2025 Google LLC
@@ -38138,7 +38527,39 @@ re2js/build/index.js:
    *)
   (**
    * @license
+   * Copyright 2017 Google LLC
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *   http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   *)
+  (**
+   * @license
    * Copyright 2023 Google LLC
+   *
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *   http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   *)
+  (**
+   * @license
+   * Copyright 2020 Google LLC
    *
    * Licensed under the Apache License, Version 2.0 (the "License");
    * you may not use this file except in compliance with the License.

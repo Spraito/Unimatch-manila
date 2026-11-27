@@ -1171,6 +1171,7 @@ export function rankedRecommendations(
         ...c,
         program_id: null,
         program_name: null,
+        topic: null,
       });
     }
     candidates = perUniversity;
@@ -1199,3 +1200,242 @@ export function collectionHistory(limit = 10) {
     }));
   return { runs, sources };
 }
+
+export interface RuntimeCatalogSyncInput {
+  id: string;
+  name: string;
+  shortName: string;
+  city: string;
+  campusLocation: string;
+  sector: string;
+  color: string;
+  officialUrl: string;
+  collectionStatus: string;
+  academicYear: string;
+  academicYears: string[];
+  isPublished: boolean;
+  programs: Array<{
+    id: string;
+    name: string;
+    topic: string;
+    strandAlignment: string;
+    sourceUrl: string;
+  }>;
+  admissionRequirements: Array<{
+    text: string;
+    category: string;
+    academicYear: string;
+    sourceUrl: string;
+  }>;
+  applicationDeadlines: Array<{
+    label: string;
+    dateIso: string;
+    rawText: string;
+    academicYear: string;
+    sourceUrl: string;
+  }>;
+  entranceExaminations: Array<{
+    examName: string;
+    coverage: string;
+    academicYear: string;
+    sourceUrl: string;
+  }>;
+  tuitionFees: Array<{
+    amountMin: number | null;
+    amountMax: number | null;
+    currency: string;
+    basis: string;
+    rawText: string;
+    academicYear: string;
+    sourceUrl: string;
+  }>;
+  applicationLinks: Array<{
+    label: string;
+    url: string;
+    sourceUrl: string;
+  }>;
+  declaredConflicts: Array<{
+    field: string;
+    keptValue: string;
+    discardedValue: string;
+    keptSourceUrl?: string;
+    discardedSourceUrl?: string;
+    reason: string;
+  }>;
+  sourceUrls: string[];
+  sourceNotes: string[];
+  collectedAt: string;
+  lastVerifiedAt: string;
+}
+
+export function removeRuntimeUniversity(schoolId: string): void {
+  universities.delete(schoolId);
+  programsByUniversity.delete(schoolId);
+  requirementsByUniversity.delete(schoolId);
+  deadlinesByUniversity.delete(schoolId);
+  examsByUniversity.delete(schoolId);
+  feesByUniversity.delete(schoolId);
+  linksByUniversity.delete(schoolId);
+  conflictsByUniversity.delete(schoolId);
+  for (const key of Array.from(collectionSources.keys())) {
+    if (key.startsWith(`${schoolId}::`)) {
+      collectionSources.delete(key);
+    }
+  }
+}
+
+export function upsertRuntimeUniversityFromCatalog(
+  record: RuntimeCatalogSyncInput,
+): void {
+  const schoolId = record.id;
+  if (!record.isPublished) {
+    removeRuntimeUniversity(schoolId);
+    return;
+  }
+
+  const existing = universities.get(schoolId);
+  const official = safeUrl(record.officialUrl) ?? null;
+  const collectedAt = record.collectedAt || existing?.collected_at || new Date().toISOString();
+  const verifiedAt = record.lastVerifiedAt || collectedAt;
+
+  const sourcesList: Array<Record<string, unknown>> = record.sourceUrls
+    .map((u) => safeUrl(u))
+    .filter((u): u is string => Boolean(u))
+    .map((url) => ({
+      requested_url: url,
+      final_url: url,
+      status: "fetched",
+      retrieved_at_utc: verifiedAt,
+    }));
+
+  if (official && !sourcesList.some((s) => s.final_url === official)) {
+    sourcesList.unshift({
+      requested_url: official,
+      final_url: official,
+      status: "fetched",
+      retrieved_at_utc: verifiedAt,
+    });
+  }
+
+  const existingEvidence = existing?.evidence ?? {};
+  const evidence: Record<string, unknown> = {
+    ...existingEvidence,
+    source_notes: record.sourceNotes,
+  };
+
+  universities.set(schoolId, {
+    id: schoolId,
+    name: record.name,
+    short_name: record.shortName,
+    city: record.city,
+    campus_location: record.campusLocation,
+    sector: record.sector,
+    color: record.color,
+    official_url: official,
+    sources: sourcesList.length > 0 ? sourcesList : (existing?.sources ?? []),
+    evidence,
+    collection_status: record.collectionStatus,
+    collected_at: collectedAt,
+    academic_year: record.academicYear || null,
+    academic_years: record.academicYears,
+    last_verified_at: verifiedAt,
+  });
+
+  const progs: ProgramRecord[] = [];
+  const seenIds = new Set<string>();
+  for (const p of record.programs) {
+    const cleanName = p.name.replace(/\s+/g, " ").trim();
+    if (!cleanName) continue;
+    const pid =
+      p.id ||
+      sha256Hex(`${schoolId}:${cleanName.toLowerCase()}`).slice(0, 20);
+    if (seenIds.has(pid)) continue;
+    seenIds.add(pid);
+    progs.push({
+      id: pid,
+      university_id: schoolId,
+      name: cleanName,
+      topic: p.topic || topicFor(cleanName),
+      strand_alignment: p.strandAlignment || null,
+      source_url: safeUrl(p.sourceUrl),
+      academic_year: record.academicYear || null,
+      last_verified_at: verifiedAt,
+    });
+  }
+  programsByUniversity.set(schoolId, progs);
+
+  requirementsByUniversity.set(
+    schoolId,
+    record.admissionRequirements.map((r) => ({
+      text: r.text,
+      category: r.category || "general",
+      academic_year: r.academicYear || null,
+      source_url: safeUrl(r.sourceUrl),
+      last_verified_at: verifiedAt,
+    })),
+  );
+
+  deadlinesByUniversity.set(
+    schoolId,
+    record.applicationDeadlines.map((d) => ({
+      label: d.label,
+      date_iso: d.dateIso || null,
+      raw_text: d.rawText,
+      academic_year: d.academicYear || null,
+      source_url: safeUrl(d.sourceUrl),
+      last_verified_at: verifiedAt,
+    })),
+  );
+
+  examsByUniversity.set(
+    schoolId,
+    record.entranceExaminations.map((e) => ({
+      exam_name: e.examName || null,
+      coverage: e.coverage,
+      academic_year: e.academicYear || null,
+      source_url: safeUrl(e.sourceUrl),
+      last_verified_at: verifiedAt,
+    })),
+  );
+
+  feesByUniversity.set(
+    schoolId,
+    record.tuitionFees.map((f) => ({
+      amount_min: f.amountMin,
+      amount_max: f.amountMax,
+      currency: f.currency || "PHP",
+      basis: f.basis || "unspecified",
+      raw_text: f.rawText,
+      academic_year: f.academicYear || null,
+      source_url: safeUrl(f.sourceUrl),
+      last_verified_at: verifiedAt,
+    })),
+  );
+
+  linksByUniversity.set(
+    schoolId,
+    record.applicationLinks
+      .filter((l) => safeUrl(l.url) !== null)
+      .map((l) => ({
+        label: cleanText(l.label) || "Application page",
+        url: safeUrl(l.url)!,
+        source_url: safeUrl(l.sourceUrl),
+        last_verified_at: verifiedAt,
+      })),
+  );
+
+  conflictsByUniversity.set(
+    schoolId,
+    record.declaredConflicts.map((c) => ({
+      field: c.field,
+      kept_value: c.keptValue,
+      discarded_value: c.discardedValue,
+      kept_source_url: safeUrl(c.keptSourceUrl),
+      discarded_source_url: safeUrl(c.discardedSourceUrl),
+      reason: c.reason,
+    })),
+  );
+
+  upsertSources(schoolId, sourcesList, verifiedAt);
+}
+

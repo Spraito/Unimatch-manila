@@ -3,7 +3,7 @@
  *
  * Uses Brevo's v3 transactional email endpoint (`POST https://api.brevo.com/v3/smtp/email`)
  * with `process.env.BREVO_API_KEY` in the `api-key` header and sends strictly from
- * `unimatchph@gmail.com` (sender name "UniMatch PH").
+ * `spraitospraito@gmail.com` (sender name "UniMatch PH").
  *
  * Security design:
  * - Reads BREVO_API_KEY strictly from process.env (never hardcoded or logged).
@@ -15,7 +15,7 @@ import "./env.js";
 
 export const DEFAULT_BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 export const DEFAULT_BREVO_ACCOUNT_URL = "https://api.brevo.com/v3/account";
-export const STRICT_SENDER_EMAIL = "unimatchph@gmail.com";
+export const STRICT_SENDER_EMAIL = "spraitospraito@gmail.com";
 export const STRICT_SENDER_NAME = "UniMatch PH";
 
 export interface SendBrevoEmailInput {
