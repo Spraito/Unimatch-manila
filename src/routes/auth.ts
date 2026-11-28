@@ -852,7 +852,7 @@ authRouter.post("/profile", loginRequired, (req, res) => {
       pushFlash(req, "Profile updated.", "success");
     } else if (formName === "preferences") {
       const weights: Record<string, number> = {};
-      for (const criterion of ["program", "location", "budget", "sector"]) {
+      for (const criterion of ["program", "location", "sector"]) {
         const raw = String(req.body?.[`weight_${criterion}`] ?? "").trim();
         if (raw) {
           const parsed = Number(raw);
@@ -866,8 +866,6 @@ authRouter.post("/profile", loginRequired, (req, res) => {
         program: String(req.body?.program ?? ""),
         city: String(req.body?.city ?? ""),
         sector: String(req.body?.sector ?? ""),
-        budget: req.body?.budget ?? "",
-        budget_basis: String(req.body?.budget_basis ?? "semester"),
         weights,
       });
       pushFlash(

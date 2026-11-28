@@ -110,59 +110,73 @@
         <section class="account-card admin-sched-form-card">
           <span class="account-eyebrow" id="sched-form-eyebrow">NEW ADMISSION EVENT</span>
           <h2 id="sched-form-title">Add admission event</h2>
-          <p class="account-help">
-            Only mark an event as <strong>Verified</strong> when backed by an official university announcement. Use <strong>To Be Announced</strong> whenever a school has not released dates yet.
-          </p>
+            <p class="account-help">
+              Only mark an event as <strong>Verified</strong> when backed by an official university announcement. Use <strong>Not Yet Announced</strong> whenever a school has not released dates yet.
+            </p>
 
-          <form id="admin-sched-form" class="account-form" novalidate>
-            <input type="hidden" id="sched-event-id" value="" />
+            <form id="admin-sched-form" class="account-form" novalidate>
+              <input type="hidden" id="sched-event-id" value="" />
 
-            <label for="sched-university">University</label>
-            <select id="sched-university" required>
-              <option value="">Select university…</option>
-            </select>
+              <label for="sched-university">University</label>
+              <select id="sched-university" required>
+                <option value="">Select university…</option>
+              </select>
 
-            <label for="sched-name">Event name</label>
-            <input
-              id="sched-name"
-              type="text"
-              maxlength="160"
-              required
-              placeholder="e.g., UPCAT 2027 Entrance Examination"
-            />
-
-            <div class="admin-form-grid-2">
-              <div>
-                <label for="sched-type">Event type</label>
-                <select id="sched-type" required>
-                  <option value="entrance_exam">Entrance Examination</option>
-                  <option value="application_open">Application Opening</option>
-                  <option value="application_deadline">Application Deadline</option>
-                  <option value="results_release">Results Release</option>
-                  <option value="enrollment">Enrollment &amp; Confirmation</option>
-                  <option value="other">Admission Event</option>
-                </select>
+              <div class="admin-form-grid-2">
+                <div>
+                  <label for="sched-name">Event name</label>
+                  <input
+                    id="sched-name"
+                    type="text"
+                    maxlength="160"
+                    required
+                    placeholder="e.g., USTET Manila Testing Batch 3"
+                  />
+                </div>
+                <div>
+                  <label for="sched-academic-year">Academic year</label>
+                  <input
+                    id="sched-academic-year"
+                    type="text"
+                    maxlength="40"
+                    placeholder="e.g., AY 2027–2028"
+                    value="AY 2027–2028"
+                  />
+                </div>
               </div>
-              <div>
-                <label for="sched-verification">Verification status</label>
-                <select id="sched-verification" required>
-                  <option value="verified">Verified (confirmed date)</option>
-                  <option value="unverified">Unverified (tentative)</option>
-                  <option value="tba">To Be Announced (no date)</option>
-                </select>
-              </div>
-            </div>
 
-            <div class="admin-form-grid-2">
-              <div>
-                <label for="sched-start-date">Start date</label>
-                <input id="sched-start-date" type="date" />
+              <div class="admin-form-grid-2">
+                <div>
+                  <label for="sched-type">Event type</label>
+                  <select id="sched-type" required>
+                    <option value="entrance_exam">Entrance Examination</option>
+                    <option value="application_open">Application Opening</option>
+                    <option value="application_deadline">Application Deadline</option>
+                    <option value="results_release">Results Release</option>
+                    <option value="enrollment">Enrollment &amp; Confirmation</option>
+                    <option value="other">Admission Event</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="sched-verification">Verification status</label>
+                  <select id="sched-verification" required>
+                    <option value="verified">Verified (confirmed date)</option>
+                    <option value="unverified">Unverified (tentative)</option>
+                    <option value="tba">Not Yet Announced (no date)</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label for="sched-end-date">End date (optional)</label>
-                <input id="sched-end-date" type="date" />
+
+              <div class="admin-form-grid-2">
+                <div>
+                  <label for="sched-start-date">Start date</label>
+                  <input id="sched-start-date" type="date" />
+                </div>
+                <div>
+                  <label for="sched-end-date">End date (optional)</label>
+                  <input id="sched-end-date" type="date" />
+                </div>
               </div>
-            </div>
 
             <div class="admin-form-grid-2">
               <div>
@@ -243,7 +257,7 @@
               <option value="">All statuses</option>
               <option value="verified">Verified</option>
               <option value="unverified">Unverified</option>
-              <option value="tba">To Be Announced</option>
+              <option value="tba">Not Yet Announced</option>
             </select>
             <input
               id="sched-filter-search"

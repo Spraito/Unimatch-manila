@@ -246,6 +246,10 @@
   gap: 14px;
 }
 
+.account-split-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .account-split-four {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }

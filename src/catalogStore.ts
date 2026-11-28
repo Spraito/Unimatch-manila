@@ -710,7 +710,7 @@ export async function seedBaselineCatalogUniversities(
 
   const run = await appendCatalogAuditRun({
     universityId: "all-baseline",
-    universityName: `Metro Manila Baseline (${baseline.length} schools)`,
+    universityName: `Manila Baseline (${baseline.length} schools)`,
     mode: "baseline-seed",
     status: "completed",
     fetchedUrlCount: written,

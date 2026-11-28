@@ -15,6 +15,7 @@ interface AdminEventRow {
   event_name: string;
   event_type: string;
   event_type_label: string;
+  academic_year: string | null;
   start_date: string | null;
   end_date: string | null;
   exam_time: string | null;
@@ -373,7 +374,7 @@ export class AdminSchedulesController {
       if (type && ev.event_type !== type) return false;
       if (ver && ev.verification_status !== ver) return false;
       if (search) {
-        const hay = `${ev.event_name} ${ev.university_name} ${ev.university_short_name} ${ev.venue || ""} ${ev.description || ""}`.toLowerCase();
+        const hay = `${ev.event_name} ${ev.university_name} ${ev.university_short_name} ${ev.academic_year || ""} ${ev.venue || ""} ${ev.description || ""}`.toLowerCase();
         if (!hay.includes(search)) return false;
       }
       return true;
@@ -418,7 +419,7 @@ export class AdminSchedulesController {
           <td>
             <div class="admin-sched-cell-title">${escapeHTML(ev.event_name)}</div>
             <div class="admin-sched-cell-sub">
-              <strong>${escapeHTML(ev.university_short_name)}</strong> · ${escapeHTML(ev.event_type_label)}
+              <strong>${escapeHTML(ev.university_short_name)}</strong> · ${escapeHTML(ev.event_type_label)}${ev.academic_year ? ` · ${escapeHTML(ev.academic_year)}` : ""}
             </div>
             ${ev.venue ? `<div class="admin-sched-cell-sub">Venue: ${escapeHTML(ev.venue)}</div>` : ""}
           </td>
@@ -489,6 +490,7 @@ export class AdminSchedulesController {
     setVal("sched-event-id", ev.event_id);
     setVal("sched-university", ev.university_id);
     setVal("sched-name", ev.event_name);
+    setVal("sched-academic-year", ev.academic_year || "");
     setVal("sched-type", ev.event_type);
     setVal("sched-verification", ev.verification_status);
     setVal("sched-start-date", ev.start_date || "");
@@ -517,6 +519,8 @@ export class AdminSchedulesController {
     form?.reset();
     const idEl = document.getElementById("sched-event-id") as HTMLInputElement | null;
     if (idEl) idEl.value = "";
+    const ayEl = document.getElementById("sched-academic-year") as HTMLInputElement | null;
+    if (ayEl && !ayEl.value) ayEl.value = "AY 2027–2028";
     this.syncVerificationDateState();
 
     const eyebrow = document.getElementById("sched-form-eyebrow");
@@ -543,6 +547,7 @@ export class AdminSchedulesController {
     const payload = {
       university_id: getVal("sched-university"),
       event_name: getVal("sched-name"),
+      academic_year: getVal("sched-academic-year") || null,
       event_type: getVal("sched-type"),
       verification_status: getVal("sched-verification"),
       start_date: getVal("sched-start-date") || null,

@@ -422,7 +422,7 @@ export class AdminCatalogController {
     if (!filtered.length) {
       listEl.innerHTML = this.universities.length
         ? '<p class="account-empty">No universities match that search filter.</p>'
-        : '<p class="account-empty">Your cloud catalog is empty. Click <strong>Seed baseline (15 schools)</strong> above to populate the Metro Manila directory, or add a university manually.</p>';
+        : '<p class="account-empty">Your catalog is empty. Click <strong>Seed baseline (15 schools)</strong> above to populate the Manila directory, or add a university manually.</p>';
       return;
     }
 
@@ -994,7 +994,7 @@ export class AdminCatalogController {
       name,
       shortName: val("ed-short-name") || name.slice(0, 30),
       city: val("ed-city") || "Manila",
-      campusLocation: val("ed-campus") || val("ed-city") || "Metro Manila",
+      campusLocation: val("ed-campus") || val("ed-city") || "Manila",
       sector: val("ed-sector") === "Public" ? "Public" : "Private",
       color: (val("ed-color") || "green") as CatalogUniversityRecord["color"],
       officialUrl: val("ed-official-url"),

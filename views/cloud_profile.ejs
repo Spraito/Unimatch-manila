@@ -99,50 +99,23 @@
             <option value="Public">Public</option>
             <option value="Private">Private</option>
           </select>
-          <div class="account-split">
-            <div>
-              <label for="cloud-pref-budget">Budget (PHP)</label>
-              <input
-                id="cloud-pref-budget"
-                name="budget"
-                type="number"
-                min="0"
-                max="10000000"
-                step="1000"
-                placeholder="e.g. 60000"
-              />
-            </div>
-            <div>
-              <label for="cloud-pref-basis">Budget basis</label>
-              <select id="cloud-pref-basis" name="budget_basis">
-                <option value="semester">Semester</option>
-                <option value="trimester">Trimester</option>
-                <option value="year">Year</option>
-                <option value="unit">Unit</option>
-              </select>
-            </div>
-          </div>
           <fieldset class="account-weights">
             <legend>Criteria weights (%)</legend>
             <p class="account-help">
-              Weights are normalized automatically. Missing university data scores zero, never a match.
+              Weights are normalized automatically. Missing university data is labeled Information Unavailable and excluded from the denominator rather than penalized.
             </p>
-            <div class="account-split account-split-four">
+            <div class="account-split account-split-three">
               <div>
                 <label for="cloud-weight-program">Program</label>
-                <input id="cloud-weight-program" type="number" min="0" max="100" step="1" value="45" />
+                <input id="cloud-weight-program" type="number" min="0" max="100" step="1" value="55" />
               </div>
               <div>
                 <label for="cloud-weight-location">Location</label>
-                <input id="cloud-weight-location" type="number" min="0" max="100" step="1" value="20" />
+                <input id="cloud-weight-location" type="number" min="0" max="100" step="1" value="25" />
               </div>
               <div>
-                <label for="cloud-weight-budget">Budget</label>
-                <input id="cloud-weight-budget" type="number" min="0" max="100" step="1" value="20" />
-              </div>
-              <div>
-                <label for="cloud-weight-sector">Sector</label>
-                <input id="cloud-weight-sector" type="number" min="0" max="100" step="1" value="15" />
+                <label for="cloud-weight-sector">School type</label>
+                <input id="cloud-weight-sector" type="number" min="0" max="100" step="1" value="20" />
               </div>
             </div>
           </fieldset>
@@ -161,7 +134,7 @@
       </div>
       <div id="cloud-match-results">
         <p class="account-empty">
-          Save at least one preference — program, city, budget or university type — to see personalised matches.
+          Save at least one preference — program, city, or university type — to see personalised matches.
         </p>
       </div>
     </section>

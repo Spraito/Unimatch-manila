@@ -1693,7 +1693,7 @@ export async function collectUniversityPolite(options: {
   const nowIso = new Date().toISOString();
   const uniName = existingSchool?.name || matchingTarget?.name || options.universityId;
   const campusLocation =
-    existingSchool?.campus_location || matchingTarget?.campus_location || "Metro Manila";
+    existingSchool?.campus_location || matchingTarget?.campus_location || "Manila";
   const structured = structureRecord(
     {
       university_name: uniName,
@@ -1839,8 +1839,8 @@ export function parseCollectorJsonImport(
       shortName: matchedExisting?.short_name || cleanText(record.short_name ?? name).slice(0, 30),
       city: matchedExisting?.city || cleanText(record.city ?? "Manila") || "Manila",
       campusLocation:
-        cleanText(record.campus_location ?? matchedExisting?.campus_location ?? "Metro Manila") ||
-        "Metro Manila",
+        cleanText(record.campus_location ?? matchedExisting?.campus_location ?? "Manila") ||
+        "Manila",
       sector,
       color,
       officialUrl,

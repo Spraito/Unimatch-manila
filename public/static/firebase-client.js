@@ -33719,10 +33719,6 @@ function cleanText(value) {
   if (typeof value !== "string") return "";
   return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
-function normalizeKey(value) {
-  const text = cleanText(value).toLowerCase().replace(/[^a-z0-9]+/g, " ");
-  return text.replace(/\s+/g, " ").trim();
-}
 
 // src/algorithms/mergeSort.ts
 function merge(left, right, key, reverse) {
@@ -33769,55 +33765,1045 @@ function mergeSortByScore(items) {
   return mergeSort(items, (item) => item.score, true);
 }
 
-// src/algorithms/matching.ts
-var CRITERIA = ["program", "location", "budget", "sector"];
-var CRITERION_LABELS = {
-  program: "Preferred program",
-  location: "Preferred location",
-  budget: "Budget fit",
-  sector: "University type"
+// src/algorithms/programSearch.ts
+var PROGRAM_ALIASES = {
+  // Computing & IT (strictly distinct degrees)
+  cs: "computer science",
+  bscs: "computer science",
+  "bs cs": "computer science",
+  compsci: "computer science",
+  "comp sci": "computer science",
+  "computer sci": "computer science",
+  "com sci": "computer science",
+  comsci: "computer science",
+  cpe: "computer engineering",
+  bscpe: "computer engineering",
+  "bs cpe": "computer engineering",
+  compeng: "computer engineering",
+  "comp eng": "computer engineering",
+  "computer eng": "computer engineering",
+  it: "information technology",
+  bsit: "information technology",
+  "bs it": "information technology",
+  infotech: "information technology",
+  "info tech": "information technology",
+  is: "information systems",
+  bsis: "information systems",
+  "bs is": "information systems",
+  infosys: "information systems",
+  "info sys": "information systems",
+  ds: "data science",
+  bsds: "data science",
+  "bs ds": "data science",
+  datasci: "data science",
+  "data sci": "data science",
+  se: "software engineering",
+  bsse: "software engineering",
+  softeng: "software engineering",
+  "soft eng": "software engineering",
+  infosec: "information security",
+  cybersec: "information security",
+  cybersecurity: "information security",
+  emc: "entertainment and multimedia computing",
+  bsemc: "entertainment and multimedia computing",
+  // Engineering
+  ce: "civil engineering",
+  bsce: "civil engineering",
+  ee: "electrical engineering",
+  bsee: "electrical engineering",
+  ece: "electronics engineering",
+  bsece: "electronics engineering",
+  "electronics and communications engineering": "electronics engineering",
+  me: "mechanical engineering",
+  bsme: "mechanical engineering",
+  ie: "industrial engineering",
+  bsie: "industrial engineering",
+  che: "chemical engineering",
+  bsche: "chemical engineering",
+  ge: "geodetic engineering",
+  bsge: "geodetic engineering",
+  sanitary: "sanitary engineering",
+  mining: "mining engineering",
+  // Business & Accountancy
+  bsa: "accountancy",
+  accounting: "accountancy",
+  bsais: "accounting information systems",
+  ais: "accounting information systems",
+  bsma: "management accounting",
+  bsba: "business administration",
+  busad: "business administration",
+  econ: "economics",
+  bsecon: "economics",
+  ab_econ: "economics",
+  entrep: "entrepreneurship",
+  hrm: "hospitality management",
+  hm: "hospitality management",
+  bshm: "hospitality management",
+  bshrm: "hospitality management",
+  tm: "tourism management",
+  bstm: "tourism management",
+  rem: "real estate management",
+  bsrem: "real estate management",
+  // Health & Sciences
+  bsn: "nursing",
+  medtech: "medical technology",
+  "med tech": "medical technology",
+  bsmt: "medical technology",
+  mls: "medical laboratory science",
+  bsmls: "medical laboratory science",
+  pharma: "pharmacy",
+  bspharma: "pharmacy",
+  bsp: "pharmacy",
+  dentistry: "dental medicine",
+  dmd: "dental medicine",
+  pt: "physical therapy",
+  bspt: "physical therapy",
+  ot: "occupational therapy",
+  bsot: "occupational therapy",
+  slp: "speech language pathology",
+  bsslp: "speech language pathology",
+  radtech: "radiologic technology",
+  "rad tech": "radiologic technology",
+  nd: "nutrition and dietetics",
+  bsnd: "nutrition and dietetics",
+  bio: "biology",
+  bsbio: "biology",
+  chem: "chemistry",
+  bschem: "chemistry",
+  biochem: "biochemistry",
+  math: "mathematics",
+  bsmath: "mathematics",
+  stat: "statistics",
+  stats: "statistics",
+  bsstat: "statistics",
+  physics: "physics",
+  // Humanities, Social Sciences, Design, Education
+  psych: "psychology",
+  bspsych: "psychology",
+  abpsych: "psychology",
+  archi: "architecture",
+  arch: "architecture",
+  bsarch: "architecture",
+  bsarchi: "architecture",
+  polsci: "political science",
+  "pol sci": "political science",
+  abpolsci: "political science",
+  educ: "education",
+  beed: "elementary education",
+  bsed: "secondary education",
+  btled: "technology and livelihood education",
+  crim: "criminology",
+  bscrim: "criminology",
+  comm: "communication",
+  masscomm: "communication",
+  "mass comm": "communication",
+  journ: "journalism",
+  "fine arts": "fine arts",
+  bfa: "fine arts",
+  mma: "multimedia arts",
+  bmma: "multimedia arts",
+  abmma: "multimedia arts",
+  id: "interior design",
+  bsid: "interior design",
+  legma: "legal management",
+  "legal mgmt": "legal management",
+  lm: "legal management",
+  blis: "library and information science",
+  lis: "library and information science"
 };
-var DEFAULT_WEIGHTS = {
-  program: 0.45,
-  location: 0.2,
-  budget: 0.2,
-  sector: 0.15
+var RELATED_DISCIPLINES = {
+  "computer science": [
+    { core: "information technology", score: 0.66 },
+    { core: "data science", score: 0.65 },
+    { core: "information systems", score: 0.63 },
+    { core: "computer engineering", score: 0.62 },
+    { core: "software engineering", score: 0.68 },
+    { core: "information security", score: 0.64 },
+    { core: "entertainment and multimedia computing", score: 0.6 }
+  ],
+  "computer engineering": [
+    { core: "computer science", score: 0.66 },
+    { core: "computer engineering technology", score: 0.68 },
+    { core: "electronics engineering", score: 0.64 },
+    { core: "electrical engineering", score: 0.61 },
+    { core: "information technology", score: 0.59 }
+  ],
+  "information technology": [
+    { core: "information systems", score: 0.67 },
+    { core: "computer science", score: 0.65 },
+    { core: "data science", score: 0.62 },
+    { core: "information security", score: 0.64 },
+    { core: "computer engineering", score: 0.6 },
+    { core: "entertainment and multimedia computing", score: 0.6 }
+  ],
+  "information systems": [
+    { core: "information technology", score: 0.67 },
+    { core: "computer science", score: 0.64 },
+    { core: "data science", score: 0.62 },
+    { core: "accounting information systems", score: 0.65 },
+    { core: "information security", score: 0.61 }
+  ],
+  "data science": [
+    { core: "computer science", score: 0.66 },
+    { core: "statistics", score: 0.65 },
+    { core: "mathematics", score: 0.62 },
+    { core: "data analytics", score: 0.67 },
+    { core: "information technology", score: 0.6 },
+    { core: "information systems", score: 0.59 }
+  ],
+  "software engineering": [
+    { core: "computer science", score: 0.68 },
+    { core: "information technology", score: 0.64 },
+    { core: "computer engineering", score: 0.62 },
+    { core: "information systems", score: 0.6 }
+  ],
+  "information security": [
+    { core: "computer science", score: 0.65 },
+    { core: "information technology", score: 0.65 },
+    { core: "information systems", score: 0.62 }
+  ],
+  accountancy: [
+    { core: "accounting information systems", score: 0.66 },
+    { core: "management accounting", score: 0.67 },
+    { core: "internal auditing", score: 0.65 },
+    { core: "business administration", score: 0.58 }
+  ],
+  "accounting information systems": [
+    { core: "accountancy", score: 0.66 },
+    { core: "information systems", score: 0.64 },
+    { core: "management accounting", score: 0.62 }
+  ],
+  nursing: [
+    { core: "medical technology", score: 0.58 },
+    { core: "physical therapy", score: 0.58 },
+    { core: "pharmacy", score: 0.58 },
+    { core: "public health", score: 0.61 },
+    { core: "midwifery", score: 0.62 }
+  ],
+  "medical technology": [
+    { core: "medical laboratory science", score: 0.68 },
+    { core: "biology", score: 0.58 },
+    { core: "pharmacy", score: 0.58 },
+    { core: "biochemistry", score: 0.6 },
+    { core: "public health", score: 0.58 }
+  ],
+  "medical laboratory science": [
+    { core: "medical technology", score: 0.68 },
+    { core: "biology", score: 0.58 },
+    { core: "biochemistry", score: 0.6 }
+  ],
+  psychology: [
+    { core: "behavioral sciences", score: 0.64 },
+    { core: "guidance and counseling", score: 0.63 },
+    { core: "sociology", score: 0.58 }
+  ],
+  architecture: [
+    { core: "interior design", score: 0.62 },
+    { core: "civil engineering", score: 0.6 },
+    { core: "landscape architecture", score: 0.65 },
+    { core: "industrial design", score: 0.58 }
+  ],
+  "civil engineering": [
+    { core: "architecture", score: 0.6 },
+    { core: "sanitary engineering", score: 0.64 },
+    { core: "geodetic engineering", score: 0.62 },
+    { core: "environmental engineering", score: 0.62 }
+  ],
+  "electrical engineering": [
+    { core: "electronics engineering", score: 0.66 },
+    { core: "computer engineering", score: 0.62 },
+    { core: "mechanical engineering", score: 0.58 }
+  ],
+  "electronics engineering": [
+    { core: "electrical engineering", score: 0.66 },
+    { core: "computer engineering", score: 0.65 }
+  ],
+  "mechanical engineering": [
+    { core: "industrial engineering", score: 0.6 },
+    { core: "manufacturing engineering", score: 0.64 },
+    { core: "electrical engineering", score: 0.58 }
+  ],
+  "industrial engineering": [
+    { core: "mechanical engineering", score: 0.6 },
+    { core: "management engineering", score: 0.65 },
+    { core: "manufacturing engineering", score: 0.63 }
+  ],
+  "hospitality management": [
+    { core: "tourism management", score: 0.66 },
+    { core: "culinary management", score: 0.63 },
+    { core: "business administration", score: 0.58 }
+  ],
+  "tourism management": [
+    { core: "hospitality management", score: 0.66 },
+    { core: "business administration", score: 0.58 }
+  ],
+  "multimedia arts": [
+    { core: "fine arts", score: 0.63 },
+    { core: "communication", score: 0.61 },
+    { core: "entertainment and multimedia computing", score: 0.64 },
+    { core: "interactive entertainment", score: 0.64 }
+  ],
+  communication: [
+    { core: "journalism", score: 0.65 },
+    { core: "broadcasting", score: 0.64 },
+    { core: "multimedia arts", score: 0.61 },
+    { core: "advertising", score: 0.62 }
+  ]
 };
-var BUDGET_BASES = ["semester", "trimester", "year", "unit"];
-var FORMULA = "score = 100 \xD7 \u03A3(weight[c] \xD7 points[c]) / \u03A3(weight[c]) over the criteria the student supplied. Missing data scores 0 and is labelled unknown.";
+var BROAD_CATEGORY_TERMS = /* @__PURE__ */ new Set([
+  "computing",
+  "engineering",
+  "business",
+  "health",
+  "science",
+  "sciences",
+  "education",
+  "arts",
+  "humanities",
+  "social sciences",
+  "law",
+  "hospitality",
+  "tourism",
+  "design",
+  "medicine",
+  "allied health"
+]);
+var GENERIC_DISCIPLINE_WORDS = /* @__PURE__ */ new Set([
+  "science",
+  "sciences",
+  "technology",
+  "technologies",
+  "engineering",
+  "management",
+  "administration",
+  "studies",
+  "arts",
+  "systems",
+  "system",
+  "education",
+  "applied",
+  "general",
+  "business",
+  "university",
+  "college",
+  "school",
+  "institute",
+  "campus",
+  "manila",
+  "philippines"
+]);
 var STOP_WORDS = /* @__PURE__ */ new Set([
   "a",
   "an",
   "and",
-  "arts",
   "bachelor",
   "bs",
   "ba",
+  "ab",
+  "bfa",
+  "bm",
+  "course",
+  "courses",
   "degree",
+  "degrees",
   "for",
   "in",
   "major",
+  "minor",
   "of",
   "program",
-  "science",
-  "the"
+  "programs",
+  "specialization",
+  "specializing",
+  "the",
+  "track",
+  "with"
 ]);
-function textOf(value) {
-  return typeof value === "string" ? cleanText(value) : "";
+var DEGREE_PREFIX_PATTERNS = [
+  /^bachelor\s+of\s+science\s+in\s+/,
+  /^bachelor\s+of\s+arts\s+in\s+/,
+  /^bachelor\s+of\s+fine\s+arts\s+in\s+/,
+  /^bachelor\s+of\s+music\s+in\s+/,
+  /^bachelor\s+of\s+laws\s+in\s+/,
+  /^bachelor\s+of\s+engineering\s+technology\s+major\s+in\s+/,
+  /^bachelor\s+of\s+engineering\s+in\s+/,
+  /^bachelor\s+of\s+secondary\s+education\s+major\s+in\s+/,
+  /^bachelor\s+of\s+elementary\s+education\s+major\s+in\s+/,
+  /^bachelor\s+of\s+library\s+and\s+/,
+  /^bachelor\s+of\s+[a-z]+\s+in\s+/,
+  /^bachelor\s+of\s+/,
+  /^doctor\s+of\s+/,
+  /^master\s+of\s+science\s+in\s+/,
+  /^master\s+of\s+arts\s+in\s+/,
+  /^bs\s+in\s+/,
+  /^ba\s+in\s+/,
+  /^ab\s+in\s+/,
+  /^bfa\s+in\s+/,
+  /^bs\s+/,
+  /^ba\s+/,
+  /^ab\s+/,
+  /^bfa\s+/
+];
+var TRAILING_FILLER_RE = /\s+(?:degree|program|course|degrees|programs|courses)$/;
+function normalizeProgramText(value) {
+  const cleaned = cleanText(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ").replace(/\b(?:[a-z]\.){2,}/g, (m) => m.replace(/\./g, "")).replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned;
 }
-function tokensOf(value) {
-  const words = normalizeKey(value).split(/\s+/).filter(Boolean);
-  const meaningful = new Set(words.filter((w) => !STOP_WORDS.has(w)));
-  return meaningful.size > 0 ? meaningful : new Set(words);
+function stripParentheticalAnnotations(officialName) {
+  return cleanText(officialName).replace(/\([^)]*\)/g, " ").replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
+}
+function stripDegreePrefix(normalized) {
+  let current = normalized.trim();
+  while (TRAILING_FILLER_RE.test(current)) {
+    const next = current.replace(TRAILING_FILLER_RE, "").trim();
+    if (!next) break;
+    current = next;
+  }
+  for (const pattern of DEGREE_PREFIX_PATTERNS) {
+    if (pattern.test(current)) {
+      const stripped = current.replace(pattern, "").trim();
+      if (stripped.length > 0) {
+        current = stripped;
+        break;
+      }
+    }
+  }
+  return current;
+}
+function interpretProgramQuery(rawQuery) {
+  const raw = cleanText(rawQuery);
+  const normalized = normalizeProgramText(raw);
+  const stripped = stripDegreePrefix(normalized);
+  let expandedCore = stripped || normalized;
+  let usedAlias = false;
+  if (PROGRAM_ALIASES[normalized]) {
+    expandedCore = PROGRAM_ALIASES[normalized];
+    usedAlias = true;
+  } else if (PROGRAM_ALIASES[stripped]) {
+    expandedCore = PROGRAM_ALIASES[stripped];
+    usedAlias = true;
+  } else {
+    const strippedRaw = normalized.replace(TRAILING_FILLER_RE, "").trim();
+    if (PROGRAM_ALIASES[strippedRaw]) {
+      expandedCore = PROGRAM_ALIASES[strippedRaw];
+      usedAlias = true;
+    }
+  }
+  const tokens = tokenizeMeaningful(expandedCore || normalized);
+  const isBroadCategory = BROAD_CATEGORY_TERMS.has(expandedCore) || tokens.length === 1 && BROAD_CATEGORY_TERMS.has(tokens[0]);
+  return {
+    raw,
+    normalized,
+    core: stripped || normalized,
+    expandedCore,
+    usedAlias,
+    tokens,
+    isBroadCategory
+  };
+}
+function tokenizeMeaningful(normalizedText) {
+  const words = normalizeProgramText(normalizedText).split(/\s+/).filter(Boolean);
+  const meaningful = words.filter((w) => !STOP_WORDS.has(w));
+  return meaningful.length > 0 ? meaningful : words;
+}
+function damerauLevenshtein(a, b2) {
+  const m = a.length;
+  const n = b2.length;
+  if (a === b2) return 0;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  if (Math.abs(m - n) > 2) return 3;
+  const dp = Array.from(
+    { length: m + 1 },
+    () => new Array(n + 1).fill(0)
+  );
+  for (let i2 = 0; i2 <= m; i2++) dp[i2][0] = i2;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i2 = 1; i2 <= m; i2++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i2 - 1] === b2[j - 1] ? 0 : 1;
+      let val = Math.min(
+        dp[i2 - 1][j] + 1,
+        dp[i2][j - 1] + 1,
+        dp[i2 - 1][j - 1] + cost
+      );
+      if (i2 > 1 && j > 1 && a[i2 - 1] === b2[j - 2] && a[i2 - 2] === b2[j - 1]) {
+        val = Math.min(val, dp[i2 - 2][j - 2] + cost);
+      }
+      dp[i2][j] = val;
+    }
+  }
+  return dp[m][n];
+}
+function tokenExactOrInflection(wanted, available) {
+  if (wanted === available) return true;
+  if (wanted.length < 4 || available.length < 4) return false;
+  if (wanted + "s" === available || available + "s" === wanted || wanted + "es" === available || available + "es" === wanted) {
+    return true;
+  }
+  return false;
+}
+function tokenTypoMatches(wanted, available) {
+  if (wanted === available) return true;
+  const minLen = Math.min(wanted.length, available.length);
+  if (minLen < 4) return false;
+  if (minLen <= 5 && wanted[0] !== available[0]) return false;
+  const maxDist = minLen >= 7 ? 2 : 1;
+  return damerauLevenshtein(wanted, available) <= maxDist;
+}
+function hasWholePhrase(haystack, needle) {
+  if (!haystack || !needle) return false;
+  return ` ${haystack} `.includes(` ${needle} `);
+}
+function isSpecializationOf(programCore, queriedCore) {
+  if (!programCore || !queriedCore) return false;
+  return programCore.startsWith(`${queriedCore} major `) || programCore.startsWith(`${queriedCore} with `) || programCore.startsWith(`${queriedCore} specialization `) || programCore.startsWith(`${queriedCore} track `) || programCore.startsWith(`${queriedCore} minor `) || programCore.startsWith(`${queriedCore} concentration `) || programCore.startsWith(`${queriedCore} option `) || programCore.startsWith(`${queriedCore} honors `) || programCore.startsWith(`${queriedCore} and master `);
+}
+function resolveCanonicalDisciplineForRelated(query2) {
+  if (RELATED_DISCIPLINES[query2.expandedCore]) {
+    return query2.expandedCore;
+  }
+  for (const key of Object.keys(RELATED_DISCIPLINES)) {
+    const keyTokens = tokenizeMeaningful(key);
+    if (keyTokens.length === query2.tokens.length && keyTokens.length > 0) {
+      const allClose = query2.tokens.every(
+        (qt2) => keyTokens.some((kt2) => tokenTypoMatches(qt2, kt2))
+      );
+      if (allClose) return key;
+    }
+  }
+  return null;
 }
 function roundTo(value, decimals) {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
 }
+function evaluateProgramMatch(rawQuery, programName, topic, universityContext) {
+  const query2 = interpretProgramQuery(rawQuery);
+  if (!query2.normalized) return null;
+  const officialName = cleanText(programName);
+  if (!officialName) return null;
+  const fullNorm = normalizeProgramText(officialName);
+  const fullCore = stripDegreePrefix(fullNorm);
+  const baseNoParenNorm = normalizeProgramText(
+    stripParentheticalAnnotations(officialName)
+  );
+  const baseCore = stripDegreePrefix(baseNoParenNorm);
+  if (!query2.usedAlias && query2.normalized === fullNorm) {
+    return {
+      tier: 1,
+      category: "Exact Match",
+      relevanceScore: 1,
+      programPoints: 1,
+      matchedVia: "exact_title",
+      reason: `Exact program match: ${officialName}.`
+    };
+  }
+  if (!query2.usedAlias && query2.expandedCore && (query2.expandedCore === fullCore || query2.expandedCore === baseCore)) {
+    return {
+      tier: 1,
+      category: "Exact Match",
+      relevanceScore: query2.expandedCore === fullCore ? 1 : 0.995,
+      programPoints: 1,
+      matchedVia: "normalized_exact",
+      reason: `Exact program match: ${officialName}.`
+    };
+  }
+  if (query2.usedAlias && query2.expandedCore && (query2.expandedCore === fullCore || query2.expandedCore === baseCore)) {
+    return {
+      tier: 2,
+      category: "Exact Match",
+      relevanceScore: query2.expandedCore === fullCore ? 0.99 : 0.985,
+      programPoints: 1,
+      matchedVia: "alias_exact",
+      reason: `Exact program match via abbreviation (${query2.raw} \u2192 ${query2.expandedCore}): ${officialName}.`
+    };
+  }
+  if (query2.expandedCore && query2.expandedCore.length >= 3 && (isSpecializationOf(baseCore, query2.expandedCore) || isSpecializationOf(fullCore, query2.expandedCore))) {
+    return {
+      tier: 3,
+      category: "Very Close Match",
+      relevanceScore: 0.94,
+      programPoints: 0.95,
+      matchedVia: "specialization",
+      reason: `Very close match \u2014 ${officialName} is a specialized track of ${query2.expandedCore}.`
+    };
+  }
+  if (query2.expandedCore && query2.expandedCore.length >= 3 && (hasWholePhrase(baseCore, query2.expandedCore) || hasWholePhrase(fullCore, query2.expandedCore))) {
+    return {
+      tier: 4,
+      category: "Very Close Match",
+      relevanceScore: 0.88,
+      programPoints: 0.88,
+      matchedVia: "strong_phrase",
+      reason: `Strong phrase match in '${officialName}'.`
+    };
+  }
+  const programTokens = tokenizeMeaningful(baseCore || fullCore || fullNorm);
+  const queryTokens = query2.tokens;
+  if (queryTokens.length > 0) {
+    const exactMatches = [];
+    const typoMatches = [];
+    for (const qt2 of queryTokens) {
+      if (programTokens.some((pt2) => tokenExactOrInflection(qt2, pt2))) {
+        exactMatches.push(qt2);
+      } else if (programTokens.some((pt2) => tokenTypoMatches(qt2, pt2))) {
+        typoMatches.push(qt2);
+      }
+    }
+    if (exactMatches.length === queryTokens.length) {
+      const sameTokenCount = programTokens.length === queryTokens.length;
+      return {
+        tier: sameTokenCount ? 3 : 4,
+        category: "Very Close Match",
+        relevanceScore: sameTokenCount ? 0.92 : 0.86,
+        programPoints: sameTokenCount ? 0.95 : 0.88,
+        matchedVia: "all_keywords",
+        reason: `All query terms match '${officialName}'.`
+      };
+    }
+    if (exactMatches.length + typoMatches.length === queryTokens.length) {
+      const isSameCoreLength = programTokens.length === queryTokens.length;
+      const isPrefixSpecialization = programTokens.length > queryTokens.length && queryTokens.every(
+        (qt2, idx) => programTokens[idx] ? tokenTypoMatches(qt2, programTokens[idx]) : false
+      );
+      if (isSameCoreLength || isPrefixSpecialization) {
+        return {
+          tier: isSameCoreLength ? 3 : 4,
+          category: "Very Close Match",
+          relevanceScore: isSameCoreLength ? 0.91 : 0.84,
+          programPoints: isSameCoreLength ? 0.95 : 0.85,
+          matchedVia: "typo_exact",
+          reason: `Matched '${officialName}' (accounting for spelling variation in "${query2.raw}").`
+        };
+      }
+      return {
+        tier: 4,
+        category: "Very Close Match",
+        relevanceScore: 0.82,
+        programPoints: 0.84,
+        matchedVia: "typo_exact",
+        reason: `Close keyword match in '${officialName}'.`
+      };
+    }
+    const canonicalForRelated = resolveCanonicalDisciplineForRelated(query2);
+    if (canonicalForRelated) {
+      const relatedList = RELATED_DISCIPLINES[canonicalForRelated] ?? [];
+      for (const rel of relatedList) {
+        if (baseCore === rel.core || fullCore === rel.core || isSpecializationOf(baseCore, rel.core) || hasWholePhrase(baseCore, rel.core)) {
+          const score = baseCore === rel.core || fullCore === rel.core ? rel.score : roundTo(rel.score - 0.04, 3);
+          return {
+            tier: 6,
+            category: "Related Match",
+            relevanceScore: score,
+            programPoints: 0.65,
+            matchedVia: "related_program",
+            reason: `Related academic program to ${canonicalForRelated}: ${officialName}.`
+          };
+        }
+      }
+    }
+    const matchedWords = [...exactMatches, ...typoMatches];
+    if (matchedWords.length > 0) {
+      const hasSpecificNonGenericWord = matchedWords.some(
+        (w) => !GENERIC_DISCIPLINE_WORDS.has(w)
+      );
+      const weakCrossWords = /* @__PURE__ */ new Set(["information", "communication", "media"]);
+      const hasStrongSpecificWord = queryTokens.length === 1 ? true : matchedWords.some(
+        (w) => !GENERIC_DISCIPLINE_WORDS.has(w) && !weakCrossWords.has(w)
+      );
+      const weighted = exactMatches.length + typoMatches.length * 0.85;
+      const ratio = weighted / queryTokens.length;
+      const meetsOverlapThreshold = queryTokens.length === 1 || ratio >= 0.5;
+      if (hasSpecificNonGenericWord && hasStrongSpecificWord && meetsOverlapThreshold) {
+        const relevanceScore = roundTo(0.7 + 0.1 * ratio, 3);
+        const programPoints = roundTo(Math.min(0.78, 0.78 * ratio), 3);
+        return {
+          tier: 5,
+          category: "Very Close Match",
+          relevanceScore,
+          programPoints,
+          matchedVia: "partial_keyword",
+          reason: `Partial keyword match in '${officialName}' (${matchedWords.join(", ")}).`
+        };
+      }
+    }
+  }
+  const topicText = cleanText(topic ?? "");
+  if (query2.isBroadCategory && topicText) {
+    const topicTokens = tokenizeMeaningful(topicText);
+    const topicHit = queryTokens.filter(
+      (qt2) => topicTokens.some(
+        (tt2) => tokenExactOrInflection(qt2, tt2) || tokenTypoMatches(qt2, tt2)
+      )
+    );
+    if (topicHit.length > 0) {
+      return {
+        tier: 7,
+        category: "Broad Match",
+        relevanceScore: 0.48,
+        programPoints: 0.55,
+        matchedVia: "broad_category",
+        reason: `Falls under the '${topicText}' academic area (${officialName}).`
+      };
+    }
+  }
+  if (universityContext && query2.normalized.length >= 2) {
+    const uniNameNorm = normalizeProgramText(universityContext.name || "");
+    const uniShortNorm = normalizeProgramText(
+      universityContext.short_name || ""
+    );
+    if (uniShortNorm && (uniShortNorm === query2.normalized || hasWholePhrase(uniShortNorm, query2.normalized)) || query2.normalized.length >= 4 && uniNameNorm && uniNameNorm.includes(query2.normalized)) {
+      return {
+        tier: 7,
+        category: "Broad Match",
+        relevanceScore: 0.45,
+        programPoints: 0.5,
+        matchedVia: "university_match",
+        reason: `Offered by ${universityContext.name || universityContext.short_name}.`
+      };
+    }
+  }
+  return null;
+}
+function deduplicatePrograms(programs) {
+  const seen = /* @__PURE__ */ new Set();
+  const unique = [];
+  for (const prog of programs) {
+    const uid = String(prog.university_id || "").toLowerCase();
+    const normName = normalizeProgramText(prog.name);
+    const key = `${uid}::${normName}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(prog);
+  }
+  return unique;
+}
+function searchAndRankPrograms(programs, rawQuery, options = {}) {
+  const deduped = deduplicatePrograms(programs);
+  const query2 = cleanText(rawQuery);
+  if (!query2) return [];
+  const matched = [];
+  for (const item of deduped) {
+    const match = evaluateProgramMatch(
+      query2,
+      item.name,
+      item.topic,
+      options.includeUniversityContext ? { name: item.university_name, short_name: item.short_name } : null
+    );
+    if (match) {
+      matched.push({ item, match });
+    }
+  }
+  const byName = [...matched].sort(
+    (a, b2) => a.item.name.localeCompare(b2.item.name) || String(a.item.university_name || "").localeCompare(
+      String(b2.item.university_name || "")
+    )
+  );
+  const byLength = mergeSort(byName, (r) => r.item.name.length, false);
+  const byScore = mergeSort(byLength, (r) => r.match.relevanceScore, true);
+  const byTier = mergeSort(byScore, (r) => r.match.tier, false);
+  return byTier;
+}
+
+// src/algorithms/universityFilter.ts
+function parseSectorFilter(raw) {
+  if (raw === null || raw === void 0 || raw === "") return [];
+  const parts = Array.isArray(raw) ? raw.flatMap((v2) => String(v2 ?? "").split(",")) : String(raw).split(",");
+  const normalized = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const part of parts) {
+    const cleaned = cleanText(part);
+    if (!cleaned) continue;
+    const lower = cleaned.toLowerCase();
+    if (lower === "all" || lower === "any" || lower === "both") {
+      return [];
+    }
+    if (lower === "public") {
+      if (!seen.has("Public")) {
+        seen.add("Public");
+        normalized.push("Public");
+      }
+    } else if (lower === "private") {
+      if (!seen.has("Private")) {
+        seen.add("Private");
+        normalized.push("Private");
+      }
+    } else {
+      throw new Error("Sector must be Public or Private");
+    }
+  }
+  return normalized;
+}
+function normalizeUniversitySector(raw) {
+  const cleaned = cleanText(typeof raw === "string" ? raw : "").toLowerCase();
+  if (cleaned === "public") return "Public";
+  if (cleaned === "private") return "Private";
+  return null;
+}
+function matchesSectorFilter(universitySector, allowedSectors) {
+  if (allowedSectors.length === 0 || allowedSectors.length >= 2) {
+    return true;
+  }
+  const actual = normalizeUniversitySector(universitySector);
+  if (!actual) return false;
+  return allowedSectors.includes(actual);
+}
+function matchesLocationFilter(city, campusLocation, locationFilter) {
+  const filter = cleanText(locationFilter ?? "");
+  if (!filter) return true;
+  const cityText = cleanText(typeof city === "string" ? city : "");
+  const campusText = cleanText(
+    typeof campusLocation === "string" ? campusLocation : ""
+  );
+  if (!cityText && !campusText) return false;
+  if (`${cityText} ${campusText}`.toLowerCase().includes("not specified")) {
+    return false;
+  }
+  let campusFocus = campusText;
+  if (!filter.toLowerCase().includes("metro")) {
+    campusFocus = campusText.replace(/\bmetro\s+manila\b/gi, "");
+  }
+  const filterKey = normalizeProgramText(filter);
+  const cityKey = normalizeProgramText(cityText);
+  const campusKey = normalizeProgramText(campusFocus);
+  const segments = campusFocus.split(",").map((s) => normalizeProgramText(s)).filter(Boolean);
+  if (!filterKey) return true;
+  if (filterKey === cityKey || segments.includes(filterKey)) {
+    return true;
+  }
+  if (` ${campusKey} `.includes(` ${filterKey} `) || ` ${cityKey} `.includes(` ${filterKey} `)) {
+    return true;
+  }
+  return false;
+}
+function applyUniversityHardFilters(items, filters) {
+  const sectors = parseSectorFilter(filters.sector);
+  const city = cleanText(filters.city ?? "") || null;
+  const eligible = [];
+  for (const item of items) {
+    if (!matchesSectorFilter(item.sector, sectors)) continue;
+    if (!matchesLocationFilter(item.city, item.campus_location, city)) continue;
+    eligible.push(item);
+  }
+  return {
+    eligible,
+    excludedCount: items.length - eligible.length,
+    applied: { sectors, city }
+  };
+}
+
+// src/algorithms/catalogQuery.ts
+function searchCatalogUniversities(schools, getPrograms, options) {
+  const sort = cleanText(options.sort || "featured") || "featured";
+  if (!["name", "programs", "featured"].includes(sort)) {
+    throw new Error("Unknown sort order");
+  }
+  const { eligible, excludedCount, applied } = applyUniversityHardFilters(
+    schools,
+    {
+      sector: options.sector,
+      city: options.city
+    }
+  );
+  const rawQuery = cleanText(options.search || "");
+  if (!rawQuery) {
+    const sorted = [...eligible].sort((a, b2) => {
+      if (sort === "name") return a.name.localeCompare(b2.name);
+      if (b2.program_count !== a.program_count) {
+        return b2.program_count - a.program_count;
+      }
+      return a.name.localeCompare(b2.name);
+    });
+    return {
+      items: sorted.map((u) => ({ ...u, search_match: null })),
+      total: sorted.length,
+      excluded_by_filters: excludedCount,
+      applied_filters: applied
+    };
+  }
+  const normQuery = normalizeProgramText(rawQuery);
+  const matched = [];
+  for (const school of eligible) {
+    const normName = normalizeProgramText(school.name);
+    const normShort = normalizeProgramText(school.short_name);
+    const normLoc = normalizeProgramText(school.campus_location);
+    const normExam = normalizeProgramText(school.exam_summary || "");
+    let uniTier = null;
+    let uniScore = 0;
+    let uniCategory = "Very Close Match";
+    if (normQuery && (normQuery === normShort || normQuery === normName)) {
+      uniTier = 1;
+      uniScore = 1;
+      uniCategory = "Exact Match";
+    } else if (normQuery && (` ${normName} `.includes(` ${normQuery} `) || ` ${normShort} `.includes(` ${normQuery} `))) {
+      uniTier = 2;
+      uniScore = 0.96;
+      uniCategory = "Exact Match";
+    } else if (normQuery.length >= 3 && (normName.includes(normQuery) || normShort.includes(normQuery) || normLoc.includes(normQuery) || normExam && normExam.includes(normQuery))) {
+      uniTier = 3;
+      uniScore = 0.88;
+      uniCategory = "Very Close Match";
+    }
+    const rankedProgs = searchAndRankPrograms(
+      getPrograms(school.id),
+      rawQuery,
+      { includeUniversityContext: false }
+    );
+    const bestProg = rankedProgs[0] ?? null;
+    if (uniTier === null && !bestProg) {
+      continue;
+    }
+    const useUniMatch = uniTier !== null && (!bestProg || uniTier <= bestProg.match.tier);
+    const bestTier = useUniMatch ? uniTier : bestProg.match.tier;
+    const bestScore = useUniMatch ? uniScore : bestProg.match.relevanceScore;
+    const bestCategory = useUniMatch ? uniCategory : bestProg.match.category;
+    const previewPrograms = rankedProgs.slice(0, 3).map((r) => ({
+      id: r.item.id,
+      name: r.item.name,
+      topic: r.item.topic,
+      match_category: r.match.category,
+      match_tier: r.match.tier
+    }));
+    matched.push({
+      ...school,
+      search_match: {
+        tier: bestTier,
+        category: bestCategory,
+        relevance_score: bestScore,
+        matched_via: useUniMatch ? "university" : "program",
+        matched_programs: previewPrograms,
+        matched_program_count: rankedProgs.length
+      }
+    });
+  }
+  let ordered;
+  if (sort === "name") {
+    ordered = [...matched].sort((a, b2) => a.name.localeCompare(b2.name));
+  } else if (sort === "programs") {
+    ordered = [...matched].sort(
+      (a, b2) => b2.program_count - a.program_count || a.name.localeCompare(b2.name)
+    );
+  } else {
+    const byName = [...matched].sort((a, b2) => a.name.localeCompare(b2.name));
+    const byHitCount = mergeSort(
+      byName,
+      (u) => u.search_match?.matched_program_count ?? 0,
+      true
+    );
+    const byScore = mergeSort(
+      byHitCount,
+      (u) => u.search_match?.relevance_score ?? 0,
+      true
+    );
+    ordered = mergeSort(byScore, (u) => u.search_match?.tier ?? 99, false);
+  }
+  return {
+    items: ordered,
+    total: ordered.length,
+    excluded_by_filters: excludedCount,
+    applied_filters: applied
+  };
+}
+function searchCatalogPrograms(rows, options) {
+  const schoolId = cleanText(options.university_id || "");
+  const topic = cleanText(options.topic || "");
+  const page = Math.max(1, Number(options.page || 1));
+  const limit2 = Math.max(1, Math.min(100, Number(options.limit || 12)));
+  const bySchoolAndTopic = rows.filter((p2) => {
+    if (schoolId && p2.university_id !== schoolId) return false;
+    if (topic && p2.topic !== topic) return false;
+    return true;
+  });
+  const { eligible, applied } = applyUniversityHardFilters(bySchoolAndTopic, {
+    sector: options.sector,
+    city: options.city
+  });
+  const deduped = deduplicatePrograms(eligible);
+  const rawQuery = cleanText(options.search || "");
+  let rankedRows;
+  let exactCount = 0;
+  let relatedCount = 0;
+  if (rawQuery) {
+    const ranked = searchAndRankPrograms(deduped, rawQuery, {
+      includeUniversityContext: true
+    });
+    rankedRows = ranked.map(({ item, match }) => {
+      if (match.tier <= 5) exactCount++;
+      else relatedCount++;
+      return {
+        ...item,
+        match_category: match.category,
+        match_tier: match.tier,
+        relevance_score: match.relevanceScore,
+        match_reason: match.reason
+      };
+    });
+  } else {
+    rankedRows = [...deduped].sort(
+      (a, b2) => a.name.localeCompare(b2.name) || String(a.id).localeCompare(String(b2.id))
+    ).map((item) => ({
+      ...item,
+      match_category: null,
+      match_tier: null,
+      relevance_score: null,
+      match_reason: null
+    }));
+  }
+  const start = (page - 1) * limit2;
+  return {
+    items: rankedRows.slice(start, start + limit2),
+    total: rankedRows.length,
+    exact_count: exactCount,
+    related_count: relatedCount,
+    page,
+    limit: limit2,
+    applied_filters: {
+      ...applied,
+      university_id: schoolId || null,
+      topic: topic || null
+    }
+  };
+}
+
+// src/algorithms/matching.ts
+var CRITERIA = ["program", "location", "sector"];
+var CRITERION_LABELS = {
+  program: "Preferred program",
+  location: "Preferred location",
+  sector: "University type",
+  budget: "Tuition & budget"
+};
+var DEFAULT_WEIGHTS = {
+  program: 0.55,
+  location: 0.25,
+  sector: 0.2
+};
+var DEFAULT_BUDGET_WEIGHT = 0.2;
+var FORMULA = "score = 100 \xD7 \u03A3(effective_weight[c] \xD7 points[c]) over supplied criteria with available data. Missing university data is labeled 'Information Unavailable' and excluded from the denominator rather than penalized as a mismatch.";
+var UNKNOWN_POLICY = "Missing or unavailable university data (such as unpublished private tuition) is labeled 'Information Unavailable' and excluded from the score denominator rather than penalized as a mismatch.";
+var STATUS_LABELS = {
+  matched: "Match",
+  partial: "Partial Match",
+  not_matched: "No Match",
+  unavailable: "Information Unavailable",
+  not_applicable: "Not Applicable"
+};
+function textOf(value) {
+  return typeof value === "string" ? cleanText(value) : "";
+}
+function roundTo2(value, decimals) {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+var VALID_BUDGET_BASES = /* @__PURE__ */ new Set(["semester", "trimester", "year", "unit"]);
 function normalizeWeights(weights) {
   const merged = { ...DEFAULT_WEIGHTS };
   if (weights) {
     for (const [name4, value] of Object.entries(weights)) {
+      if (name4 === "budget") {
+        continue;
+      }
       if (!(name4 in DEFAULT_WEIGHTS)) {
         throw new Error(`Unknown weight criterion: ${name4}`);
       }
@@ -33834,10 +34820,51 @@ function normalizeWeights(weights) {
     throw new Error("At least one criterion weight must be greater than zero");
   }
   return {
-    program: roundTo(merged.program / total, 4),
-    location: roundTo(merged.location / total, 4),
-    budget: roundTo(merged.budget / total, 4),
-    sector: roundTo(merged.sector / total, 4)
+    program: roundTo2(merged.program / total, 4),
+    location: roundTo2(merged.location / total, 4),
+    sector: roundTo2(merged.sector / total, 4)
+  };
+}
+function resolveScoringWeights(rawWeights, includeBudget) {
+  const coreWeights = normalizeWeights(rawWeights);
+  if (!includeBudget) {
+    return {
+      coreWeights,
+      activeWeights: {
+        program: coreWeights.program,
+        location: coreWeights.location,
+        sector: coreWeights.sector,
+        budget: 0
+      }
+    };
+  }
+  let budgetRaw = DEFAULT_BUDGET_WEIGHT;
+  if (rawWeights && typeof rawWeights.budget === "number" && Number.isFinite(rawWeights.budget) && rawWeights.budget >= 0) {
+    budgetRaw = rawWeights.budget;
+  }
+  const baseProgram = rawWeights && typeof rawWeights.program === "number" && Number.isFinite(rawWeights.program) && rawWeights.program >= 0 ? rawWeights.program : coreWeights.program * (1 - DEFAULT_BUDGET_WEIGHT);
+  const baseLocation = rawWeights && typeof rawWeights.location === "number" && Number.isFinite(rawWeights.location) && rawWeights.location >= 0 ? rawWeights.location : coreWeights.location * (1 - DEFAULT_BUDGET_WEIGHT);
+  const baseSector = rawWeights && typeof rawWeights.sector === "number" && Number.isFinite(rawWeights.sector) && rawWeights.sector >= 0 ? rawWeights.sector : coreWeights.sector * (1 - DEFAULT_BUDGET_WEIGHT);
+  const sum = baseProgram + baseLocation + baseSector + budgetRaw;
+  if (sum <= 0) {
+    return {
+      coreWeights,
+      activeWeights: {
+        program: 0.44,
+        location: 0.2,
+        sector: 0.16,
+        budget: 0.2
+      }
+    };
+  }
+  return {
+    coreWeights,
+    activeWeights: {
+      program: roundTo2(baseProgram / sum, 4),
+      location: roundTo2(baseLocation / sum, 4),
+      sector: roundTo2(baseSector / sum, 4),
+      budget: roundTo2(budgetRaw / sum, 4)
+    }
   };
 }
 function parseWeights(value) {
@@ -33855,118 +34882,63 @@ function parseWeights(value) {
     if (!raw || Number.isNaN(num)) {
       throw new Error(`Invalid weight value for ${name4}`);
     }
+    if (name4 !== "budget" && !(name4 in DEFAULT_WEIGHTS)) {
+      throw new Error(`Unknown weight criterion: ${name4}`);
+    }
+    if (!Number.isFinite(num) || num < 0) {
+      throw new Error(
+        `Weight for ${name4} must be a finite non-negative number`
+      );
+    }
     parsed[name4] = num;
   }
-  return normalizeWeights(parsed);
+  normalizeWeights(parsed);
+  return parsed;
 }
 function validatePreferences(preferences) {
   const raw = preferences ?? {};
   const program = textOf(raw.program);
   const city = textOf(raw.city ?? raw.location);
-  const sector = textOf(raw.sector);
+  const sectors = parseSectorFilter(raw.sectors ?? raw.sector);
+  const sector = sectors.length === 1 ? sectors[0] : sectors.length > 1 ? sectors.join(",") : null;
   if (program.length > 200 || city.length > 200) {
     throw new Error(
       "Program and location preferences must be at most 200 characters"
     );
   }
-  if (sector && sector !== "Public" && sector !== "Private") {
-    throw new Error("Sector must be Public or Private");
-  }
-  const budgetRaw = raw.budget;
   let budget = null;
-  if (budgetRaw !== void 0 && budgetRaw !== null && budgetRaw !== "") {
-    if (typeof budgetRaw === "boolean") {
-      throw new Error("Budget must be a number");
+  if (raw.budget !== null && raw.budget !== void 0 && String(raw.budget).trim() !== "") {
+    const parsedBudget = Number(raw.budget);
+    if (!Number.isFinite(parsedBudget) || parsedBudget < 0 || parsedBudget > 1e7) {
+      throw new Error("Budget must be a number between 0 and 10,000,000 PHP");
     }
-    const num = Number(budgetRaw);
-    if (!Number.isFinite(num)) {
-      throw new Error("Budget must be a number");
-    }
-    if (num < 0 || num > 1e7) {
-      throw new Error("Budget must be between 0 and 10,000,000 PHP");
-    }
-    budget = num;
+    budget = roundTo2(parsedBudget, 2);
   }
-  const rawBasis = textOf(raw.budget_basis);
-  const basis = rawBasis || "semester";
-  if (!BUDGET_BASES.includes(basis)) {
-    throw new Error("Budget basis must be semester, trimester, year or unit");
-  }
-  if (budget === null && rawBasis) {
-    throw new Error("Provide a budget when choosing a budget basis");
-  }
+  const rawBasis = textOf(raw.budget_basis ?? raw.budgetBasis).toLowerCase();
+  const budget_basis = budget !== null ? VALID_BUDGET_BASES.has(rawBasis) ? rawBasis : "semester" : null;
   const cleaned = {
     program: program || null,
     city: city || null,
-    sector: sector || null,
+    sector,
+    sectors,
     budget,
-    budget_basis: budget !== null ? basis : null
+    budget_basis
   };
-  if (!cleaned.program && !cleaned.city && !cleaned.sector && budget === null) {
+  if (!cleaned.program && !cleaned.city && cleaned.sectors.length === 0 && cleaned.budget === null) {
     throw new Error(
-      "Provide at least one preference: program, location, budget or sector"
+      "Provide at least one preference: program, location, university type, or budget"
     );
   }
   return cleaned;
 }
-function programMatch(preference, programName) {
-  const name4 = textOf(programName);
-  if (!name4) {
-    return {
-      points: 0,
-      unknown: true,
-      reason: "No program information is available."
-    };
-  }
-  const prefKey = normalizeKey(preference);
-  const nameKey = normalizeKey(name4);
-  if (prefKey === nameKey) {
-    return {
-      points: 1,
-      unknown: false,
-      reason: `Exact program match: ${name4}.`
-    };
-  }
-  const wanted = tokensOf(preference);
-  const available = tokensOf(name4);
-  const matched = Array.from(wanted).filter((w) => available.has(w));
-  if (wanted.size > 0 && matched.length === wanted.size) {
-    return {
-      points: 0.9,
-      unknown: false,
-      reason: `All preferred keywords appear in '${name4}'.`
-    };
-  }
-  if (matched.length > 0) {
-    const ratio = matched.length / wanted.size;
-    const points = roundTo(Math.min(0.85, 0.85 * ratio), 3);
-    return {
-      points,
-      unknown: false,
-      reason: `Partial program match in '${name4}' (${matched.sort().join(", ")} of ${Array.from(wanted).sort().join(", ")}).`
-    };
-  }
-  return {
-    points: 0,
-    unknown: false,
-    reason: `The program name '${name4}' does not contain the preferred keywords.`
-  };
-}
 function locationMatch(preference, city, campus) {
   const cityText = textOf(city);
   const campusText = textOf(campus);
-  if (!cityText && !campusText) {
+  if (!cityText && !campusText || `${cityText} ${campusText}`.toLowerCase().includes("not specified")) {
     return {
-      points: 0,
-      unknown: true,
-      reason: "No campus location is available."
-    };
-  }
-  if (`${cityText} ${campusText}`.toLowerCase().includes("not specified")) {
-    return {
-      points: 0,
-      unknown: true,
-      reason: "No campus location is available."
+      points: null,
+      unavailable: true,
+      reason: "Campus location information is unavailable for this university; excluded from score denominator."
     };
   }
   let campusFocus = campusText;
@@ -33974,151 +34946,243 @@ function locationMatch(preference, city, campus) {
     campusFocus = campusText.replace(/\bmetro\s+manila\b/gi, "");
   }
   const available = [cityText, cleanText(campusFocus)].filter(Boolean).join(" ");
-  const prefKey = normalizeKey(preference);
-  const cityKey = normalizeKey(cityText);
-  const campusKey = normalizeKey(campusFocus);
-  if (prefKey && prefKey === cityKey) {
+  const prefKey = normalizeProgramText(preference);
+  const cityKey = normalizeProgramText(cityText);
+  const campusKey = normalizeProgramText(campusFocus);
+  const campusSegments = campusFocus.split(",").map((segment) => normalizeProgramText(segment)).filter(Boolean);
+  if (prefKey && (prefKey === cityKey || campusSegments.includes(prefKey))) {
     return {
       points: 1,
-      unknown: false,
-      reason: `Campus city matches ${cityText}.`
+      unavailable: false,
+      reason: `Campus location matches ${preference} (${campusText || cityText}).`
+    };
+  }
+  if (prefKey && (` ${cityKey} `.includes(` ${prefKey} `) || ` ${campusKey} `.includes(` ${prefKey} `))) {
+    return {
+      points: 1,
+      unavailable: false,
+      reason: `Campus is located in ${preference} (${campusText || available}).`
     };
   }
   if (prefKey && (cityKey.includes(prefKey) || campusKey.includes(prefKey))) {
     return {
       points: 0.85,
-      unknown: false,
-      reason: `Preferred location appears in '${available}'.`
-    };
-  }
-  const wanted = tokensOf(preference);
-  const availTokens = tokensOf(available);
-  const matched = Array.from(wanted).filter((w) => availTokens.has(w));
-  if (matched.length > 0) {
-    return {
-      points: 0.5,
-      unknown: false,
-      reason: `Partial location match in '${available}'.`
+      unavailable: false,
+      reason: `Preferred location appears in '${campusText || available}'.`
     };
   }
   return {
     points: 0,
-    unknown: false,
-    reason: `'${available}' is outside the preferred location.`
+    unavailable: false,
+    reason: `'${campusText || available}' is outside the preferred location (${preference}).`
   };
 }
-function formatPhp(n) {
-  return Math.round(n).toLocaleString("en-US");
+function sectorMatch(allowedSectors, sector) {
+  const actual = normalizeUniversitySector(sector);
+  if (!actual) {
+    return {
+      points: null,
+      unavailable: true,
+      reason: "University type information is unavailable; excluded from score denominator."
+    };
+  }
+  if (allowedSectors.length === 0 || allowedSectors.includes(actual)) {
+    return {
+      points: 1,
+      unavailable: false,
+      reason: allowedSectors.length === 1 ? `Confirmed ${actual} university (matches selected filter).` : `Confirmed ${actual} university.`
+    };
+  }
+  return {
+    points: 0,
+    unavailable: false,
+    reason: `University is ${actual}, not ${allowedSectors.join(" or ")}.`
+  };
+}
+function convertToAnnualPhp(amount, basis) {
+  const b2 = basis.trim().toLowerCase();
+  if (b2 === "year" || b2 === "annual") return amount;
+  if (b2 === "semester" || b2 === "sem") return amount * 2;
+  if (b2 === "trimester" || b2 === "term") return amount * 3;
+  if (b2 === "unit") return amount * 36;
+  return null;
 }
 function budgetMatch(budget, basis, fees) {
-  const comparable = [];
-  for (const fee of fees) {
-    if (!fee || fee.basis !== basis) continue;
-    const low = fee.amount_min;
-    const high = fee.amount_max;
-    if (typeof low !== "number" || typeof high !== "number") continue;
-    if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high < low)
-      continue;
-    comparable.push({ min: low, max: high });
-  }
-  if (comparable.length === 0) {
-    return {
-      points: 0,
-      unknown: true,
-      reason: `No published tuition amount with a '${basis}' basis is available; budget fit cannot be confirmed.`
-    };
-  }
-  comparable.sort((a, b2) => a.min - b2.min || a.max - b2.max);
-  const cheapest = comparable[0];
-  const amount = `PHP ${formatPhp(cheapest.min)}\u2013${formatPhp(cheapest.max)} per ${basis}`;
-  if (cheapest.max <= budget) {
+  const safeFees = Array.isArray(fees) ? fees : [];
+  const isFree = safeFees.some(
+    (f2) => f2.amount_min === 0 && f2.amount_max === 0
+  );
+  if (isFree) {
     return {
       points: 1,
-      unknown: false,
-      reason: `Published tuition (${amount}) is within the budget.`
+      unavailable: false,
+      reason: `Free undergraduate tuition under RA 10931 fits within your PHP ${budget.toLocaleString("en-PH")} / ${basis} budget.`
     };
   }
-  if (cheapest.min <= budget) {
+  const numericFees = safeFees.filter(
+    (f2) => typeof f2.amount_min === "number" && Number.isFinite(f2.amount_min) || typeof f2.amount_max === "number" && Number.isFinite(f2.amount_max)
+  );
+  if (numericFees.length === 0) {
     return {
-      points: 0.5,
-      unknown: false,
-      reason: `Published tuition (${amount}) straddles the budget.`
+      points: null,
+      unavailable: true,
+      reason: "Official tuition rates are not published in our dataset; not penalized in your match score."
     };
+  }
+  const budgetAnnual = convertToAnnualPhp(budget, basis);
+  let bestPoints = -1;
+  let bestReason = "";
+  for (const fee of numericFees) {
+    const minAmt = typeof fee.amount_min === "number" ? fee.amount_min : fee.amount_max ?? 0;
+    const maxAmt = typeof fee.amount_max === "number" ? fee.amount_max : minAmt;
+    const feeBasis = (fee.basis || "semester").toLowerCase();
+    let compMin = minAmt;
+    let compMax = maxAmt;
+    let compBudget = budget;
+    if (feeBasis !== basis && budgetAnnual !== null) {
+      const feeMinAnnual = convertToAnnualPhp(minAmt, feeBasis);
+      const feeMaxAnnual = convertToAnnualPhp(maxAmt, feeBasis);
+      if (feeMinAnnual !== null && feeMaxAnnual !== null) {
+        compMin = feeMinAnnual;
+        compMax = feeMaxAnnual;
+        compBudget = budgetAnnual;
+      }
+    }
+    let pts = 0;
+    let reason = "";
+    if (compMax <= compBudget) {
+      pts = 1;
+      reason = `Published tuition (PHP ${minAmt.toLocaleString("en-PH")}\u2013${maxAmt.toLocaleString("en-PH")} / ${feeBasis}) fits within your budget.`;
+    } else if (compMin <= compBudget) {
+      pts = 0.8;
+      reason = `Lower tuition estimate (PHP ${minAmt.toLocaleString("en-PH")} / ${feeBasis}) fits within your budget; upper range may exceed it.`;
+    } else if (compBudget > 0 && compMin <= compBudget * 1.2) {
+      pts = 0.5;
+      reason = `Published tuition starts slightly above your budget (within 20%).`;
+    } else {
+      pts = 0;
+      reason = `Published tuition (PHP ${minAmt.toLocaleString("en-PH")} / ${feeBasis}) exceeds your PHP ${budget.toLocaleString("en-PH")} / ${basis} budget.`;
+    }
+    if (pts > bestPoints) {
+      bestPoints = pts;
+      bestReason = reason;
+    }
   }
   return {
-    points: 0,
-    unknown: false,
-    reason: `Published tuition (${amount}) exceeds the budget.`
+    points: bestPoints >= 0 ? bestPoints : null,
+    unavailable: bestPoints < 0,
+    reason: bestReason || "Official tuition rates are unavailable; not penalized in your match score."
   };
 }
-function sectorMatch(preference, sector) {
-  const value = textOf(sector);
-  if (!value || value.toLowerCase() === "not specified" || value.toLowerCase() === "unknown") {
-    return {
-      points: 0,
-      unknown: true,
-      reason: "University type is not available."
-    };
-  }
-  if (value.toLowerCase() === preference.toLowerCase()) {
-    return {
-      points: 1,
-      unknown: false,
-      reason: `Confirmed ${value} university.`
-    };
-  }
-  return {
-    points: 0,
-    unknown: false,
-    reason: `University is ${value}, not ${preference}.`
-  };
-}
-function scoreCandidate(candidate, preferences, weights) {
-  const explanations = [];
-  let numerator = 0;
-  let denominator = 0;
+function scoreCandidate(candidate, preferences, weights, precomputedProgramMatch) {
+  const evaluatedEntries = [];
+  const notApplicableEntries = [];
   const missing = [];
-  for (const criterion of CRITERIA) {
-    const preference = criterion === "program" ? preferences.program : criterion === "location" ? preferences.city : criterion === "budget" ? preferences.budget : preferences.sector;
-    if (preference === null || preference === void 0 || preference === "") {
+  const criteriaToCheck = preferences.budget !== null ? ["program", "location", "sector", "budget"] : ["program", "location", "sector"];
+  for (const criterion of criteriaToCheck) {
+    const isSupplied = criterion === "program" ? Boolean(preferences.program) : criterion === "location" ? Boolean(preferences.city) : criterion === "sector" ? preferences.sectors.length > 0 : preferences.budget !== null;
+    if (!isSupplied) {
+      notApplicableEntries.push({
+        criterion,
+        label: CRITERION_LABELS[criterion],
+        weight: roundTo2(weights[criterion] ?? 0, 4),
+        effective_weight: 0,
+        points: null,
+        status: "not_applicable",
+        status_label: STATUS_LABELS.not_applicable,
+        reason: "Not specified in your preferences."
+      });
       continue;
     }
     let result;
     if (criterion === "program") {
-      result = programMatch(String(preference), candidate.program_name);
+      if (!candidate.program_name) {
+        result = {
+          points: null,
+          unavailable: true,
+          reason: "No program catalog is available for this university."
+        };
+      } else {
+        const pm = precomputedProgramMatch !== void 0 ? precomputedProgramMatch : evaluateProgramMatch(
+          preferences.program,
+          candidate.program_name,
+          candidate.topic
+        );
+        if (pm) {
+          result = {
+            points: pm.programPoints,
+            unavailable: false,
+            reason: pm.reason
+          };
+        } else {
+          result = {
+            points: 0,
+            unavailable: false,
+            reason: `'${candidate.program_name}' does not match '${preferences.program}'.`
+          };
+        }
+      }
     } else if (criterion === "location") {
       result = locationMatch(
-        String(preference),
+        preferences.city,
         candidate.city,
         candidate.campus_location
       );
-    } else if (criterion === "budget") {
-      result = budgetMatch(
-        Number(preference),
-        preferences.budget_basis || "semester",
-        candidate.fees || []
-      );
+    } else if (criterion === "sector") {
+      result = sectorMatch(preferences.sectors, candidate.sector);
     } else {
-      result = sectorMatch(String(preference), candidate.sector);
+      result = budgetMatch(
+        preferences.budget,
+        preferences.budget_basis || "semester",
+        candidate.fees
+      );
     }
     const weight = weights[criterion] ?? 0;
-    const points = result.points;
-    const status = result.unknown ? "unknown" : points >= 1 ? "matched" : points > 0 ? "partial" : "not_matched";
-    if (result.unknown) {
+    let status;
+    if (result.unavailable || result.points === null) {
+      status = "unavailable";
       missing.push(CRITERION_LABELS[criterion]);
+    } else if (result.points >= 1) {
+      status = "matched";
+    } else if (result.points > 0) {
+      status = "partial";
+    } else {
+      status = "not_matched";
     }
-    numerator += weight * points;
-    denominator += weight;
+    evaluatedEntries.push({ criterion, weight, result, status });
+  }
+  const availableWeightSum = evaluatedEntries.reduce(
+    (sum, entry) => entry.status !== "unavailable" ? sum + entry.weight : sum,
+    0
+  );
+  let numerator = 0;
+  const explanations = [];
+  for (const entry of evaluatedEntries) {
+    const isAvailable = entry.status !== "unavailable" && entry.result.points !== null;
+    const effectiveWeight = isAvailable && availableWeightSum > 0 ? entry.weight / availableWeightSum : 0;
+    if (isAvailable && entry.result.points !== null) {
+      numerator += effectiveWeight * entry.result.points;
+    }
     explanations.push({
-      criterion,
-      label: CRITERION_LABELS[criterion],
-      weight: roundTo(weight, 4),
-      points: roundTo(points, 3),
-      status,
-      reason: result.reason
+      criterion: entry.criterion,
+      label: CRITERION_LABELS[entry.criterion],
+      weight: roundTo2(entry.weight, 4),
+      effective_weight: roundTo2(effectiveWeight, 4),
+      points: entry.result.points !== null ? roundTo2(entry.result.points, 3) : null,
+      status: entry.status,
+      status_label: STATUS_LABELS[entry.status],
+      reason: entry.result.reason
     });
   }
-  const score = denominator > 0 ? roundTo(100 * numerator / denominator, 1) : 0;
+  explanations.push(...notApplicableEntries);
+  const score = availableWeightSum > 0 ? roundTo2(100 * numerator, 1) : 0;
+  const searchMatchSummary = precomputedProgramMatch ? {
+    tier: precomputedProgramMatch.tier,
+    category: precomputedProgramMatch.category,
+    relevance_score: precomputedProgramMatch.relevanceScore,
+    matched_via: precomputedProgramMatch.matchedVia,
+    reason: precomputedProgramMatch.reason
+  } : null;
   return {
     university_id: candidate.university_id,
     university_name: candidate.university_name,
@@ -34130,31 +35194,128 @@ function scoreCandidate(candidate, preferences, weights) {
     program_name: candidate.program_name,
     topic: candidate.topic,
     score,
+    search_match: searchMatchSummary,
     explanations,
     missing,
     unknown: missing.length > 0
   };
 }
+function selectDiverseTopMatches(ranked, limit2, perUniversityCap) {
+  if (ranked.length <= limit2) return ranked;
+  const picked = [];
+  const overflow = [];
+  const counts = /* @__PURE__ */ new Map();
+  for (const item of ranked) {
+    const seen = counts.get(item.university_id) ?? 0;
+    if (seen < perUniversityCap && picked.length < limit2) {
+      picked.push(item);
+      counts.set(item.university_id, seen + 1);
+    } else {
+      overflow.push(item);
+    }
+  }
+  for (const item of overflow) {
+    if (picked.length >= limit2) break;
+    picked.push(item);
+  }
+  const byScore = mergeSortByScore(picked);
+  return mergeSort(byScore, (item) => item.search_match?.tier ?? 99, false);
+}
 function recommend(candidates, preferences, weights, limit2 = 20) {
   const cleanedPreferences = validatePreferences(preferences);
-  const normalizedWeights = normalizeWeights(weights);
+  const { coreWeights, activeWeights } = resolveScoringWeights(
+    weights,
+    cleanedPreferences.budget !== null
+  );
   if (!Number.isInteger(limit2) || limit2 < 1 || limit2 > 100) {
     throw new Error("limit must be an integer between 1 and 100");
   }
-  const scored = candidates.map(
-    (candidate) => scoreCandidate(candidate, cleanedPreferences, normalizedWeights)
+  const { eligible, excludedCount, applied } = applyUniversityHardFilters(
+    candidates,
+    {
+      sector: cleanedPreferences.sectors,
+      city: cleanedPreferences.city
+    }
   );
-  const ranked = mergeSortByScore(scored);
+  const dedupedEligible = cleanedPreferences.program ? deduplicatePrograms(
+    eligible.filter((c) => Boolean(c.program_name)).map((c) => ({ ...c, name: c.program_name || "" }))
+  ).map(({ name: _ignored, ...rest }) => rest) : (() => {
+    const seenUni = /* @__PURE__ */ new Set();
+    const uniRows = [];
+    for (const c of eligible) {
+      if (seenUni.has(c.university_id)) continue;
+      seenUni.add(c.university_id);
+      uniRows.push({
+        ...c,
+        program_id: null,
+        program_name: null,
+        topic: null
+      });
+    }
+    return uniRows;
+  })();
+  const scored = [];
+  for (const candidate of dedupedEligible) {
+    let progMatch = null;
+    if (cleanedPreferences.program) {
+      progMatch = evaluateProgramMatch(
+        cleanedPreferences.program,
+        candidate.program_name || "",
+        candidate.topic
+      );
+      if (!progMatch) continue;
+    }
+    const result = scoreCandidate(
+      candidate,
+      cleanedPreferences,
+      activeWeights,
+      cleanedPreferences.program ? progMatch : void 0
+    );
+    const allSuppliedUnavailable = result.explanations.some((ex) => ex.status === "unavailable") && !result.explanations.some(
+      (ex) => ex.status === "matched" || ex.status === "partial" || ex.status === "not_matched"
+    );
+    if (result.score <= 0 && !allSuppliedUnavailable) continue;
+    scored.push(result);
+  }
+  const byName = [...scored].sort(
+    (a, b2) => a.university_name.localeCompare(b2.university_name) || String(a.program_name || "").localeCompare(String(b2.program_name || ""))
+  );
+  const byCompleteness = mergeSort(byName, (item) => item.missing.length, false);
+  const byRelevance = cleanedPreferences.program ? mergeSort(
+    byCompleteness,
+    (item) => item.search_match?.relevance_score ?? 0,
+    true
+  ) : byCompleteness;
+  const byScore = mergeSortByScore(byRelevance);
+  const ranked = cleanedPreferences.program ? mergeSort(byScore, (item) => item.search_match?.tier ?? 99, false) : byScore;
+  const exactMatchCount = ranked.filter(
+    (item) => item.search_match && (item.search_match.category === "Exact Match" || item.search_match.category === "Very Close Match")
+  ).length;
+  const relatedMatchCount = ranked.filter(
+    (item) => item.search_match && (item.search_match.category === "Related Match" || item.search_match.category === "Broad Match")
+  ).length;
+  const items = cleanedPreferences.program ? selectDiverseTopMatches(ranked, limit2, 3) : ranked.slice(0, limit2);
   return {
-    items: ranked.slice(0, limit2),
+    items,
     total: ranked.length,
+    exact_match_count: exactMatchCount,
+    related_match_count: relatedMatchCount,
+    excluded_by_filters: excludedCount,
+    applied_filters: {
+      sectors: applied.sectors,
+      city: applied.city,
+      program: cleanedPreferences.program,
+      budget: cleanedPreferences.budget,
+      budget_basis: cleanedPreferences.budget_basis
+    },
     preferences: cleanedPreferences,
-    weights: normalizedWeights,
+    weights: coreWeights,
+    active_weights: activeWeights,
     default_weights: { ...DEFAULT_WEIGHTS },
     criteria: { ...CRITERION_LABELS },
     formula: FORMULA,
-    algorithm: "Hand-written stable merge sort (src/algorithms/mergeSort.ts)",
-    unknown_policy: "Missing source data scores 0 for that criterion and is reported as unknown; it is never treated as a match.",
+    algorithm: "Hard-filter -> hybrid program search relevance -> independent weighted compatibility scoring (stable merge sort)",
+    unknown_policy: UNKNOWN_POLICY,
     limit: limit2
   };
 }
@@ -34206,13 +35367,23 @@ function mergeLiveAndBaselineCatalog(liveRecords, baselineRecords) {
   return [...byId.values()].sort((a, b2) => a.name.localeCompare(b2.name));
 }
 
-// client/catalogService.ts
+// client/catalogService.js
+var CatalogOpType;
+(function(CatalogOpType2) {
+  CatalogOpType2["CREATE"] = "create";
+  CatalogOpType2["UPDATE"] = "update";
+  CatalogOpType2["DELETE"] = "delete";
+  CatalogOpType2["LIST"] = "list";
+  CatalogOpType2["GET"] = "get";
+  CatalogOpType2["WRITE"] = "write";
+})(CatalogOpType || (CatalogOpType = {}));
 var VALID_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 var VALID_COLORS = /* @__PURE__ */ new Set(["green", "maroon", "gold", "rust", "lilac"]);
 var VALID_STATUSES = /* @__PURE__ */ new Set(["pending", "partial", "verified"]);
 var BOOTSTRAPPED_ADMIN_EMAILS = /* @__PURE__ */ new Set(["enricomigsduran@gmail.com"]);
 function isBootstrappedAdminUser(user) {
-  if (!user || !user.emailVerified || !user.email) return false;
+  if (!user || !user.emailVerified || !user.email)
+    return false;
   return BOOTSTRAPPED_ADMIN_EMAILS.has(user.email.trim().toLowerCase());
 }
 function slugifyCatalogId(raw) {
@@ -34223,7 +35394,8 @@ function cleanStr(val, maxLen) {
 }
 function cleanHttpsUrl(val, maxLen = 500) {
   const s = cleanStr(val, maxLen);
-  if (!s) return "";
+  if (!s)
+    return "";
   try {
     const parsed = new URL(s);
     if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
@@ -34240,7 +35412,8 @@ function sanitizeCatalogUniversity(raw, adminUid) {
     throw new Error("University slug ID must contain letters, numbers, hyphens, or underscores.");
   }
   const name4 = cleanStr(raw.name, 200);
-  if (!name4) throw new Error("University name is required.");
+  if (!name4)
+    throw new Error("University name is required.");
   const shortName = cleanStr(raw.shortName || name4, 60) || name4.slice(0, 60);
   const city = cleanStr(raw.city || "Manila", 100) || "Manila";
   const campusLocation = cleanStr(raw.campusLocation || city, 300) || city;
@@ -34301,17 +35474,9 @@ function sanitizeCatalogUniversity(raw, adminUid) {
     discardedValue: cleanStr(c?.discardedValue, 300),
     reason: cleanStr(c?.reason, 300)
   })).filter((c) => c.field.length > 0);
-  const sourceUrls = Array.from(
-    new Set(
-      (Array.isArray(raw.sourceUrls) ? raw.sourceUrls : []).map((u) => cleanHttpsUrl(u)).filter(Boolean)
-    )
-  ).slice(0, 50);
+  const sourceUrls = Array.from(new Set((Array.isArray(raw.sourceUrls) ? raw.sourceUrls : []).map((u) => cleanHttpsUrl(u)).filter(Boolean))).slice(0, 50);
   const sourceNotes = (Array.isArray(raw.sourceNotes) ? raw.sourceNotes : []).map((n) => cleanStr(n, 600)).filter(Boolean).slice(0, 30);
-  const academicYears = Array.from(
-    new Set(
-      (Array.isArray(raw.academicYears) ? raw.academicYears : []).map((y2) => cleanStr(y2, 40)).filter(Boolean)
-    )
-  ).slice(0, 10);
+  const academicYears = Array.from(new Set((Array.isArray(raw.academicYears) ? raw.academicYears : []).map((y2) => cleanStr(y2, 40)).filter(Boolean))).slice(0, 10);
   return {
     id,
     name: name4,
@@ -34340,8 +35505,10 @@ function sanitizeCatalogUniversity(raw, adminUid) {
   };
 }
 async function verifyAdminAccess(db2, user) {
-  if (!user || !user.emailVerified) return false;
-  if (isBootstrappedAdminUser(user)) return true;
+  if (!user || !user.emailVerified)
+    return false;
+  if (isBootstrappedAdminUser(user))
+    return true;
   try {
     const snap = await getDoc(doc(db2, "admins", user.uid));
     return snap.exists();
@@ -34352,14 +35519,11 @@ async function verifyAdminAccess(db2, user) {
 async function loadPublishedCatalogUniversities(db2, reportError) {
   const path = "catalogUniversities";
   try {
-    const q = query(
-      collection(db2, path),
-      where("isPublished", "==", true)
-    );
+    const q = query(collection(db2, path), where("isPublished", "==", true));
     const snap = await getDocs(q);
     return snap.docs.map((d) => d.data()).sort((a, b2) => a.name.localeCompare(b2.name));
   } catch (error) {
-    reportError(error, "list" /* LIST */, path);
+    reportError(error, CatalogOpType.LIST, path);
   }
 }
 async function saveCatalogUniversity(db2, user, draft, reportError) {
@@ -34386,7 +35550,7 @@ async function saveCatalogUniversity(db2, user, draft, reportError) {
     });
     return clean;
   } catch (error) {
-    reportError(error, "write" /* WRITE */, path);
+    reportError(error, CatalogOpType.WRITE, path);
   }
 }
 async function deleteCatalogUniversity(db2, universityId, reportError) {
@@ -34397,7 +35561,7 @@ async function deleteCatalogUniversity(db2, universityId, reportError) {
   try {
     await deleteDoc(doc(db2, "catalogUniversities", universityId));
   } catch (error) {
-    reportError(error, "delete" /* DELETE */, path);
+    reportError(error, CatalogOpType.DELETE, path);
   }
 }
 async function recordCollectionRun(db2, user, run, reportError) {
@@ -34421,7 +35585,7 @@ async function recordCollectionRun(db2, user, run, reportError) {
     });
     return runId;
   } catch (error) {
-    reportError(error, "create" /* CREATE */, path);
+    reportError(error, CatalogOpType.CREATE, path);
   }
 }
 async function getFreshIdToken(auth2) {
@@ -34432,12 +35596,8 @@ async function getFreshIdToken(auth2) {
   return user.getIdToken();
 }
 function catalogRecordToExplorerDetail(docItem) {
-  const tuitionAmountCount = docItem.tuitionFees.filter(
-    (f2) => typeof f2.amountMin === "number" || typeof f2.amountMax === "number"
-  ).length;
-  const freeTuition = docItem.tuitionFees.some(
-    (f2) => f2.amountMin === 0 && f2.amountMax === 0
-  );
+  const tuitionAmountCount = docItem.tuitionFees.filter((f2) => typeof f2.amountMin === "number" || typeof f2.amountMax === "number").length;
+  const freeTuition = docItem.tuitionFees.some((f2) => f2.amountMin === 0 && f2.amountMax === 0);
   const firstExam = docItem.entranceExaminations[0];
   let examSummary = null;
   if (firstExam) {
@@ -34528,6 +35688,8 @@ function catalogRecordToExplorerDetail(docItem) {
       university_name: docItem.name,
       short_name: docItem.shortName,
       city: docItem.city,
+      campus_location: docItem.campusLocation,
+      sector: docItem.sector,
       color: docItem.color,
       name: p2.name,
       topic: p2.topic,
@@ -34608,6 +35770,14 @@ function scoreLiveCatalogRecommendations(records, preferences, rawWeights, maxIt
   }
   const weights = typeof rawWeights === "string" ? parseWeights(rawWeights) : rawWeights ?? null;
   return recommend(candidates, preferences, weights, maxItems);
+}
+function queryLiveCatalogUniversities(details, options) {
+  const byId = new Map(details.map((u) => [u.id, u]));
+  return searchCatalogUniversities(details, (schoolId) => byId.get(schoolId)?.programs || [], options);
+}
+function queryLiveCatalogPrograms(details, options) {
+  const allPrograms = details.flatMap((u) => u.programs || []);
+  return searchCatalogPrograms(allPrograms, options);
 }
 
 // client/adminAccounts.ts
@@ -35827,7 +36997,7 @@ var AdminCatalogController = class {
       return `${u.name} ${u.shortName} ${u.city} ${u.id}`.toLowerCase().includes(q);
     });
     if (!filtered.length) {
-      listEl.innerHTML = this.universities.length ? '<p class="account-empty">No universities match that search filter.</p>' : '<p class="account-empty">Your cloud catalog is empty. Click <strong>Seed baseline (15 schools)</strong> above to populate the Metro Manila directory, or add a university manually.</p>';
+      listEl.innerHTML = this.universities.length ? '<p class="account-empty">No universities match that search filter.</p>' : '<p class="account-empty">Your catalog is empty. Click <strong>Seed baseline (15 schools)</strong> above to populate the Manila directory, or add a university manually.</p>';
       return;
     }
     listEl.innerHTML = `<div class="admin-table-wrap"><table class="admin-table">
@@ -36246,7 +37416,7 @@ var AdminCatalogController = class {
       name: name4,
       shortName: val("ed-short-name") || name4.slice(0, 30),
       city: val("ed-city") || "Manila",
-      campusLocation: val("ed-campus") || val("ed-city") || "Metro Manila",
+      campusLocation: val("ed-campus") || val("ed-city") || "Manila",
       sector: val("ed-sector") === "Public" ? "Public" : "Private",
       color: val("ed-color") || "green",
       officialUrl: val("ed-official-url"),
@@ -36828,6 +37998,467 @@ var AdminCatalogController = class {
   }
 };
 
+// client/adminSchedules.ts
+function escapeHTML4(value) {
+  return String(value ?? "").replace(
+    /[&<>"']/g,
+    (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[ch] || ch
+  );
+}
+function formatDateTime2(iso) {
+  if (!iso) return "\u2014";
+  const dt2 = new Date(iso);
+  if (Number.isNaN(dt2.getTime())) return "\u2014";
+  return dt2.toLocaleString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+function safeHref(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+var AdminSchedulesController = class {
+  auth;
+  root;
+  isSessionAdmin;
+  sessionDenied;
+  csrfToken;
+  firebaseUser = null;
+  events = [];
+  universities = [];
+  pendingDeleteId = null;
+  constructor(auth2, root) {
+    this.auth = auth2;
+    this.root = root;
+    this.isSessionAdmin = root.dataset.sessionAdmin === "true";
+    this.sessionDenied = root.dataset.sessionDenied === "true";
+    this.csrfToken = root.dataset.csrfToken || "";
+    this.bindEvents();
+    if (this.isSessionAdmin && !this.sessionDenied) {
+      this.showWorkspace();
+      void this.loadEvents();
+    }
+  }
+  setFeedback(message, isError = false) {
+    const el = document.getElementById("admin-sched-feedback");
+    if (!el) return;
+    el.textContent = message;
+    el.classList.toggle("error", isError);
+    el.classList.toggle("success", !isError);
+    el.hidden = !message;
+  }
+  showWorkspace() {
+    const loading = document.getElementById("admin-sched-loading");
+    const signedOut = document.getElementById("admin-sched-signed-out");
+    const denied = document.getElementById("admin-sched-denied");
+    const workspace = document.getElementById("admin-sched-workspace");
+    if (loading) loading.hidden = true;
+    if (signedOut) signedOut.hidden = true;
+    if (denied) denied.hidden = true;
+    if (workspace) workspace.hidden = false;
+  }
+  showSignedOut() {
+    const loading = document.getElementById("admin-sched-loading");
+    const signedOut = document.getElementById("admin-sched-signed-out");
+    const denied = document.getElementById("admin-sched-denied");
+    const workspace = document.getElementById("admin-sched-workspace");
+    if (loading) loading.hidden = true;
+    if (signedOut) signedOut.hidden = false;
+    if (denied) denied.hidden = true;
+    if (workspace) workspace.hidden = true;
+  }
+  showDenied() {
+    const loading = document.getElementById("admin-sched-loading");
+    const signedOut = document.getElementById("admin-sched-signed-out");
+    const denied = document.getElementById("admin-sched-denied");
+    const workspace = document.getElementById("admin-sched-workspace");
+    if (loading) loading.hidden = true;
+    if (signedOut) signedOut.hidden = true;
+    if (denied) denied.hidden = false;
+    if (workspace) workspace.hidden = true;
+  }
+  async onAuthChanged(user) {
+    this.firebaseUser = user;
+    if (this.sessionDenied || this.isSessionAdmin) return;
+    if (!user) {
+      this.showSignedOut();
+      return;
+    }
+    await this.loadEvents();
+  }
+  async buildHeaders(isMutation = false) {
+    const headers = { Accept: "application/json" };
+    if (isMutation) {
+      headers["Content-Type"] = "application/json";
+    }
+    if (this.isSessionAdmin) {
+      if (isMutation && this.csrfToken) {
+        headers["X-CSRF-Token"] = this.csrfToken;
+      }
+      return headers;
+    }
+    const activeUser2 = this.firebaseUser || this.auth.currentUser;
+    if (activeUser2) {
+      const token = await activeUser2.getIdToken();
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  }
+  syncVerificationDateState() {
+    const verEl = document.getElementById("sched-verification");
+    const startEl = document.getElementById("sched-start-date");
+    const endEl = document.getElementById("sched-end-date");
+    if (!verEl || !startEl || !endEl) return;
+    const isTba = verEl.value === "tba";
+    startEl.disabled = isTba;
+    endEl.disabled = isTba;
+    if (isTba) {
+      startEl.value = "";
+      endEl.value = "";
+    }
+  }
+  bindEvents() {
+    const form = document.getElementById("admin-sched-form");
+    form?.addEventListener("submit", (e2) => {
+      e2.preventDefault();
+      void this.handleSaveEvent();
+    });
+    const verSelect = document.getElementById("sched-verification");
+    verSelect?.addEventListener("change", () => this.syncVerificationDateState());
+    const uniSelect = document.getElementById("sched-university");
+    uniSelect?.addEventListener("change", () => {
+      const urlInput = document.getElementById("sched-source-url");
+      const editId = document.getElementById("sched-event-id")?.value;
+      if (urlInput && !urlInput.value && !editId) {
+        const match = this.universities.find((u) => u.id === uniSelect.value);
+        if (match?.official_url) {
+          urlInput.value = match.official_url;
+        }
+      }
+    });
+    document.getElementById("sched-cancel-edit")?.addEventListener("click", () => {
+      this.resetForm();
+    });
+    document.getElementById("sched-refresh-btn")?.addEventListener("click", () => {
+      void this.loadEvents();
+    });
+    ["sched-filter-university", "sched-filter-type", "sched-filter-verification"].forEach(
+      (id) => {
+        document.getElementById(id)?.addEventListener("change", () => {
+          this.renderTable();
+        });
+      }
+    );
+    document.getElementById("sched-filter-search")?.addEventListener("input", () => {
+      this.renderTable();
+    });
+    const tableContainer = document.getElementById("admin-sched-table");
+    tableContainer?.addEventListener("click", (e2) => {
+      const target = e2.target?.closest(
+        "[data-sched-action]"
+      );
+      if (!target) return;
+      const action = target.dataset.schedAction;
+      const eventId = target.dataset.eventId || "";
+      if (!eventId) return;
+      if (action === "edit") {
+        this.populateFormForEdit(eventId);
+      } else if (action === "delete-ask") {
+        this.pendingDeleteId = eventId;
+        this.renderTable();
+      } else if (action === "delete-cancel") {
+        this.pendingDeleteId = null;
+        this.renderTable();
+      } else if (action === "delete-confirm") {
+        void this.handleDeleteEvent(eventId);
+      }
+    });
+  }
+  populateUniversityDropdowns() {
+    const formSelect = document.getElementById("sched-university");
+    const filterSelect = document.getElementById(
+      "sched-filter-university"
+    );
+    if (!this.universities.length) return;
+    if (formSelect && formSelect.options.length <= 1) {
+      const current = formSelect.value;
+      formSelect.innerHTML = '<option value="">Select university\u2026</option>' + this.universities.map(
+        (u) => `<option value="${escapeHTML4(u.id)}">${escapeHTML4(u.name)} (${escapeHTML4(u.short_name)})</option>`
+      ).join("");
+      if (current) formSelect.value = current;
+    }
+    if (filterSelect && filterSelect.options.length <= 1) {
+      const current = filterSelect.value;
+      filterSelect.innerHTML = '<option value="">All universities</option>' + this.universities.map(
+        (u) => `<option value="${escapeHTML4(u.id)}">${escapeHTML4(u.short_name)} \u2014 ${escapeHTML4(u.name)}</option>`
+      ).join("");
+      if (current) filterSelect.value = current;
+    }
+  }
+  async loadEvents() {
+    try {
+      const headers = await this.buildHeaders(false);
+      const resp = await fetch("/api/admin/admission-events", { headers });
+      if (resp.status === 401) {
+        this.showSignedOut();
+        return;
+      }
+      if (resp.status === 403) {
+        this.showDenied();
+        return;
+      }
+      if (!resp.ok) {
+        throw new Error("Could not load admission schedules.");
+      }
+      const data = await resp.json();
+      this.showWorkspace();
+      this.events = data.items || [];
+      this.universities = data.universities || [];
+      this.populateUniversityDropdowns();
+      const actorEl = document.getElementById("admin-sched-actor");
+      if (actorEl && data.actor) {
+        const mode = data.actor.source === "firebase" ? "Google Admin session" : "Local admin session";
+        actorEl.textContent = `${data.actor.email} \xB7 ${mode}`;
+      }
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(value);
+      };
+      setText("sched-kpi-total", data.summary?.total ?? this.events.length);
+      setText("sched-kpi-verified", data.summary?.verified_upcoming ?? 0);
+      setText("sched-kpi-pending", data.summary?.unverified_or_tba ?? 0);
+      setText("sched-kpi-expired", data.summary?.expired ?? 0);
+      this.renderTable();
+    } catch (err) {
+      this.setFeedback(
+        err instanceof Error ? err.message : "Could not load admission schedules.",
+        true
+      );
+    }
+  }
+  getFilteredEvents() {
+    const uni = document.getElementById("sched-filter-university")?.value || "";
+    const type = document.getElementById("sched-filter-type")?.value || "";
+    const ver = document.getElementById("sched-filter-verification")?.value || "";
+    const search = (document.getElementById("sched-filter-search")?.value || "").trim().toLowerCase();
+    return this.events.filter((ev) => {
+      if (uni && ev.university_id !== uni) return false;
+      if (type && ev.event_type !== type) return false;
+      if (ver && ev.verification_status !== ver) return false;
+      if (search) {
+        const hay = `${ev.event_name} ${ev.university_name} ${ev.university_short_name} ${ev.academic_year || ""} ${ev.venue || ""} ${ev.description || ""}`.toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    });
+  }
+  renderTable() {
+    const container = document.getElementById("admin-sched-table");
+    const subtitle = document.getElementById("sched-list-subtitle");
+    if (!container) return;
+    const rows = this.getFilteredEvents();
+    if (subtitle) {
+      subtitle.textContent = `Showing ${rows.length} of ${this.events.length} centralized admission schedule record${this.events.length === 1 ? "" : "s"}.`;
+    }
+    if (!rows.length) {
+      container.innerHTML = '<p class="account-empty">No admission schedule events match the active filters.</p>';
+      return;
+    }
+    const htmlRows = rows.map((ev) => {
+      const statusClass = ev.verification_status === "verified" ? ev.is_expired ? "is-muted" : "is-good" : ev.verification_status === "unverified" ? "is-warn" : "is-muted";
+      const statusText = ev.is_expired && ev.is_confirmed ? "Verified \xB7 Expired" : ev.verification_label;
+      const linkHref = safeHref(ev.official_source_url);
+      const isDeleting = this.pendingDeleteId === ev.event_id;
+      return `
+        <tr>
+          <td>
+            <div class="admin-sched-cell-title">${escapeHTML4(ev.event_name)}</div>
+            <div class="admin-sched-cell-sub">
+              <strong>${escapeHTML4(ev.university_short_name)}</strong> \xB7 ${escapeHTML4(ev.event_type_label)}${ev.academic_year ? ` \xB7 ${escapeHTML4(ev.academic_year)}` : ""}
+            </div>
+            ${ev.venue ? `<div class="admin-sched-cell-sub">Venue: ${escapeHTML4(ev.venue)}</div>` : ""}
+          </td>
+          <td class="admin-tabular">
+            <div><strong>${escapeHTML4(ev.display_date)}</strong></div>
+            ${ev.exam_time ? `<div class="admin-sched-cell-sub">${escapeHTML4(ev.exam_time)}</div>` : ""}
+          </td>
+          <td>
+            <span class="admin-status-text ${statusClass}">${escapeHTML4(statusText)}</span>
+            ${linkHref ? `<div class="admin-sched-cell-sub"><a href="${escapeHTML4(linkHref)}" target="_blank" rel="noopener noreferrer">Official link \u2197</a></div>` : `<div class="admin-sched-cell-sub">No source URL</div>`}
+          </td>
+          <td class="admin-tabular">
+            <div>${escapeHTML4(formatDateTime2(ev.last_updated_at))}</div>
+            <div class="admin-sched-cell-sub">${escapeHTML4(ev.updated_by)}</div>
+          </td>
+          <td>
+            <div class="admin-row-actions">
+              <button type="button" class="button secondary admin-btn-sm" data-sched-action="edit" data-event-id="${escapeHTML4(ev.event_id)}">
+                Edit
+              </button>
+              ${isDeleting ? `<button type="button" class="button danger admin-btn-sm" data-sched-action="delete-confirm" data-event-id="${escapeHTML4(ev.event_id)}">Confirm delete</button>
+                     <button type="button" class="button secondary admin-btn-sm" data-sched-action="delete-cancel" data-event-id="${escapeHTML4(ev.event_id)}">Cancel</button>` : `<button type="button" class="button secondary admin-btn-sm" data-sched-action="delete-ask" data-event-id="${escapeHTML4(ev.event_id)}">Delete</button>`}
+            </div>
+          </td>
+        </tr>`;
+    }).join("");
+    container.innerHTML = `
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Event &amp; University</th>
+              <th>Schedule</th>
+              <th>Verification &amp; Source</th>
+              <th>Last updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>${htmlRows}</tbody>
+        </table>
+      </div>
+    `;
+  }
+  populateFormForEdit(eventId) {
+    const ev = this.events.find((item) => item.event_id === eventId);
+    if (!ev) return;
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    };
+    setVal("sched-event-id", ev.event_id);
+    setVal("sched-university", ev.university_id);
+    setVal("sched-name", ev.event_name);
+    setVal("sched-academic-year", ev.academic_year || "");
+    setVal("sched-type", ev.event_type);
+    setVal("sched-verification", ev.verification_status);
+    setVal("sched-start-date", ev.start_date || "");
+    setVal("sched-end-date", ev.end_date || "");
+    setVal("sched-exam-time", ev.exam_time || "");
+    setVal("sched-venue", ev.venue || "");
+    setVal("sched-source-url", ev.official_source_url || "");
+    setVal("sched-description", ev.description || "");
+    this.syncVerificationDateState();
+    const eyebrow = document.getElementById("sched-form-eyebrow");
+    const title = document.getElementById("sched-form-title");
+    const submitBtn = document.getElementById("sched-submit-btn");
+    const cancelBtn = document.getElementById("sched-cancel-edit");
+    if (eyebrow) eyebrow.textContent = "EDITING ADMISSION EVENT";
+    if (title) title.textContent = `Edit: ${ev.university_short_name}`;
+    if (submitBtn) submitBtn.textContent = "Update admission event";
+    if (cancelBtn) cancelBtn.hidden = false;
+    this.setFeedback("", false);
+    document.getElementById("sched-name")?.focus();
+  }
+  resetForm() {
+    const form = document.getElementById("admin-sched-form");
+    form?.reset();
+    const idEl = document.getElementById("sched-event-id");
+    if (idEl) idEl.value = "";
+    const ayEl = document.getElementById("sched-academic-year");
+    if (ayEl && !ayEl.value) ayEl.value = "AY 2027\u20132028";
+    this.syncVerificationDateState();
+    const eyebrow = document.getElementById("sched-form-eyebrow");
+    const title = document.getElementById("sched-form-title");
+    const submitBtn = document.getElementById("sched-submit-btn");
+    const cancelBtn = document.getElementById("sched-cancel-edit");
+    if (eyebrow) eyebrow.textContent = "NEW ADMISSION EVENT";
+    if (title) title.textContent = "Add admission event";
+    if (submitBtn) submitBtn.textContent = "Save admission event";
+    if (cancelBtn) cancelBtn.hidden = true;
+  }
+  async handleSaveEvent() {
+    const getVal = (id) => document.getElementById(id)?.value.trim() || "";
+    const eventId = getVal("sched-event-id");
+    const payload = {
+      university_id: getVal("sched-university"),
+      event_name: getVal("sched-name"),
+      academic_year: getVal("sched-academic-year") || null,
+      event_type: getVal("sched-type"),
+      verification_status: getVal("sched-verification"),
+      start_date: getVal("sched-start-date") || null,
+      end_date: getVal("sched-end-date") || null,
+      exam_time: getVal("sched-exam-time") || null,
+      venue: getVal("sched-venue") || null,
+      official_source_url: getVal("sched-source-url") || null,
+      description: getVal("sched-description")
+    };
+    const submitBtn = document.getElementById(
+      "sched-submit-btn"
+    );
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const headers = await this.buildHeaders(true);
+      const url = eventId ? `/api/admin/admission-events/${encodeURIComponent(eventId)}` : "/api/admin/admission-events";
+      const method = eventId ? "PUT" : "POST";
+      const resp = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data.error || "Could not save admission event.");
+      }
+      this.setFeedback(
+        eventId ? `Updated "${data.event?.event_name || payload.event_name}". Student calendars now reflect this schedule.` : `Added "${data.event?.event_name || payload.event_name}". Students who saved this university can now view it.`,
+        false
+      );
+      this.resetForm();
+      await this.loadEvents();
+    } catch (err) {
+      this.setFeedback(
+        err instanceof Error ? err.message : "Could not save admission event.",
+        true
+      );
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+  async handleDeleteEvent(eventId) {
+    try {
+      const headers = await this.buildHeaders(true);
+      const resp = await fetch(
+        `/api/admin/admission-events/${encodeURIComponent(eventId)}`,
+        {
+          method: "DELETE",
+          headers
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data.error || "Could not delete admission event.");
+      }
+      this.pendingDeleteId = null;
+      const editingId = document.getElementById("sched-event-id")?.value;
+      if (editingId === eventId) {
+        this.resetForm();
+      }
+      this.setFeedback("Admission event deleted from centralized schedules.", false);
+      await this.loadEvents();
+    } catch (err) {
+      this.setFeedback(
+        err instanceof Error ? err.message : "Could not delete admission event.",
+        true
+      );
+    }
+  }
+};
+
 // client/firebaseClient.ts
 var app = initializeApp(firebase_applet_config_default);
 var db = getFirestore(app, firebase_applet_config_default.firestoreDatabaseId);
@@ -36877,10 +38508,10 @@ var VALID_ID_RE2 = /^[a-zA-Z0-9_-]{1,128}$/;
 var VALID_SECTORS = /* @__PURE__ */ new Set(["", "Public", "Private"]);
 var VALID_BASES = /* @__PURE__ */ new Set(["semester", "trimester", "year", "unit"]);
 var DEFAULT_WEIGHTS2 = {
-  program: 0.45,
-  location: 0.2,
-  budget: 0.2,
-  sector: 0.15
+  program: 0.55,
+  location: 0.25,
+  budget: 0,
+  sector: 0.2
 };
 function sanitizeDisplayName(value, fallback = "Student") {
   const cleaned = String(value ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
@@ -36942,7 +38573,7 @@ function isSafeRedirect(value) {
   }
   return value;
 }
-function escapeHTML4(value) {
+function escapeHTML5(value) {
   return String(value ?? "").replace(
     /[&<>"']/g,
     (ch) => ({
@@ -37247,6 +38878,8 @@ async function hydratePublishedCatalog() {
     window.__unimatchLiveCatalog = {
       records,
       detailsById,
+      queryUniversities: queryLiveCatalogUniversities,
+      queryPrograms: queryLiveCatalogPrograms,
       scoreRecommendations: scoreLiveCatalogRecommendations
     };
     window.dispatchEvent(
@@ -37334,8 +38967,8 @@ async function refreshCloudRecommendations(prefs) {
         <section class="account-match-group">
           <header class="account-match-group-head">
             <div>
-              <h3>${escapeHTML4(group.university_name)}</h3>
-              <p>${escapeHTML4(group.campus_location || "Campus not available")}</p>
+              <h3>${escapeHTML5(group.university_name)}</h3>
+              <p>${escapeHTML5(group.campus_location || "Campus not available")}</p>
             </div>
             <span class="account-pill">${group.items.length} program${group.items.length === 1 ? "" : "s"}</span>
           </header>
@@ -37345,16 +38978,16 @@ async function refreshCloudRecommendations(prefs) {
               <li class="account-match">
                 <div class="account-match-head">
                   <div>
-                    <h4>${escapeHTML4(item.program_name || "All collected programs at this university")}</h4>
-                    <p>#${item.rank} overall${item.topic ? ` \xB7 ${escapeHTML4(item.topic)}` : ""}</p>
+                    <h4>${escapeHTML5(item.program_name || "All collected programs at this university")}</h4>
+                    <p>#${item.rank} overall${item.topic ? ` \xB7 ${escapeHTML5(item.topic)}` : ""}</p>
                   </div>
-                  <strong class="account-score">${escapeHTML4(item.score)}<span>/100</span></strong>
+                  <strong class="account-score">${escapeHTML5(item.score)}<span>/100</span></strong>
                 </div>
                 <details>
                   <summary>Why this match?</summary>
                   <ul>
                     ${(item.explanations || []).map(
-          (ex) => `<li><strong>${escapeHTML4(ex.label)}:</strong> ${escapeHTML4(ex.reason)} <span class="account-status">${escapeHTML4(String(ex.status || "").replace(/_/g, " "))}</span></li>`
+          (ex) => `<li><strong>${escapeHTML5(ex.label)}:</strong> ${escapeHTML5(ex.reason)} <span class="account-status">${escapeHTML5(ex.status_label || String(ex.status || "").replace(/_/g, " "))}</span></li>`
         ).join("")}
                   </ul>
                 </details>
@@ -37365,7 +38998,7 @@ async function refreshCloudRecommendations(prefs) {
     ).join("");
     container.innerHTML = `<p class="account-help">Grouped by university and ranked with the custom stable merge sort. Scores measure fit against your saved preferences, not admission chances.</p><div class="account-match-groups">${groupsHtml}</div>`;
   } catch (err) {
-    container.innerHTML = `<p class="account-alert error" role="alert">${escapeHTML4(err instanceof Error ? err.message : "Could not load recommendations.")}</p>`;
+    container.innerHTML = `<p class="account-alert error" role="alert">${escapeHTML5(err instanceof Error ? err.message : "Could not load recommendations.")}</p>`;
   }
 }
 async function hydrateCloudProfilePage(user) {
@@ -37431,7 +39064,7 @@ async function hydrateCloudProfilePage(user) {
     await refreshCloudRecommendations(prefs);
   } catch {
     showAuthFeedback(
-      "Could not load your saved cloud profile. Please check your connection and reload."
+      "Could not load your saved profile. Please check your connection and reload."
     );
   } finally {
     if (loadingNotice) loadingNotice.hidden = true;
@@ -37494,7 +39127,7 @@ function wireCloudProfileForms() {
         }
       });
       showAuthFeedback(
-        "Preferences saved to cloud storage. Your matches have been refreshed.",
+        "Preferences saved. Your matches have been refreshed.",
         false
       );
       await refreshCloudRecommendations(saved);
@@ -37533,6 +39166,10 @@ function wireGoogleButtons() {
   });
 }
 function boot() {
+  window.__unimatchAuth = {
+    getIdToken: async () => activeUser ? activeUser.getIdToken() : null,
+    getUid: () => activeUser?.uid || null
+  };
   wireGoogleButtons();
   wireCloudProfileForms();
   wireExploreShortlistSync();
@@ -37551,7 +39188,9 @@ function boot() {
   const adminAccountsController = adminAccountsRoot ? new AdminAccountsController(auth, adminAccountsRoot) : null;
   const adminDashboardRoot = document.getElementById("admin-dashboard-page");
   const adminDashboardController = adminDashboardRoot ? new AdminDashboardController(auth, adminDashboardRoot) : null;
-  if (!adminCatalogRoot && !adminAccountsRoot && !adminDashboardRoot) {
+  const adminSchedulesRoot = document.getElementById("admin-schedules-page");
+  const adminSchedulesController = adminSchedulesRoot ? new AdminSchedulesController(auth, adminSchedulesRoot) : null;
+  if (!adminCatalogRoot && !adminAccountsRoot && !adminDashboardRoot && !adminSchedulesRoot) {
     void hydratePublishedCatalog();
   }
   onAuthStateChanged(auth, async (user) => {
@@ -37570,6 +39209,9 @@ function boot() {
       }
       if (adminDashboardController) {
         await adminDashboardController.onAuthChanged(null);
+      }
+      if (adminSchedulesController) {
+        await adminSchedulesController.onAuthChanged(null);
       }
       if (isCloudProfilePage) {
         const signedOutSection = document.getElementById("cloud-signed-out");
@@ -37605,6 +39247,9 @@ function boot() {
     if (adminDashboardController) {
       await adminDashboardController.onAuthChanged(user);
     }
+    if (adminSchedulesController) {
+      await adminSchedulesController.onAuthChanged(user);
+    }
     if (adminController) {
       await adminController.onAuthChanged(user);
       try {
@@ -37618,7 +39263,7 @@ function boot() {
       }
       return;
     }
-    if (adminAccountsController || adminDashboardController) {
+    if (adminAccountsController || adminDashboardController || adminSchedulesController) {
       updateHeaderLinksForCloudUser(
         sanitizeDisplayName(user.displayName || user.email?.split("@")[0] || "Admin")
       );

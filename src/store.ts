@@ -21,11 +21,20 @@ import {
   type RequirementRow,
 } from "./algorithms/extraction.js";
 import {
+  searchCatalogPrograms,
+  searchCatalogUniversities,
+  type CatalogUniversityItem,
+} from "./algorithms/catalogQuery.js";
+import {
   recommend,
   type CandidateInput,
   type Criterion,
   type RecommendationResponse,
 } from "./algorithms/matching.js";
+import {
+  parseMatchSentence,
+  type ParsedMatchQuery,
+} from "./algorithms/nlpQueryParser.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -136,21 +145,21 @@ const SCHOOLS: Record<string, SchoolTuple> = {
 };
 
 const CANONICAL_CAMPUSES: Record<string, string> = {
-  "up-manila": "Padre Faura Street, Ermita, Manila, Metro Manila",
-  "ust-manila": "España Boulevard, Sampaloc, Manila, Metro Manila",
-  "dlsu-manila": "Taft Avenue, Malate, Manila, Metro Manila",
-  "adamson-manila": "900 San Marcelino Street, Ermita, Manila, Metro Manila",
-  "pup-sta-mesa": "Sta. Mesa, Manila, Metro Manila",
-  "ue-manila": "2219 C.M. Recto Avenue, Sampaloc, Manila, Metro Manila",
-  "feu-manila": "Nicanor Reyes Street, Sampaloc, Manila, Metro Manila",
-  "sanbeda-manila": "638 Mendiola Street, San Miguel, Manila, Metro Manila",
-  "mapua-manila": "658 Muralla Street, Intramuros, Manila, Metro Manila",
-  "lpu-manila": "Muralla Street, Intramuros, Manila, Metro Manila",
-  "ceu-manila": "9 Mendiola Street, San Miguel, Manila, Metro Manila",
-  "tup-manila": "Ayala Boulevard, Ermita, Manila, Metro Manila",
-  "pnu-manila": "Taft Avenue, Ermita, Manila, Metro Manila",
-  "plm-manila": "General Luna Street, Intramuros, Manila, Metro Manila",
-  spumanila: "680 Pedro Gil Street, Malate, Manila, Metro Manila",
+  "up-manila": "Padre Faura Street, Ermita, Manila",
+  "ust-manila": "España Boulevard, Sampaloc, Manila",
+  "dlsu-manila": "Taft Avenue, Malate, Manila",
+  "adamson-manila": "900 San Marcelino Street, Ermita, Manila",
+  "pup-sta-mesa": "Sta. Mesa, Manila",
+  "ue-manila": "2219 C.M. Recto Avenue, Sampaloc, Manila",
+  "feu-manila": "Nicanor Reyes Street, Sampaloc, Manila",
+  "sanbeda-manila": "638 Mendiola Street, San Miguel, Manila",
+  "mapua-manila": "658 Muralla Street, Intramuros, Manila",
+  "lpu-manila": "Muralla Street, Intramuros, Manila",
+  "ceu-manila": "9 Mendiola Street, San Miguel, Manila",
+  "tup-manila": "Ayala Boulevard, Ermita, Manila",
+  "pnu-manila": "Taft Avenue, Ermita, Manila",
+  "plm-manila": "General Luna Street, Intramuros, Manila",
+  spumanila: "680 Pedro Gil Street, Malate, Manila",
 };
 
 const TOPICS: Record<string, string[]> = {
@@ -372,10 +381,21 @@ function sha256Hex(value: string): string {
   return crypto.createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+function normalizeCampusDisplay(campus: string): string {
+  return campus
+    .replace(/,\s*manila\s*,\s*metro manila$/i, ", Manila")
+    .replace(/\bmetro manila\b/gi, "Manila")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function identityFor(name: string, campus: string): SchoolTuple {
   const known = SCHOOLS[name];
-  const normCampus = campus.toLowerCase().replace(/\s+/g, " ").trim();
-  if (known && normCampus === CANONICAL_CAMPUSES[known[0]].toLowerCase()) {
+  const normCampus = normalizeCampusDisplay(campus).toLowerCase();
+  if (
+    known &&
+    normCampus === normalizeCampusDisplay(CANONICAL_CAMPUSES[known[0]]).toLowerCase()
+  ) {
     return known;
   }
   const slug =
@@ -528,7 +548,7 @@ function upsertSources(
 export function importRecords(records: Array<Record<string, unknown>>): number {
   for (const record of records) {
     const name = String(record.university_name ?? "").trim();
-    const campus = String(record.campus_location ?? "").trim();
+    const campus = normalizeCampusDisplay(String(record.campus_location ?? "").trim());
     const [schoolId, shortName, city, sector, color] = identityFor(
       name,
       campus,
@@ -758,13 +778,27 @@ export function initStore(): void {
   for (const [schoolId, supplement] of Object.entries(baselineSupplements)) {
     const school = universities.get(schoolId);
     if (!school) continue;
+    const supplementVerifiedAt =
+      typeof supplement.retrieved_at_utc === "string" && supplement.retrieved_at_utc
+        ? supplement.retrieved_at_utc
+        : school.last_verified_at ?? "2026-11-27T00:00:00Z";
     const structured = structureRecord({
       university_name: school.name,
       campus_location: school.campus_location,
-      retrieved_at_utc: school.collected_at ?? "2026-11-21T00:00:00Z",
+      retrieved_at_utc: supplementVerifiedAt,
       ...supplement,
     });
-    const verifiedAt = school.last_verified_at ?? "2026-11-21T00:00:00Z";
+    const verifiedAt = supplementVerifiedAt;
+    if (
+      typeof supplement.retrieved_at_utc === "string" &&
+      (!school.last_verified_at || supplement.retrieved_at_utc > school.last_verified_at)
+    ) {
+      school.last_verified_at = supplement.retrieved_at_utc;
+      school.collected_at = supplement.retrieved_at_utc;
+    }
+    if (typeof supplement.official_url === "string" && safeUrl(supplement.official_url)) {
+      school.official_url = safeUrl(supplement.official_url);
+    }
 
     if ((requirementsByUniversity.get(schoolId)?.length ?? 0) === 0 && structured.admission_requirements.length > 0) {
       requirementsByUniversity.set(
@@ -799,7 +833,16 @@ export function initStore(): void {
           : [];
       }
     }
-    if ((linksByUniversity.get(schoolId)?.length ?? 0) === 0 && structured.application_links.length > 0) {
+    if (structured.application_deadlines.length > 0) {
+      deadlinesByUniversity.set(
+        schoolId,
+        structured.application_deadlines.map((d) => ({ ...d, last_verified_at: verifiedAt })),
+      );
+      if (Array.isArray(supplement.application_deadlines)) {
+        school.evidence.application_deadlines = supplement.application_deadlines;
+      }
+    }
+    if (structured.application_links.length > 0) {
       linksByUniversity.set(
         schoolId,
         structured.application_links
@@ -811,6 +854,10 @@ export function initStore(): void {
             last_verified_at: verifiedAt,
           })),
       );
+      if (!school.official_url) {
+        const firstLink = linksByUniversity.get(schoolId)?.[0]?.url ?? null;
+        if (firstLink) school.official_url = firstLink;
+      }
     }
     if (Array.isArray(supplement.source_notes)) {
       const existingNotes = Array.isArray(school.evidence.source_notes)
@@ -967,38 +1014,18 @@ export function datasetStats() {
 export function queryUniversities(
   search = "",
   city = "",
-  sector = "",
+  sector: string | string[] = "",
   sort = "featured",
 ) {
-  if (!["name", "programs", "featured"].includes(sort)) {
-    throw new Error("Unknown sort order");
-  }
-  const q = search.toLowerCase();
-  const matched = Array.from(universities.values()).filter((u) => {
-    if (city && u.city !== city) return false;
-    if (sector && u.sector !== sector) return false;
-    if (q) {
-      const hay = `${u.name} ${u.short_name} ${u.campus_location}`.toLowerCase();
-      const progs = programsByUniversity.get(u.id) ?? [];
-      if (
-        !hay.includes(q) &&
-        !progs.some((p) => p.name.toLowerCase().includes(q))
-      ) {
-        return false;
-      }
-    }
-    return true;
-  });
-
-  matched.sort((a, b) => {
-    if (sort === "name") return a.name.localeCompare(b.name);
-    const countA = (programsByUniversity.get(a.id) ?? []).length;
-    const countB = (programsByUniversity.get(b.id) ?? []).length;
-    if (countB !== countA) return countB - countA;
-    return a.name.localeCompare(b.name);
-  });
-
-  return matched.map((u) => serializeSchool(u, false));
+  const serialized = Array.from(universities.values()).map(
+    (u) => serializeSchool(u, false) as Record<string, unknown> & CatalogUniversityItem,
+  );
+  const result = searchCatalogUniversities(
+    serialized,
+    (schoolId) => programsByUniversity.get(schoolId) ?? [],
+    { search, city, sector, sort },
+  );
+  return result.items;
 }
 
 export function getUniversityDetail(schoolId: string) {
@@ -1054,47 +1081,45 @@ export function queryPrograms(
   topic = "",
   page = 1,
   limit = 12,
+  sector: string | string[] = "",
+  city = "",
 ) {
-  const q = search.toLowerCase();
-  const joined: Array<
+  const rows: Array<
     ProgramRecord & {
       university_name: string;
       short_name: string;
       city: string;
+      campus_location: string;
+      sector: string;
       color: string;
     }
   > = [];
 
   for (const [uid, progs] of programsByUniversity.entries()) {
-    if (schoolId && uid !== schoolId) continue;
     const u = universities.get(uid);
     if (!u) continue;
     for (const p of progs) {
-      if (topic && p.topic !== topic) continue;
-      if (q) {
-        const hay = `${p.name} ${u.name} ${u.short_name}`.toLowerCase();
-        if (!hay.includes(q)) continue;
-      }
-      joined.push({
+      rows.push({
         ...p,
         university_name: u.name,
         short_name: u.short_name,
         city: u.city,
+        campus_location: u.campus_location,
+        sector: u.sector,
         color: u.color,
       });
     }
   }
 
-  joined.sort(
-    (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
-  );
-  const start = (page - 1) * limit;
-  return {
-    items: joined.slice(start, start + limit),
-    total: joined.length,
+  return searchCatalogPrograms(rows, {
+    search,
+    university_id: schoolId,
+    topic,
+    sector,
+    city,
     page,
     limit,
-  };
+  });
 }
 
 export function recommendationCandidates(): CandidateInput[] {
@@ -1437,5 +1462,31 @@ export function upsertRuntimeUniversityFromCatalog(
   );
 
   upsertSources(schoolId, sourcesList, verifiedAt);
+}
+
+/**
+ * Offline classical NLP query parser backed by live catalog program names and
+ * campus areas. Strictly read-only — never modifies catalog or search state.
+ */
+export function parseNaturalMatchQuery(sentence: string): ParsedMatchQuery {
+  const programNames: string[] = [];
+  const campusAreas = new Set<string>();
+  for (const u of universities.values()) {
+    const progs = programsByUniversity.get(u.id) || [];
+    for (const p of progs) {
+      if (p.name) programNames.push(p.name);
+    }
+    const parts = String(u.campus_location || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s && !/^metro manila$/i.test(s));
+    if (parts.length >= 2) {
+      campusAreas.add(parts[parts.length - 2]);
+    }
+  }
+  return parseMatchSentence(sentence, {
+    programNames,
+    campusAreas: [...campusAreas],
+  });
 }
 

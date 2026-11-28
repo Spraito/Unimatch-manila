@@ -41,6 +41,12 @@ import {
   universities,
   type UniversityRecord,
 } from "./store.js";
+import {
+  AUDIT_ACADEMIC_YEAR,
+  UNIVERSITY_ADMISSION_AUDIT_META,
+  VERIFIED_AUDIT_EVENTS_AY_2027_2028,
+  type OfficialAdmissionStatus,
+} from "./verifiedAdmissionAudit.js";
 
 export const ADMISSION_EVENT_TYPES = [
   "entrance_exam",
@@ -68,7 +74,7 @@ export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
 export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
   verified: "Verified",
   unverified: "Unverified",
-  tba: "To Be Announced",
+  tba: "Not Yet Announced",
 };
 
 export const APPLICATION_STATUSES = [
@@ -93,6 +99,7 @@ export interface AdmissionEvent {
   university_id: string;
   event_name: string;
   event_type: AdmissionEventType;
+  academic_year: string | null;
   start_date: string | null;
   end_date: string | null;
   exam_time: string | null;
@@ -112,6 +119,8 @@ export interface EnrichedAdmissionEvent extends AdmissionEvent {
   university_city: string;
   university_sector: string;
   official_admissions_url: string | null;
+  official_portal_url: string | null;
+  admission_status: OfficialAdmissionStatus;
   event_type_label: string;
   verification_label: string;
   is_confirmed: boolean;
@@ -203,6 +212,11 @@ export interface SavedUniversityDashboardItem {
   sector: string;
   color: string;
   official_admissions_url: string | null;
+  official_portal_url: string | null;
+  admission_status: OfficialAdmissionStatus;
+  admission_academic_year: string;
+  admission_last_verified_date: string | null;
+  admission_status_note: string | null;
   application_status: ApplicationStatus;
   application_status_updated_at: string | null;
   next_upcoming_event: EnrichedAdmissionEvent | null;
@@ -210,6 +224,7 @@ export interface SavedUniversityDashboardItem {
     status: VerificationStatus;
     event_id: string | null;
     event_name: string | null;
+    academic_year: string | null;
     start_date: string | null;
     end_date: string | null;
     exam_time: string | null;
@@ -221,6 +236,7 @@ export interface SavedUniversityDashboardItem {
     status: VerificationStatus;
     event_id: string | null;
     event_name: string | null;
+    academic_year: string | null;
     start_date: string | null;
     end_date: string | null;
     display_date: string;
@@ -246,6 +262,7 @@ export interface UpsertAdmissionEventInput {
   university_id: unknown;
   event_name: unknown;
   event_type: unknown;
+  academic_year?: unknown;
   start_date?: unknown;
   end_date?: unknown;
   exam_time?: unknown;
@@ -358,7 +375,7 @@ export function formatDisplayDate(
   verificationStatus: VerificationStatus,
 ): string {
   if (verificationStatus === "tba" || !startDate) {
-    return "To Be Announced";
+    return "Not Yet Announced";
   }
   const fmt = (iso: string) => {
     const [y, m, d] = iso.split("-").map(Number);
@@ -472,6 +489,11 @@ export function validateEventInput(
     );
   }
 
+  const academicYear = cleanOptionalText(
+    input.academic_year,
+    40,
+    "Academic year",
+  );
   const examTime = cleanOptionalText(input.exam_time, 100, "Examination time");
   const venue = cleanOptionalText(input.venue, 240, "Venue");
   const officialSourceUrl = validateOfficialUrl(input.official_source_url);
@@ -482,6 +504,7 @@ export function validateEventInput(
     university_id: universityId,
     event_name: eventName,
     event_type: rawType,
+    academic_year: academicYear,
     start_date: startDate,
     end_date: endDate,
     exam_time: examTime,
@@ -493,12 +516,25 @@ export function validateEventInput(
 }
 
 function officialAdmissionsUrlFor(school: UniversityRecord): string | null {
+  const auditMeta = UNIVERSITY_ADMISSION_AUDIT_META[school.id];
+  if (auditMeta?.official_admissions_url) {
+    const checked = safeUrl(auditMeta.official_admissions_url);
+    if (checked) return checked;
+  }
   const links = linksByUniversity.get(school.id) ?? [];
   for (const link of links) {
     const u = safeUrl(link.url);
     if (u) return u;
   }
   return safeUrl(school.official_url);
+}
+
+function officialPortalUrlFor(school: UniversityRecord): string | null {
+  const auditMeta = UNIVERSITY_ADMISSION_AUDIT_META[school.id];
+  if (auditMeta?.official_portal_url) {
+    return safeUrl(auditMeta.official_portal_url);
+  }
+  return null;
 }
 
 // --- Local JSON atomic persistence fallback ---
@@ -538,7 +574,13 @@ export function loadPersistedAdmissionDataLocal(): void {
       if (Array.isArray(parsed.events)) {
         for (const ev of parsed.events) {
           if (ev && typeof ev.event_id === "string" && ev.university_id) {
-            admissionEvents.set(ev.event_id, ev);
+            admissionEvents.set(ev.event_id, {
+              ...ev,
+              academic_year:
+                typeof ev.academic_year === "string" && ev.academic_year.trim()
+                  ? ev.academic_year.trim()
+                  : null,
+            });
           }
         }
       }
@@ -606,10 +648,21 @@ export async function loadAdmissionDataFromPostgres(): Promise<void> {
         admissionEvents.set(row.event_id, {
           ...row,
           event_type: type,
+          academic_year: row.academic_year || null,
         });
       }
+      // Upgrade legacy auto-seeded `seed-*` placeholders to audited AY 2027–2028 records
+      const reconciled = reconcileAuditedEventsInMemory();
+      if (reconciled.removedIds.length > 0 || reconciled.upserted.length > 0) {
+        for (const oldId of reconciled.removedIds) {
+          await dbDeleteAdmissionEvent(oldId);
+        }
+        for (const ev of reconciled.upserted) {
+          await dbUpsertAdmissionEvent(ev as PgAdmissionEventRow);
+        }
+      }
     } else if (admissionEvents.size > 0) {
-      // Push truthful baseline TBA records to newly initialized DB
+      // Push verified baseline & TBA records to newly initialized DB
       for (const ev of admissionEvents.values()) {
         await dbUpsertAdmissionEvent(ev as PgAdmissionEventRow);
       }
@@ -650,14 +703,77 @@ export async function loadAdmissionDataFromPostgres(): Promise<void> {
 }
 
 /**
- * Seeds truthful baseline admission entries from existing university catalog
- * records ONLY for universities that currently have zero events in the central
- * schedule store. NEVER invents or estimates exam dates — unannounced dates
- * are explicitly recorded with `verification_status: "tba"` and `start_date: null`.
+ * Reconciles legacy auto-generated `seed-*` placeholders with the audited
+ * AY 2027–2028 verified admission dataset while preserving any admin-created
+ * or admin-modified event records.
+ */
+function reconcileAuditedEventsInMemory(): {
+  removedIds: string[];
+  upserted: AdmissionEvent[];
+} {
+  const nowIso = new Date().toISOString();
+  const removedIds: string[] = [];
+  const upserted: AdmissionEvent[] = [];
+
+  // Remove obsolete auto-generated legacy placeholders (only system-baseline ones)
+  for (const [eventId, ev] of admissionEvents.entries()) {
+    if (eventId.startsWith("seed-") && ev.updated_by === "system-baseline") {
+      admissionEvents.delete(eventId);
+      removedIds.push(eventId);
+    }
+  }
+
+  for (const seed of VERIFIED_AUDIT_EVENTS_AY_2027_2028) {
+    if (!universities.has(seed.university_id)) continue;
+    const existing = admissionEvents.get(seed.event_id);
+    // Do not overwrite an event that an administrator manually edited
+    if (
+      existing &&
+      existing.updated_by !== "system-audit-2026-11-27" &&
+      existing.updated_by !== "system-baseline"
+    ) {
+      continue;
+    }
+    if (!existing) {
+      const rec: AdmissionEvent = {
+        event_id: seed.event_id,
+        university_id: seed.university_id,
+        event_name: seed.event_name,
+        event_type: seed.event_type,
+        academic_year: seed.academic_year,
+        start_date: seed.start_date,
+        end_date: seed.end_date,
+        exam_time: seed.exam_time,
+        venue: seed.venue,
+        official_source_url: safeUrl(seed.official_source_url),
+        description: seed.description,
+        verification_status: seed.verification_status,
+        updated_by: "system-audit-2026-11-27",
+        created_at: seed.last_updated_at || nowIso,
+        last_updated_at: seed.last_updated_at || nowIso,
+      };
+      admissionEvents.set(rec.event_id, rec);
+      upserted.push(rec);
+    }
+  }
+
+  return { removedIds, upserted };
+}
+
+/**
+ * Seeds the verified AY 2027–2028 admission audit schedule dataset and creates
+ * honest "Not Yet Announced" (`tba`) entries for any additional catalog
+ * universities that have zero events. NEVER invents or estimates exam dates.
  */
 export function seedBaselineAdmissionEvents(): number {
   let added = 0;
   const nowIso = new Date().toISOString();
+
+  // 1. Seed / reconcile curated AY 2027–2028 audited schedules for the 15 schools
+  const reconciled = reconcileAuditedEventsInMemory();
+  added += reconciled.upserted.length;
+
+  // 2. Fallback for any newly added admin catalog universities without events
   const universitiesWithEvents = new Set(
     Array.from(admissionEvents.values()).map((e) => e.university_id),
   );
@@ -670,7 +786,6 @@ export function seedBaselineAdmissionEvents(): number {
     const deadlines = deadlinesByUniversity.get(school.id) ?? [];
     const lastUpdated = school.last_verified_at || nowIso;
 
-    // 1. Seed any real dated deadlines already present in the catalog
     for (const dl of deadlines) {
       let validIso: string | null = null;
       if (dl.date_iso) {
@@ -691,6 +806,7 @@ export function seedBaselineAdmissionEvents(): number {
         university_id: school.id,
         event_name: dl.label || `${school.short_name} Application Deadline`,
         event_type: "application_deadline",
+        academic_year: AUDIT_ACADEMIC_YEAR,
         start_date: validIso,
         end_date: null,
         exam_time: null,
@@ -705,7 +821,6 @@ export function seedBaselineAdmissionEvents(): number {
       added += 1;
     }
 
-    // 2. Seed entrance examination entry with "To Be Announced" (never guessed!)
     if (exams.length > 0) {
       const primaryExam = exams[0];
       const examLabel = primaryExam.exam_name
@@ -718,14 +833,13 @@ export function seedBaselineAdmissionEvents(): number {
           university_id: school.id,
           event_name: examLabel,
           event_type: "entrance_exam",
+          academic_year: AUDIT_ACADEMIC_YEAR,
           start_date: null,
           end_date: null,
           exam_time: null,
           venue: school.campus_location || null,
           official_source_url: safeUrl(primaryExam.source_url) || officialUrl,
-          description: primaryExam.coverage
-            ? `${primaryExam.coverage} Official examination dates have not yet been published in UniMatch PH — verify updates directly on the university admissions portal.`
-            : `Official examination dates for ${school.name} are To Be Announced. Verify directly on the university's official admissions portal.`,
+          description: `Official examination dates for ${school.name} are Not Yet Announced. Verify directly on the university's official admissions portal.`,
           verification_status: "tba",
           updated_by: "system-baseline",
           created_at: nowIso,
@@ -741,12 +855,13 @@ export function seedBaselineAdmissionEvents(): number {
           university_id: school.id,
           event_name: `${school.short_name} Freshman Admissions & Screening`,
           event_type: "application_open",
+          academic_year: AUDIT_ACADEMIC_YEAR,
           start_date: null,
           end_date: null,
           exam_time: null,
           venue: school.campus_location || null,
           official_source_url: officialUrl,
-          description: `Official application and examination schedule dates for ${school.name} are To Be Announced. Check the official admissions page for the latest intake advisory.`,
+          description: `Official application and examination schedule dates for ${school.name} are Not Yet Announced. Check the official admissions page for the latest intake advisory.`,
           verification_status: "tba",
           updated_by: "system-baseline",
           created_at: nowIso,
@@ -757,7 +872,7 @@ export function seedBaselineAdmissionEvents(): number {
     }
   }
 
-  if (added > 0) {
+  if (added > 0 || reconciled.removedIds.length > 0) {
     persistSchedulesLocal();
   }
   return added;
@@ -811,7 +926,9 @@ export function enrichAdmissionEvent(
   todayIso: string = todayManilaIso(),
 ): EnrichedAdmissionEvent {
   const school = universities.get(event.university_id);
+  const auditMeta = UNIVERSITY_ADMISSION_AUDIT_META[event.university_id];
   const officialAdmissionsUrl = school ? officialAdmissionsUrlFor(school) : null;
+  const officialPortalUrl = school ? officialPortalUrlFor(school) : null;
   const effectiveEnd = event.end_date || event.start_date;
   const isConfirmed =
     event.verification_status === "verified" && Boolean(event.start_date);
@@ -823,12 +940,15 @@ export function enrichAdmissionEvent(
 
   return {
     ...event,
+    academic_year: event.academic_year || auditMeta?.academic_year || null,
     university_name: school?.name || event.university_id,
     university_short_name: school?.short_name || event.university_id,
     university_color: school?.color || "green",
     university_city: school?.city || "Manila",
     university_sector: school?.sector || "Not specified",
     official_admissions_url: officialAdmissionsUrl,
+    official_portal_url: officialPortalUrl,
+    admission_status: auditMeta?.admission_status || "Not Yet Announced",
     event_type_label:
       ADMISSION_EVENT_TYPE_LABELS[event.event_type] || "Admission Event",
     verification_label:
@@ -1309,6 +1429,7 @@ export function buildSavedUniversitiesDashboard(
           status: "verified" as VerificationStatus,
           event_id: verifiedUpcomingExam.event_id,
           event_name: verifiedUpcomingExam.event_name,
+          academic_year: verifiedUpcomingExam.academic_year,
           start_date: verifiedUpcomingExam.start_date,
           end_date: verifiedUpcomingExam.end_date,
           exam_time: verifiedUpcomingExam.exam_time,
@@ -1324,6 +1445,7 @@ export function buildSavedUniversitiesDashboard(
             : "tba") as VerificationStatus,
           event_id: anyExam?.event_id || null,
           event_name: anyExam?.event_name || `${school.short_name} Entrance Examination`,
+          academic_year: anyExam?.academic_year || AUDIT_ACADEMIC_YEAR,
           start_date:
             anyExam && !anyExam.is_expired && anyExam.verification_status === "unverified"
               ? anyExam.start_date
@@ -1340,7 +1462,9 @@ export function buildSavedUniversitiesDashboard(
             anyExam.verification_status === "unverified" &&
             anyExam.start_date
               ? `${anyExam.display_date} (Unverified)`
-              : "To Be Announced",
+              : anyExam && anyExam.is_expired && anyExam.is_confirmed
+                ? `${anyExam.display_date} (Concluded)`
+                : "Not Yet Announced",
           official_source_url:
             anyExam?.official_source_url || officialAdmissionsUrlFor(school),
         };
@@ -1365,6 +1489,7 @@ export function buildSavedUniversitiesDashboard(
           status: deadlineTarget.verification_status,
           event_id: deadlineTarget.event_id,
           event_name: deadlineTarget.event_name,
+          academic_year: deadlineTarget.academic_year,
           start_date: deadlineTarget.start_date,
           end_date: deadlineTarget.end_date,
           display_date:
@@ -1381,6 +1506,7 @@ export function buildSavedUniversitiesDashboard(
       statusEntry && isValidApplicationStatus(statusEntry.status)
         ? statusEntry.status
         : "Interested";
+    const auditMeta = UNIVERSITY_ADMISSION_AUDIT_META[school.id];
 
     items.push({
       university_id: school.id,
@@ -1390,6 +1516,11 @@ export function buildSavedUniversitiesDashboard(
       sector: school.sector,
       color: school.color,
       official_admissions_url: officialAdmissionsUrlFor(school),
+      official_portal_url: officialPortalUrlFor(school),
+      admission_status: auditMeta?.admission_status || "Not Yet Announced",
+      admission_academic_year: auditMeta?.academic_year || AUDIT_ACADEMIC_YEAR,
+      admission_last_verified_date: auditMeta?.last_verified_date || null,
+      admission_status_note: auditMeta?.status_note || null,
       application_status: appStatus,
       application_status_updated_at: statusEntry?.updated_at ?? null,
       next_upcoming_event: nextUpcoming,

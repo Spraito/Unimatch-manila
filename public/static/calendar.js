@@ -87,7 +87,7 @@ function daysBetweenIso(fromIso, toIso) {
 }
 
 function formatDateReadable(iso) {
-  if (!iso) return "To Be Announced";
+  if (!iso) return "Not Yet Announced";
   const parts = iso.split("-").map(Number);
   if (parts.length !== 3 || parts.some(Number.isNaN)) return iso;
   const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
@@ -734,12 +734,12 @@ export function createCalendarManager(ctx) {
         </div>`
       : `<p class="cal-mobile-empty">No confirmed admission events scheduled in ${e(MONTH_NAMES[month])} ${year} for your saved universities.</p>`;
 
-    // Unverified & To Be Announced section (explicitly separated from confirmed calendar events)
+    // Unverified & Not Yet Announced section (explicitly separated from confirmed calendar events)
     const unverifiedHtml = unverifiedOrTba.length
       ? `<section class="cal-notice-section" aria-labelledby="cal-tba-heading">
           <div class="cal-notice-head">
             <div>
-              <h3 id="cal-tba-heading">To Be Announced &amp; Unverified Schedules</h3>
+              <h3 id="cal-tba-heading">Not Yet Announced &amp; Unverified Schedules</h3>
               <p>These entries are kept separate from confirmed calendar dates until officially announced and verified.</p>
             </div>
             <span class="cal-notice-count">${unverifiedOrTba.length} ${unverifiedOrTba.length === 1 ? "notice" : "notices"}</span>
@@ -765,8 +765,9 @@ export function createCalendarManager(ctx) {
                   </div>
                   <p class="cal-notice-meta">
                     <span>${e(ev.event_type_label)}</span>
+                    ${ev.academic_year ? `<span aria-hidden="true">·</span><span>${e(ev.academic_year)}</span>` : ""}
                     <span aria-hidden="true">·</span>
-                    <strong>${ev.verification_status === "unverified" && ev.start_date ? `${e(ev.display_date)} (Unverified)` : "To Be Announced"}</strong>
+                    <strong>${ev.verification_status === "unverified" && ev.start_date ? `${e(ev.display_date)} (Unverified)` : "Not Yet Announced"}</strong>
                   </p>
                   ${ev.description ? `<p class="cal-notice-desc">${e(ev.description)}</p>` : ""}
                   <div class="cal-notice-actions">
@@ -807,7 +808,7 @@ export function createCalendarManager(ctx) {
           </div>`
         : !upcomingConfirmedTotal
           ? `<div class="cal-month-hint">
-              <span>No confirmed upcoming examination or deadline dates have been published yet for your saved universities. Check the To Be Announced notices and official portal links below.</span>
+              <span>No confirmed upcoming examination or deadline dates have been published yet for your saved universities. Check the Not Yet Announced notices and official portal links below.</span>
             </div>`
           : "";
 
@@ -824,7 +825,7 @@ export function createCalendarManager(ctx) {
           <strong>${upcomingConfirmedTotal}</strong>
         </div>
         <div class="cal-kpi">
-          <span>TBA / Unverified</span>
+          <span>Not Yet Announced</span>
           <strong>${unverifiedTotal}</strong>
         </div>
         <div class="cal-kpi">
@@ -932,15 +933,21 @@ export function createCalendarManager(ctx) {
           ? exam.status === "verified"
             ? `${exam.display_date}${exam.event_name ? ` · ${exam.event_name}` : ""}`
             : exam.display_date
-          : "To Be Announced";
+          : "Not Yet Announced";
 
         const deadlineDisplay = deadline
           ? deadline.display_date
-          : "Not announced yet";
+          : dash?.admission_status === "Closed"
+            ? "Closed for AY 2027–2028"
+            : dash?.admission_status === "Open"
+              ? "Open (Rolling — no fixed deadline)"
+              : "Not Yet Announced";
 
         const nextEventDisplay = nextEv
           ? `${nextEv.display_date} — ${nextEv.event_name}`
-          : "No confirmed upcoming event";
+          : dash?.admission_status === "Closed"
+            ? "Application period closed"
+            : "Not Yet Announced";
 
         return `<article class="saved-dash-card uni-accent-${accent}" data-saved-card="${e(school.id)}">
           <div class="saved-dash-head">
@@ -1069,6 +1076,7 @@ export function createCalendarManager(ctx) {
 
     const sourceHref = safeURL(ev.official_source_url);
     const admissionsHref = safeURL(ev.official_admissions_url);
+    const portalHref = safeURL(ev.official_portal_url);
     const rem = calState.reminders[ev.event_id] || {
       enabled: false,
       intervals_days: [7, 3, 1],
@@ -1137,6 +1145,7 @@ export function createCalendarManager(ctx) {
         <div>
           <p class="event-modal-kicker">
             <span>${e(ev.event_type_label)}</span>
+            ${ev.academic_year ? `<span aria-hidden="true">·</span><span>${e(ev.academic_year)}</span>` : ""}
             <span aria-hidden="true">·</span>
             <span class="cal-ver-tag ${verClass}">${e(verLabel)}</span>
           </p>
@@ -1151,6 +1160,11 @@ export function createCalendarManager(ctx) {
           <dt>Date</dt>
           <dd>${e(ev.display_date)}${ev.verification_status === "unverified" && ev.start_date ? " (Unverified)" : ""}</dd>
         </div>
+        ${
+          ev.academic_year
+            ? `<div><dt>Academic year</dt><dd>${e(ev.academic_year)}</dd></div>`
+            : ""
+        }
         <div>
           <dt>Examination time</dt>
           <dd>${e(ev.exam_time || "Not specified")}</dd>
@@ -1169,7 +1183,7 @@ export function createCalendarManager(ctx) {
           <dd>${e(verLabel)}</dd>
         </div>
         <div>
-          <dt>Last updated</dt>
+          <dt>Last verified / updated</dt>
           <dd>${e(formatDateTimeReadable(ev.last_updated_at))}</dd>
         </div>
       </dl>
@@ -1192,7 +1206,12 @@ export function createCalendarManager(ctx) {
             : ""
         }
         ${
-          admissionsHref && admissionsHref !== sourceHref
+          portalHref && portalHref !== sourceHref
+            ? `<a class="button secondary" href="${e(portalHref)}" target="_blank" rel="noopener noreferrer">Application portal ${icon("external")}</a>`
+            : ""
+        }
+        ${
+          admissionsHref && admissionsHref !== sourceHref && admissionsHref !== portalHref
             ? `<a class="button secondary" href="${e(admissionsHref)}" target="_blank" rel="noopener noreferrer">Official admissions page ${icon("external")}</a>`
             : admissionsHref && !sourceHref
               ? `<a class="button primary" href="${e(admissionsHref)}" target="_blank" rel="noopener noreferrer">Official admissions page ${icon("external")}</a>`
@@ -1305,7 +1324,7 @@ export function createCalendarManager(ctx) {
       ${
         events.length
           ? renderGroup("Confirmed upcoming events", upcoming) +
-            renderGroup("To Be Announced & unverified notices", unverified) +
+            renderGroup("Not Yet Announced & unverified notices", unverified) +
             renderGroup("Past / expired schedules", past)
           : '<p class="muted-note">No admission events recorded yet. Check the official university admissions portal below.</p>'
       }

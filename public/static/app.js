@@ -65,14 +65,19 @@ const state = {
     budgetBasis: "semester",
     limit: 20,
     weights: {
-      program: 0.45,
-      location: 0.2,
+      program: 0.55,
+      location: 0.25,
       budget: 0.2,
-      sector: 0.15,
+      sector: 0.2,
     },
     result: null,
     error: "",
     loading: false,
+    nlpQuery: "",
+    nlpOpen: false,
+    nlpParsed: null,
+    nlpError: "",
+    nlpLoading: false,
   },
 };
 let renderVersion = 0,
@@ -129,30 +134,15 @@ function liveCatalogApi(path, params = {}) {
   }
 
   if (path === "/api/universities") {
-    const q = String(params.search || "").trim().toLowerCase();
-    const city = String(params.city || "").trim();
-    const sector = String(params.sector || "").trim();
-    const sort = String(params.sort || "featured").trim();
-    const matched = allDetails.filter((u) => {
-      if (city && u.city !== city) return false;
-      if (sector && u.sector !== sector) return false;
-      if (q) {
-        const hay = `${u.name} ${u.short_name} ${u.campus_location}`.toLowerCase();
-        if (
-          !hay.includes(q) &&
-          !(u.programs || []).some((p) => p.name.toLowerCase().includes(q))
-        ) {
-          return false;
-        }
-      }
-      return true;
-    });
-    matched.sort((a, b) => {
-      if (sort === "name") return a.name.localeCompare(b.name);
-      if (b.program_count !== a.program_count) return b.program_count - a.program_count;
-      return a.name.localeCompare(b.name);
-    });
-    return { items: matched, total: matched.length };
+    if (typeof live.queryUniversities === "function") {
+      return live.queryUniversities(allDetails, {
+        search: String(params.search || ""),
+        city: String(params.city || ""),
+        sector: String(params.sector || ""),
+        sort: String(params.sort || "featured"),
+      });
+    }
+    return null;
   }
 
   if (path.startsWith("/api/universities/")) {
@@ -163,33 +153,18 @@ function liveCatalogApi(path, params = {}) {
   }
 
   if (path === "/api/programs") {
-    const q = String(params.search || "").trim().toLowerCase();
-    const schoolId = String(params.university_id || "").trim();
-    const topic = String(params.topic || "").trim();
-    const page = Math.max(1, Number(params.page || 1));
-    const limit = Math.max(1, Math.min(100, Number(params.limit || 12)));
-    const joined = [];
-    for (const u of allDetails) {
-      if (schoolId && u.id !== schoolId) continue;
-      for (const p of u.programs || []) {
-        if (topic && p.topic !== topic) continue;
-        if (q) {
-          const hay = `${p.name} ${u.name} ${u.short_name}`.toLowerCase();
-          if (!hay.includes(q)) continue;
-        }
-        joined.push(p);
-      }
+    if (typeof live.queryPrograms === "function") {
+      return live.queryPrograms(allDetails, {
+        search: String(params.search || ""),
+        university_id: String(params.university_id || ""),
+        topic: String(params.topic || ""),
+        sector: String(params.sector || ""),
+        city: String(params.city || ""),
+        page: Math.max(1, Number(params.page || 1)),
+        limit: Math.max(1, Math.min(100, Number(params.limit || 12))),
+      });
     }
-    joined.sort(
-      (a, b) => a.name.localeCompare(b.name) || String(a.id).localeCompare(String(b.id)),
-    );
-    const start = (page - 1) * limit;
-    return {
-      items: joined.slice(start, start + limit),
-      total: joined.length,
-      page,
-      limit,
-    };
+    return null;
   }
 
   if (path === "/api/compare") {
@@ -219,6 +194,13 @@ function liveCatalogApi(path, params = {}) {
       params.weights ? String(params.weights) : null,
       Number(params.limit || 20),
     );
+  }
+
+  if (path === "/api/nlp/parse-match") {
+    if (typeof live.parseMatchQuery === "function") {
+      return live.parseMatchQuery(live.records, String(params.q || params.query || ""));
+    }
+    return null;
   }
 
   return null;
@@ -329,7 +311,7 @@ const UNIVERSITY_LOGOS = {
   "sanbeda-manila": "/static/logos/sanbeda-manila.png",
   "up-manila": "/static/logos/up-manila.png",
   spumanila: "/static/logos/spumanila.png",
-  "feu-manila": "/static/logos/feu-manila.png",
+  "feu-manila": "/static/logos/feu-manila.png?v=2",
   "lpu-manila": "/static/logos/lpu-manila.png",
   "mapua-manila": "/static/logos/mapua-manila.png",
 };
@@ -368,6 +350,19 @@ function shortExamLabel(raw) {
     .trim();
 }
 
+function matchBadge(category) {
+  if (!category) return "";
+  const cls =
+    category === "Exact Match"
+      ? "is-exact"
+      : category === "Very Close Match"
+        ? "is-close"
+        : category === "Related Match"
+          ? "is-related"
+          : "is-broad";
+  return `<span class="match-badge ${cls}">${e(category)}</span>`;
+}
+
 function schoolCard(school) {
   const saved = state.saved.includes(school.id),
     compared = state.compare.includes(school.id);
@@ -378,6 +373,19 @@ function schoolCard(school) {
       ? "See fee guide"
       : "Check portal";
   const tuitionClass = school.free_tuition ? "metric-value is-free" : "metric-value";
+  const sm = school.search_match;
+  const matchedProgsHtml =
+    sm && sm.matched_programs && sm.matched_programs.length
+      ? `<div class="card-match-preview">
+          <div class="card-match-head">${matchBadge(sm.category)}<span class="card-match-count">${sm.matched_program_count} matching ${sm.matched_program_count === 1 ? "program" : "programs"}</span></div>
+          <ul class="card-match-programs">${sm.matched_programs
+            .slice(0, 2)
+            .map((p) => `<li>${e(p.name)}</li>`)
+            .join("")}</ul>
+        </div>`
+      : sm
+        ? `<div class="card-match-preview"><div class="card-match-head">${matchBadge(sm.category)}<span class="card-match-count">University match</span></div></div>`
+        : "";
   return `<article class="school-card ${e(school.color)}" data-school-card="${e(school.id)}">
     <div class="card-top">
       ${schoolMark(school)}
@@ -385,6 +393,7 @@ function schoolCard(school) {
     </div>
     <h3><button class="card-title-btn" data-action="details" data-school="${e(school.id)}">${e(school.name)}</button></h3>
     <p class="card-meta"><span>${e(school.sector)}</span><span aria-hidden="true">·</span><span>${e(shortLocation(school.campus_location, school.city))}</span></p>
+    ${matchedProgsHtml}
     <div class="card-stats">
       <div>
         <span class="metric-label">Programs</span>
@@ -408,7 +417,10 @@ function schoolCard(school) {
 
 function programCard(program) {
   return `<article class="program-card">
-    <div class="program-school">${schoolMark(program, true)}<span>${e(program.short_name)}</span><span aria-hidden="true">·</span><span>${e(program.topic)}</span></div>
+    <div class="program-card-top">
+      <div class="program-school">${schoolMark(program, true)}<span>${e(program.short_name)}</span>${program.sector ? `<span aria-hidden="true">·</span><span>${e(program.sector)}</span>` : ""}<span aria-hidden="true">·</span><span>${e(program.topic)}</span></div>
+      ${matchBadge(program.match_category)}
+    </div>
     <h3>${e(program.name)}</h3>
     ${program.strand_alignment ? `<p class="program-strand">Strand note: ${e(program.strand_alignment)}</p>` : ""}
     <button class="text-button" data-action="details" data-school="${e(program.university_id)}" data-tab="programs">View university ${icon("arrow")}</button>
@@ -462,6 +474,52 @@ function renderQuickFilters() {
   container.innerHTML = "";
 }
 
+function renderActiveFilters() {
+  const host = $("#active-filters");
+  if (!host) return;
+  if (["compare", "recommend", "calendar"].includes(state.view)) {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+  const chips = [];
+  if (state.query) {
+    chips.push({ key: "query", label: `Search: "${state.query}"` });
+  }
+  if (state.sector) {
+    const label =
+      state.sector === "Public,Private"
+        ? "Public & Private"
+        : `${state.sector} only`;
+    chips.push({ key: "sector", label: `Type: ${label}` });
+  }
+  if (state.city) {
+    chips.push({ key: "city", label: `Location: ${state.city}` });
+  }
+  if (state.school && state.view === "programs") {
+    const uni = state.schools.find((s) => s.id === state.school);
+    chips.push({
+      key: "school",
+      label: `University: ${uni ? uni.short_name : state.school}`,
+    });
+  }
+  if (state.topic && state.view === "programs") {
+    chips.push({ key: "topic", label: `Topic: ${state.topic}` });
+  }
+  if (!chips.length) {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+  host.hidden = false;
+  host.innerHTML = `<span class="active-filters-label">Active filters:</span>${chips
+    .map(
+      (c) =>
+        `<button type="button" class="active-filter-chip" data-action="clear-filter" data-filter="${e(c.key)}" aria-label="Remove ${e(c.label)} filter">${e(c.label)} <span aria-hidden="true">×</span></button>`,
+    )
+    .join("")}<button type="button" class="active-filter-reset" data-action="reset">Reset all</button>`;
+}
+
 function controls() {
   const universitiesView = state.view === "universities",
     programs = state.view === "programs",
@@ -474,21 +532,21 @@ function controls() {
   $("#results-meta").hidden = compare || recommend || calendar;
   const multiCity = (state.stats?.cities?.length || 0) > 1;
   $("#city-wrap").hidden = !multiCity || programs || recommend || calendar;
-  $("#sector-wrap").hidden = universitiesView || programs || recommend || calendar;
+  $("#sector-wrap").hidden = universitiesView || recommend || calendar;
   $("#school-wrap").hidden = !programs;
   $("#topic-wrap").hidden = true;
   $("#sort-wrap").hidden = programs || recommend || calendar;
   $("#search").placeholder = programs
-    ? "Search a degree or subject (e.g. Nursing, Computer Science)…"
-    : "Search a university, degree, or exam (e.g. USTET, Nursing)…";
+    ? "Search a degree or abbreviation (e.g. Computer Science, BSCS, BSIT, Nursing)…"
+    : "Search a university, degree, or abbreviation (e.g. UST, BSCS, Nursing)…";
   const descriptions = {
     universities: [
       "Explore universities",
-      "Browse 15 Metro Manila universities with verified programs and admissions info.",
+      "Browse 15 Manila universities with verified programs and admissions info.",
     ],
     programs: [
       "Degree programs",
-      "Search undergraduate degrees across all 15 Metro Manila universities.",
+      "Search undergraduate degrees across all 15 Manila universities.",
     ],
     saved: [
       "Saved schools",
@@ -579,23 +637,53 @@ async function render() {
       }
       return;
     }
+    renderActiveFilters();
     if (state.view === "programs") {
       const data = await api("/api/programs", {
         search: state.query,
         university_id: state.school,
         topic: state.topic,
+        sector: state.sector,
+        city: state.city,
         page: state.page,
         limit: 12,
       });
       if (version !== renderVersion) return;
+      const breakdownNote =
+        state.query && (data.exact_count || data.related_count)
+          ? ` (${data.exact_count || 0} direct · ${data.related_count || 0} related)`
+          : "";
       $("#results-count").innerHTML =
-        `<strong>${data.total}</strong> collected program ${data.total === 1 ? "entry" : "entries"}`;
-      results.innerHTML = data.items.length
-        ? `<div class="program-grid">${data.items.map(programCard).join("")}</div>`
-        : emptyState(
-            "No collected programs match",
-            "Try another search or school. An empty result does not mean a university offers no programs.",
-          );
+        `<strong>${data.total}</strong> program ${data.total === 1 ? "match" : "matches"}${e(breakdownNote)}`;
+      if (!data.items.length) {
+        results.innerHTML = emptyState(
+          "No programs match your current search and filters",
+          "Try checking your spelling, searching a broader degree keyword, or removing one of your active filters.",
+        );
+      } else if (state.query) {
+        const directItems = data.items.filter(
+          (p) =>
+            !p.match_tier || p.match_tier <= 5,
+        );
+        const relatedItems = data.items.filter(
+          (p) => p.match_tier && p.match_tier >= 6,
+        );
+        if (directItems.length && relatedItems.length) {
+          results.innerHTML = `
+            <div class="results-tier-block">
+              <h3 class="results-tier-heading">Exact &amp; close matches</h3>
+              <div class="program-grid">${directItems.map(programCard).join("")}</div>
+            </div>
+            <div class="results-tier-block">
+              <h3 class="results-tier-heading">Related academic programs</h3>
+              <div class="program-grid">${relatedItems.map(programCard).join("")}</div>
+            </div>`;
+        } else {
+          results.innerHTML = `<div class="program-grid">${data.items.map(programCard).join("")}</div>`;
+        }
+      } else {
+        results.innerHTML = `<div class="program-grid">${data.items.map(programCard).join("")}</div>`;
+      }
       const pages = Math.ceil(data.total / data.limit);
       if (pages > 1) {
         $("#pagination").hidden = false;
@@ -626,13 +714,17 @@ async function render() {
       });
       if (version !== renderVersion) return;
       const schools = data.items;
+      const filterSuffix =
+        state.sector && state.sector !== "Public,Private"
+          ? ` (${state.sector} only)`
+          : "";
       $("#results-count").innerHTML =
-        `<strong>${schools.length}</strong> ${schools.length === 1 ? "university" : "universities"} to explore`;
+        `<strong>${schools.length}</strong> ${schools.length === 1 ? "university" : "universities"} to explore${e(filterSuffix)}`;
       results.innerHTML = schools.length
         ? `<div class="school-grid">${schools.map(schoolCard).join("")}</div>`
         : emptyState(
-            "A different search might open a door",
-            "Try a university name, degree, or another location to explore more possibilities.",
+            "No universities match your selected filters",
+            "Try clearing a filter or searching another degree, university name, or campus location.",
           );
     }
   } catch (error) {
@@ -1053,7 +1145,7 @@ function renderComparison(schools) {
       <div class="empty-state compare-empty">
         <div class="empty-icon">${icon("compare")}</div>
         <h3>Pick two universities above to compare side by side</h3>
-        <p>Select any two Metro Manila universities from the dropdowns above, or start with a popular comparison below.</p>
+        <p>Select any two Manila universities from the dropdowns above, or start with a popular comparison below.</p>
         ${
           validPairs.length
             ? `<div class="compare-quick-pairs">
@@ -1126,10 +1218,12 @@ function renderComparison(schools) {
 }
 
 const EXPLANATION_STATUS = {
-  matched: "Matched",
-  partial: "Partial",
-  not_matched: "No match",
-  unknown: "Unknown",
+  matched: "Match",
+  partial: "Partial Match",
+  not_matched: "No Match",
+  unavailable: "Information Unavailable",
+  not_applicable: "Not Applicable",
+  unknown: "Information Unavailable",
 };
 
 function groupRecommendations(items) {
@@ -1141,11 +1235,12 @@ function groupRecommendations(items) {
         university_id: item.university_id,
         university_name: item.university_name,
         short_name: item.short_name,
+        sector: item.sector,
         campus_location: item.campus_location,
         items: [],
       });
     }
-    groups.get(key).items.push({ ...item, rank: index + 1 });
+    groups.get(key).items.push({ ...item, rank: item.rank || index + 1 });
   });
   return [...groups.values()];
 }
@@ -1153,26 +1248,46 @@ function groupRecommendations(items) {
 function recommendationRow(item, rank) {
   const program = item.program_name || "All collected programs at this university";
   const explanations = (item.explanations || [])
-    .map(
-      (row) => `<li class="explain-row ${e(row.status)}">
-        <span class="explain-label">${e(row.label)}</span>
-        <span class="explain-status">${e(EXPLANATION_STATUS[row.status] || row.status)}</span>
-        <span class="explain-points">${Math.round(Number(row.points || 0) * 100)}%</span>
+    .map((row) => {
+      const statusLabel =
+        row.status_label || EXPLANATION_STATUS[row.status] || row.status;
+      const hasScore =
+        row.points !== null &&
+        row.points !== undefined &&
+        row.status !== "unavailable" &&
+        row.status !== "not_applicable";
+      const pointsText = hasScore
+        ? `${Math.round(Number(row.points) * 100)}%`
+        : "—";
+      const weightText =
+        hasScore && typeof row.effective_weight === "number" && row.effective_weight > 0
+          ? `Weight ${Math.round(row.effective_weight * 100)}%`
+          : "";
+      return `<li class="explain-row ${e(row.status)}">
+        <span class="explain-label">${e(row.label)}${weightText ? ` <small class="explain-weight">(${e(weightText)})</small>` : ""}</span>
+        <span class="explain-status">${e(statusLabel)}</span>
+        <span class="explain-points">${e(pointsText)}</span>
         <p>${e(row.reason)}</p>
-      </li>`,
-    )
+      </li>`;
+    })
     .join("");
   const compared = state.compare.includes(item.university_id);
+  const categoryBadge = item.search_match?.category
+    ? matchBadge(item.search_match.category)
+    : "";
   return `<article class="match-card match-card-grouped">
     <div class="match-rank" aria-hidden="true">#${rank}</div>
     <div class="match-main">
       <div class="match-head">
         <div>
-          <h4>${e(program)}</h4>
-          <p class="match-program"><span>${e(item.topic || "University-wide match")}</span>${item.unknown ? '<span aria-hidden="true">·</span><span class="match-unknown-note">Some source data unknown</span>' : ""}</p>
+          <div class="match-title-row">
+            <h4>${e(program)}</h4>
+            ${categoryBadge}
+          </div>
+          <p class="match-program"><span>${e(item.topic || "University-wide match")}</span>${item.unknown ? '<span aria-hidden="true">·</span><span class="match-unknown-note">Some source data unavailable (not penalized)</span>' : ""}</p>
         </div>
-        <div class="match-score" aria-label="Match score ${e(item.score)} out of 100">
-          <strong>${e(item.score)}</strong><span>match score</span>
+        <div class="match-score" aria-label="Compatibility score ${e(item.score)} percent">
+          <strong>${e(item.score)}%</strong><span>compatibility</span>
         </div>
       </div>
       <progress class="score-track" max="100" value="${Math.max(0, Math.min(100, Number(item.score) || 0))}" aria-hidden="true"></progress>
@@ -1197,6 +1312,7 @@ function recommendationGroup(group) {
     short_name: group.short_name,
     color: "green",
   };
+  const sectorLabel = group.sector || matchedSchool?.sector || "";
   const programCountLabel =
     group.items.length === 1 && !group.items[0].program_name
       ? "University match"
@@ -1207,16 +1323,46 @@ function recommendationGroup(group) {
         ${schoolMark(markSource)}
         <div>
           <h3>${e(group.university_name)}</h3>
-          <p class="card-location">${icon("pin")}${e(group.campus_location || "Campus not available")}</p>
+          <p class="card-location">${sectorLabel ? `<span class="match-sector-tag">${e(sectorLabel)}</span> · ` : ""}${icon("pin")}${e(group.campus_location || "Campus not available")}</p>
         </div>
       </div>
       <div class="match-group-meta">
-        <strong>${e(best)}<span>/100 best</span></strong>
+        <strong>${e(best)}%<span> best</span></strong>
         <span class="match-group-count">${e(programCountLabel)}</span>
       </div>
     </header>
     <div class="match-group-list">${group.items.map((item) => recommendationRow(item, item.rank)).join("")}</div>
   </section>`;
+}
+
+function renderRecommendActiveFilters(rec) {
+  const chips = [];
+  if (rec.program) chips.push({ key: "program", label: `Program: ${rec.program}` });
+  if (rec.city) chips.push({ key: "city", label: `Location: ${rec.city}` });
+  if (rec.sector) {
+    const sectorText =
+      rec.sector === "Public,Private"
+        ? "Public & Private"
+        : `${rec.sector} only`;
+    chips.push({ key: "sector", label: `Type: ${sectorText}` });
+  }
+  if (rec.budget !== "") {
+    chips.push({
+      key: "budget",
+      label: `Budget: PHP ${Number(rec.budget).toLocaleString("en-PH")} / ${rec.budgetBasis}`,
+    });
+  }
+  if (!chips.length) return "";
+  return `<div class="active-filters recommend-active-filters" aria-label="Active match filters">
+    <span class="active-filters-label">Applied filters:</span>
+    ${chips
+      .map(
+        (c) =>
+          `<button type="button" class="active-filter-chip" data-action="rec-clear-filter" data-filter="${e(c.key)}">${e(c.label)} <span aria-hidden="true">×</span></button>`,
+      )
+      .join("")}
+    <button type="button" class="active-filter-reset" data-action="recommend-reset">Reset all</button>
+  </div>`;
 }
 
 function recommendationOutput(result, error, loading) {
@@ -1229,44 +1375,94 @@ function recommendationOutput(result, error, loading) {
   if (!result) {
     const picks = [
       "Computer Science",
+      "Information Technology",
       "Nursing",
       "Accountancy",
       "Architecture",
       "Psychology",
-      "Engineering",
     ];
     return `<div class="empty-state recommend-placeholder">
       <div class="empty-icon">${icon("spark")}</div>
       <h3>See which universities fit you best</h3>
-      <p>Enter a degree, campus area, budget, or school type — or try a popular program below.</p>
+      <p>Enter a degree (or abbreviation like BSCS, BSIT, BSCpE), campus area, school type, or budget — or try a popular program below.</p>
       <div class="match-quick-picks">
         ${picks.map((p) => `<button type="button" class="filter-chip" data-action="quick-match" data-value="${e(p)}">${e(p)}</button>`).join("")}
       </div>
     </div>`;
   }
+  const activeFiltersHtml = renderRecommendActiveFilters(state.recommend);
   if (!result.items?.length) {
-    return emptyState(
-      "No matches found",
-      "Try a broader degree keyword (e.g. Engineering, Nursing, Computer Science) or adjust one of your filters.",
+    const sectorNote =
+      state.recommend.sector && state.recommend.sector !== "Public,Private"
+        ? `No ${state.recommend.sector} universities matched all of your active filters.`
+        : "No universities matched all of your active filters.";
+    return `${activeFiltersHtml}${emptyState(
+      "No matching universities found",
+      `${sectorNote} Filters are applied strictly — remove a filter or try a broader degree keyword.`,
       "recommend-reset",
-      "Reset preferences",
+      "Reset all filters",
       "spark",
-    );
+    )}`;
   }
-  const groups = groupRecommendations(result.items);
-  const topTwoIds = groups.slice(0, 2).map((g) => g.university_id).filter(Boolean);
+
+  const numberedItems = result.items.map((item, idx) => ({
+    ...item,
+    rank: idx + 1,
+  }));
+  const hasProgramSearch = Boolean(result.preferences?.program);
+  const directItems = hasProgramSearch
+    ? numberedItems.filter(
+        (item) => !item.search_match || item.search_match.tier <= 5,
+      )
+    : numberedItems;
+  const relatedItems = hasProgramSearch
+    ? numberedItems.filter(
+        (item) => item.search_match && item.search_match.tier >= 6,
+      )
+    : [];
+
+  const directGroups = groupRecommendations(directItems);
+  const relatedGroups = groupRecommendations(relatedItems);
+  const allGroups = groupRecommendations(numberedItems);
+  const topTwoIds = allGroups.slice(0, 2).map((g) => g.university_id).filter(Boolean);
   const showingAll = result.items.length >= result.total;
   const headingText = showingAll
-    ? `${result.items.length} ${result.items.length === 1 ? "match" : "matches"} across ${groups.length} universit${groups.length === 1 ? "y" : "ies"}`
-    : `Showing top ${result.items.length} of ${result.total} matches across ${groups.length} universit${groups.length === 1 ? "y" : "ies"}`;
+    ? `${result.items.length} ${result.items.length === 1 ? "match" : "matches"} across ${allGroups.length} universit${allGroups.length === 1 ? "y" : "ies"}`
+    : `Showing top ${result.items.length} of ${result.total} matches across ${allGroups.length} universit${allGroups.length === 1 ? "y" : "ies"}`;
   const canShowMore = result.total > result.items.length && result.limit < 60;
+  const breakdownSub =
+    hasProgramSearch && (result.exact_match_count || result.related_match_count)
+      ? `<p class="recommend-tier-summary">${result.exact_match_count || 0} exact &amp; close ${result.exact_match_count === 1 ? "match" : "matches"} · ${result.related_match_count || 0} related ${result.related_match_count === 1 ? "program" : "programs"}</p>`
+      : "";
 
-  return `<div class="recommend-summary">
+  let listHtml = "";
+  if (directGroups.length && relatedGroups.length) {
+    listHtml = `
+      <div class="results-tier-block">
+        <h4 class="results-tier-heading">Exact &amp; very close program matches</h4>
+        <div class="match-list">${directGroups.map(recommendationGroup).join("")}</div>
+      </div>
+      <div class="results-tier-block">
+        <h4 class="results-tier-heading">Related academic programs</h4>
+        <div class="match-list">${relatedGroups.map(recommendationGroup).join("")}</div>
+      </div>`;
+  } else if (relatedGroups.length && !directGroups.length) {
+    listHtml = `
+      <div class="results-tier-block">
+        <h4 class="results-tier-heading">Related academic programs (no exact title match under active filters)</h4>
+        <div class="match-list">${relatedGroups.map(recommendationGroup).join("")}</div>
+      </div>`;
+  } else {
+    listHtml = `<div class="match-list">${allGroups.map(recommendationGroup).join("")}</div>`;
+  }
+
+  return `${activeFiltersHtml}<div class="recommend-summary">
       <div>
         <h3>${e(headingText)}</h3>
+        ${breakdownSub}
         <details class="score-info-toggle">
-          <summary>How scores work</summary>
-          <p>${e(result.formula || "")} ${e(result.unknown_policy || "Missing source data scores 0 and is labeled unknown.")}</p>
+          <summary>How compatibility scores &amp; filters work</summary>
+          <p>Hard filters (school type, campus area) are applied first so non-matching universities never appear. ${e(result.formula || "")}</p>
         </details>
       </div>
       ${
@@ -1275,7 +1471,7 @@ function recommendationOutput(result, error, loading) {
           : ""
       }
     </div>
-    <div class="match-list">${groups.map(recommendationGroup).join("")}</div>
+    ${listHtml}
     ${
       canShowMore
         ? `<div class="recommend-more-wrap"><button type="button" class="button secondary" data-action="recommend-more">Show more matches (${Math.min(60, result.total)} max)</button></div>`
@@ -1286,19 +1482,24 @@ function recommendationOutput(result, error, loading) {
 function updateWeightSumLabel() {
   const el = $("#rec-weight-sum");
   if (!el) return;
+  const hasBudget = ($("#rec-budget")?.value || "").trim() !== "";
+  const activeNames = hasBudget
+    ? ["program", "location", "budget", "sector"]
+    : ["program", "location", "sector"];
   let sum = 0;
-  for (const name of ["program", "location", "budget", "sector"]) {
+  for (const name of activeNames) {
     const val = Number($("#rec-weight-" + name)?.value || 0);
     if (Number.isFinite(val) && val > 0) sum += val;
   }
+  const budgetNote = hasBudget ? "" : " (budget weight applies only when a budget is entered)";
   if (sum <= 0) {
     el.textContent = "Total: 0% — set at least one weight above 0";
     el.classList.add("is-invalid");
   } else if (Math.round(sum) === 100) {
-    el.textContent = "Total: 100%";
+    el.textContent = `Total: 100%${budgetNote}`;
     el.classList.remove("is-invalid");
   } else {
-    el.textContent = `Total: ${Math.round(sum)}% (auto-normalized to 100%)`;
+    el.textContent = `Total: ${Math.round(sum)}% (auto-normalized to 100%)${budgetNote}`;
     el.classList.remove("is-invalid");
   }
 }
@@ -1318,31 +1519,128 @@ function updateRecommendOutput() {
   if (submit) submit.disabled = Boolean(state.recommend.loading);
 }
 
+const NLP_SAMPLE_PROMPTS = [
+  "Private school in Malate for Computer Science under 80k per sem",
+  "Free tuition nursing near Ermita",
+  "Gusto ko ng Civil Engineering malapit sa Sta. Mesa",
+];
+
+function renderNlpFeedback(rec) {
+  if (rec.nlpError) {
+    return `<p class="nlp-feedback nlp-feedback-error" role="alert">${e(rec.nlpError)}</p>`;
+  }
+  if (!rec.nlpParsed) return "";
+  if (!rec.nlpParsed.hasMatches) {
+    return `<p class="nlp-feedback nlp-feedback-empty">${e(rec.nlpParsed.summary)}</p>`;
+  }
+  return `<div class="nlp-feedback nlp-feedback-ok" aria-live="polite">
+    <p class="nlp-feedback-title">Detected from your sentence — edit any field below:</p>
+    <ul class="nlp-entity-list">
+      ${rec.nlpParsed.entities
+        .map(
+          (ent) =>
+            `<li class="nlp-entity-item"><strong>${e(ent.label)}:</strong> <span>${e(ent.value)}</span> <em class="nlp-entity-trigger">from “${e(ent.matchedPhrase)}”</em></li>`,
+        )
+        .join("")}
+    </ul>
+  </div>`;
+}
+
+async function runNlpParse(autoMatch = true) {
+  const rec = state.recommend;
+  const inputEl = $("#rec-nlp-input");
+  const sentence = (inputEl ? inputEl.value : rec.nlpQuery || "").trim();
+  rec.nlpQuery = sentence;
+  rec.nlpOpen = true;
+  if (!sentence) {
+    rec.nlpError =
+      "Type a short sentence describing your preferred degree, Manila area, school type, or budget.";
+    rec.nlpParsed = null;
+    const feedback = $("#nlp-feedback");
+    if (feedback) feedback.innerHTML = renderNlpFeedback(rec);
+    return;
+  }
+  rec.nlpLoading = true;
+  rec.nlpError = "";
+  const parseBtn = $(".nlp-parse-btn");
+  if (parseBtn) parseBtn.disabled = true;
+  try {
+    const parsed = await api("/api/nlp/parse-match", { q: sentence });
+    rec.nlpParsed = parsed;
+    rec.nlpLoading = false;
+    if (!parsed || !parsed.hasMatches) {
+      renderRecommend();
+      return;
+    }
+    const p = parsed.preferences || {};
+    rec.program = p.program || "";
+    rec.city = p.city || "";
+    rec.sector = p.sector || "";
+    rec.budget =
+      p.budget !== null && p.budget !== undefined ? String(p.budget) : "";
+    rec.budgetBasis = p.budget_basis || "semester";
+    renderRecommend();
+    if (autoMatch) {
+      await runRecommendation(true);
+    } else {
+      toast("Filters filled from your description. Review and click Find my matches.");
+    }
+  } catch (err) {
+    rec.nlpLoading = false;
+    rec.nlpError = err?.message || "Could not interpret your description.";
+    rec.nlpParsed = null;
+    const feedback = $("#nlp-feedback");
+    if (feedback) feedback.innerHTML = renderNlpFeedback(rec);
+    if (parseBtn) parseBtn.disabled = false;
+  }
+}
+
 function renderRecommend() {
   const rec = state.recommend;
   const locations = getMatchLocations();
+  const hasSelectedCityInList =
+    !rec.city || locations.some((loc) => loc.value === rec.city);
   const weightInput = (name, label) => `<label class="weight-field"><span>${e(label)}</span><input id="rec-weight-${e(name)}" type="number" min="0" max="100" step="5" value="${Math.round(Number(rec.weights[name] || 0) * 100)}" aria-label="${e(label)} weight in percent"><span class="weight-unit">%</span></label>`;
   $("#results").innerHTML = `<div class="recommend-layout">
     <form class="recommend-form" id="recommend-form" novalidate>
       <div class="recommend-form-head">
         <h3>Your preferences</h3>
-        <p>Fill in at least one field. Leave anything blank if it doesn’t matter.</p>
+        <p>Fill in at least one field. School type and campus area act as strict filters.</p>
       </div>
-      <label class="recommend-field"><span>Preferred degree or field</span><input id="rec-program" type="search" maxlength="200" autocomplete="off" placeholder="e.g. Computer Science, Nursing, BS Accountancy, IT" value="${e(rec.program)}"></label>
-      <label class="recommend-field"><span>Campus area</span><select id="rec-city"><option value="">Any Manila campus</option>${locations.map((loc) => `<option value="${e(loc.value)}" ${loc.value === rec.city ? "selected" : ""}>${e(loc.label)}</option>`).join("")}</select></label>
-      <label class="recommend-field"><span>University type</span><select id="rec-sector"><option value="">Public or Private</option><option value="Public" ${rec.sector === "Public" ? "selected" : ""}>Public (Free tuition via RA 10931)</option><option value="Private" ${rec.sector === "Private" ? "selected" : ""}>Private</option></select></label>
+      <details class="nlp-panel" id="nlp-panel" ${rec.nlpOpen ? "open" : ""}>
+        <summary><span>Describe in plain language</span><span class="nlp-summary-hint">Optional</span></summary>
+        <div class="nlp-panel-body">
+          <p class="nlp-helper">Write a sentence in English or Taglish to pre-fill the filters below automatically.</p>
+          <label class="sr-only" for="rec-nlp-input">Describe the university and program you want</label>
+          <textarea id="rec-nlp-input" class="nlp-textarea" rows="2" maxlength="500" placeholder="e.g. Private university near Intramuros for computer science under 70k per sem">${e(rec.nlpQuery)}</textarea>
+          <div class="nlp-examples" aria-label="Example descriptions">
+            ${NLP_SAMPLE_PROMPTS.map(
+              (sample) =>
+                `<button type="button" class="nlp-example-btn" data-action="nlp-example" data-value="${e(sample)}">${e(sample)}</button>`,
+            ).join("")}
+          </div>
+          <div class="nlp-actions">
+            <button class="button secondary nlp-parse-btn" type="button" data-action="nlp-parse-match" ${rec.nlpLoading ? "disabled" : ""}>${icon("spark")}Interpret &amp; match</button>
+            <button class="nlp-fill-only-btn" type="button" data-action="nlp-fill-only" ${rec.nlpLoading ? "disabled" : ""}>Fill filters only</button>
+          </div>
+          <div id="nlp-feedback">${renderNlpFeedback(rec)}</div>
+        </div>
+      </details>
+      <label class="recommend-field"><span>Preferred degree or field</span><input id="rec-program" type="search" maxlength="200" autocomplete="off" placeholder="e.g. Computer Science, BSCS, BSIT, Nursing" value="${e(rec.program)}"></label>
+      <label class="recommend-field"><span>Campus area</span><select id="rec-city"><option value="">Any Manila campus</option>${locations.map((loc) => `<option value="${e(loc.value)}" ${loc.value === rec.city ? "selected" : ""}>${e(loc.label)}</option>`).join("")}${!hasSelectedCityInList ? `<option value="${e(rec.city)}" selected>${e(rec.city)}</option>` : ""}</select></label>
+      <label class="recommend-field"><span>University type</span><select id="rec-sector"><option value="">All universities (no filter)</option><option value="Public" ${rec.sector === "Public" ? "selected" : ""}>Public only (Free tuition via RA 10931)</option><option value="Private" ${rec.sector === "Private" ? "selected" : ""}>Private only</option><option value="Public,Private" ${rec.sector === "Public,Private" ? "selected" : ""}>Both Public &amp; Private</option></select></label>
       <div class="recommend-budget">
         <label class="recommend-field"><span>Budget (PHP)</span><input id="rec-budget" type="number" min="0" max="10000000" step="1000" inputmode="numeric" placeholder="Optional" value="${e(rec.budget)}"></label>
         <label class="recommend-field"><span>Per</span><select id="rec-basis">${["semester", "trimester", "year", "unit"].map((basis) => `<option value="${basis}" ${basis === rec.budgetBasis ? "selected" : ""}>${basis}</option>`).join("")}</select></label>
       </div>
       <details class="weight-panel">
         <summary>Customize priority weights</summary>
-        <p>Adjust how much each factor counts toward your match score.</p>
+        <p>Adjust how much each factor counts toward your compatibility score. Unavailable university data is never penalized.</p>
         <div class="weight-grid">
           ${weightInput("program", "Program")}
           ${weightInput("location", "Location")}
-          ${weightInput("budget", "Budget")}
           ${weightInput("sector", "School type")}
+          ${weightInput("budget", "Budget")}
         </div>
         <p class="weight-sum" id="rec-weight-sum">Total: 100%</p>
       </details>
@@ -1353,6 +1651,12 @@ function renderRecommend() {
     </form>
     <div class="recommend-output" aria-live="polite">${recommendationOutput(rec.result, rec.error, rec.loading)}</div>
   </div>`;
+  const nlpPanel = $("#nlp-panel");
+  if (nlpPanel) {
+    nlpPanel.addEventListener("toggle", () => {
+      state.recommend.nlpOpen = nlpPanel.open;
+    });
+  }
   updateWeightSumLabel();
   $("#results").setAttribute("aria-busy", "false");
 }
@@ -1366,8 +1670,9 @@ async function runRecommendation(resetLimit = true) {
     rec.sector = read("rec-sector");
     rec.budget = read("rec-budget");
     rec.budgetBasis = read("rec-basis") || "semester";
+    const hasBudget = rec.budget !== "";
     const weights = {};
-    let weightTotal = 0;
+    let coreWeightTotal = 0;
     for (const name of ["program", "location", "budget", "sector"]) {
       const raw = Number(read("rec-weight-" + name));
       if (!Number.isFinite(raw) || raw < 0 || raw > 100) {
@@ -1377,9 +1682,11 @@ async function runRecommendation(resetLimit = true) {
         return;
       }
       weights[name] = raw / 100;
-      weightTotal += raw;
+      if (name !== "budget" || hasBudget) {
+        coreWeightTotal += raw;
+      }
     }
-    if (weightTotal <= 0) {
+    if (coreWeightTotal <= 0) {
       rec.error = "At least one criterion weight must be greater than 0%.";
       rec.result = null;
       updateRecommendOutput();
@@ -1408,12 +1715,15 @@ async function runRecommendation(resetLimit = true) {
   rec.error = "";
   rec.result = null;
   updateRecommendOutput();
+  const activeWeightEntries = Object.entries(rec.weights).filter(
+    ([name]) => name !== "budget" || rec.budget !== "",
+  );
   const params = {
     program: rec.program,
     city: rec.city,
     sector: rec.sector,
     limit: rec.limit || 20,
-    weights: Object.entries(rec.weights)
+    weights: activeWeightEntries
       .map(([name, value]) => `${name}:${value}`)
       .join(","),
   };
@@ -1711,10 +2021,10 @@ function openNotes() {
   ++detailVersion;
   state.detail = null;
   $("#detail-body").innerHTML =
-    `<header class="detail-head"><h2 id="dialog-title">About this data</h2><p class="detail-meta">Sourced from official Metro Manila university portals</p></header>
+    `<header class="detail-head"><h2 id="dialog-title">About this data</h2><p class="detail-meta">Sourced from official Manila university portals</p></header>
     <div class="detail-panel">
       <h3>What’s included</h3>
-      <p>UniMatch PH covers ${e(state.stats?.universities ?? state.schools.length)} Metro Manila universities with undergraduate programs, entrance exam policies, freshman requirements, and official portal links.</p>
+      <p>UniMatch PH covers ${e(state.stats?.universities ?? state.schools.length)} Manila universities with undergraduate programs, entrance exam policies, freshman requirements, and official portal links.</p>
       <h3>Tuition honesty</h3>
       <p>Public universities covered by Republic Act 10931 (Free Higher Education) are marked free for eligible Filipino undergraduates. Private university tuition is left blank unless verified on an official fee schedule.</p>
       <h3>Always double-check dates</h3>
@@ -1900,6 +2210,60 @@ document.addEventListener("click", (event) => {
       runRecommendation(true);
       break;
     }
+    case "clear-filter": {
+      clearTimeout(searchTimer);
+      const key = button.dataset.filter || "";
+      if (key === "query") {
+        state.query = "";
+        $("#search").value = "";
+      } else if (["sector", "city", "topic", "school"].includes(key)) {
+        state[key] = "";
+        const el = $("#" + key);
+        if (el) el.value = "";
+      }
+      state.page = 1;
+      renderQuickFilters();
+      render();
+      break;
+    }
+    case "rec-clear-filter": {
+      const key = button.dataset.filter || "";
+      if (key === "program") state.recommend.program = "";
+      else if (key === "city") state.recommend.city = "";
+      else if (key === "sector") state.recommend.sector = "";
+      else if (key === "budget") state.recommend.budget = "";
+      const hasAny =
+        Boolean(state.recommend.program) ||
+        Boolean(state.recommend.city) ||
+        Boolean(state.recommend.sector) ||
+        state.recommend.budget !== "";
+      renderRecommend();
+      if (hasAny) {
+        runRecommendation(true);
+      } else {
+        state.recommend.result = null;
+        state.recommend.error = "";
+        updateRecommendOutput();
+      }
+      break;
+    }
+    case "nlp-parse-match": {
+      runNlpParse(true);
+      break;
+    }
+    case "nlp-fill-only": {
+      runNlpParse(false);
+      break;
+    }
+    case "nlp-example": {
+      const sample = button.dataset.value || "";
+      state.recommend.nlpQuery = sample;
+      state.recommend.nlpOpen = true;
+      const input = $("#rec-nlp-input");
+      if (input) input.value = sample;
+      runNlpParse(true);
+      break;
+    }
     case "recommend-reset": {
       state.recommend = {
         program: "",
@@ -1909,14 +2273,19 @@ document.addEventListener("click", (event) => {
         budgetBasis: "semester",
         limit: 20,
         weights: {
-          program: 0.45,
-          location: 0.2,
+          program: 0.55,
+          location: 0.25,
           budget: 0.2,
-          sector: 0.15,
+          sector: 0.2,
         },
         result: null,
         error: "",
         loading: false,
+        nlpQuery: "",
+        nlpOpen: state.recommend.nlpOpen,
+        nlpParsed: null,
+        nlpError: "",
+        nlpLoading: false,
       };
       renderRecommend();
       break;
@@ -1987,7 +2356,20 @@ $("#search").addEventListener("input", (event) => {
   state.query = event.target.value.trim();
   state.page = 1;
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(render, 220);
+  if (!state.query) {
+    render();
+    return;
+  }
+  searchTimer = setTimeout(render, 200);
+});
+$("#search").addEventListener("search", (event) => {
+  const next = event.target.value.trim();
+  if (next !== state.query || !next) {
+    state.query = next;
+    state.page = 1;
+    clearTimeout(searchTimer);
+    render();
+  }
 });
 ["city", "sector", "topic", "school", "sort"].forEach((id) =>
   $("#" + id).addEventListener("change", (event) => {
@@ -2011,14 +2393,33 @@ document.addEventListener("input", (event) => {
     state.compareOptions.programQuery = event.target.value;
     updateCompareTableOnly();
   }
+  if (event.target.id === "rec-nlp-input") {
+    state.recommend.nlpQuery = event.target.value;
+    if (state.recommend.nlpError) {
+      state.recommend.nlpError = "";
+      const feedback = $("#nlp-feedback");
+      if (feedback) feedback.innerHTML = renderNlpFeedback(state.recommend);
+    }
+  }
   if (
-    typeof event.target.id === "string" &&
-    event.target.id.startsWith("rec-weight-")
+    event.target.id === "rec-budget" ||
+    (typeof event.target.id === "string" &&
+      event.target.id.startsWith("rec-weight-"))
   ) {
     updateWeightSumLabel();
   }
 });
 document.addEventListener("keydown", (event) => {
+  if (
+    event.target &&
+    event.target.id === "rec-nlp-input" &&
+    event.key === "Enter" &&
+    !event.shiftKey
+  ) {
+    event.preventDefault();
+    runNlpParse(true);
+    return;
+  }
   if (
     (event.ctrlKey || event.metaKey) &&
     event.key.toLowerCase() === "k" &&

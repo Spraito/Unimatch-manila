@@ -4,11 +4,7 @@
  */
 import crypto from "node:crypto";
 import { cleanText } from "./algorithms/extraction.js";
-import {
-  BUDGET_BASES,
-  normalizeWeights,
-  type Criterion,
-} from "./algorithms/matching.js";
+import { normalizeWeights, type Criterion } from "./algorithms/matching.js";
 import {
   hydratePgUserIntoStore,
   persistAccountStore,
@@ -163,32 +159,6 @@ function validatePreferencesInput(raw: Record<string, unknown>) {
     throw new AccountError("University type must be Public or Private");
   }
 
-  let budget: number | null = null;
-  if (raw.budget !== undefined && raw.budget !== null && raw.budget !== "") {
-    if (typeof raw.budget === "boolean") {
-      throw new AccountError("Budget must be a number");
-    }
-    const num = Number(raw.budget);
-    if (!Number.isFinite(num)) {
-      throw new AccountError("Budget must be a number");
-    }
-    if (num < 0 || num > 10_000_000) {
-      throw new AccountError("Budget must be between 0 and 10,000,000 PHP");
-    }
-    budget = num;
-  }
-
-  const rawBasis = cleanText(raw.budget_basis);
-  const basis = rawBasis || "semester";
-  if (!(BUDGET_BASES as readonly string[]).includes(basis)) {
-    throw new AccountError(
-      "Budget basis must be semester, trimester, year or unit",
-    );
-  }
-  if (budget === null && rawBasis) {
-    throw new AccountError("Provide a budget when choosing a budget basis");
-  }
-
   let rawWeights: Record<string, unknown> = {};
   if (typeof raw.weights === "string" && raw.weights.trim()) {
     try {
@@ -211,8 +181,8 @@ function validatePreferencesInput(raw: Record<string, unknown>) {
     program,
     city,
     sector,
-    budget,
-    budget_basis: budget !== null ? basis : "semester",
+    budget: null as number | null,
+    budget_basis: "semester",
     weights,
   };
 }
@@ -683,12 +653,7 @@ export function savePreferences(
 }
 
 export function hasPreferences(preferences: PreferencesData): boolean {
-  return Boolean(
-    preferences.program ||
-      preferences.city ||
-      preferences.sector ||
-      preferences.budget !== null,
-  );
+  return Boolean(preferences.program || preferences.city || preferences.sector);
 }
 
 export function recommendationPreferences(preferences: PreferencesData) {
@@ -696,8 +661,6 @@ export function recommendationPreferences(preferences: PreferencesData) {
     program: preferences.program || "",
     city: preferences.city || "",
     sector: preferences.sector || "",
-    budget: preferences.budget,
-    budget_basis: preferences.budget !== null ? preferences.budget_basis : "",
   };
 }
 

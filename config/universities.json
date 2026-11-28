@@ -1,16 +1,21 @@
 [
   {
     "name": "University of the Philippines Manila",
-    "campus_location": "Padre Faura Street, Ermita, Manila, Metro Manila",
-    "approved_domains": ["upm.edu.ph"],
+    "campus_location": "Padre Faura Street, Ermita, Manila",
+    "approved_domains": ["upm.edu.ph", "up.edu.ph"],
     "source_notes": [
-      "Official UP Manila admissions and academic program pages configured. Verify current intake applicability with UPM OUR before publishing."
+      "Official UP Manila undergraduate admissions and UPCAT 2027 portals verified on 2026-11-27. UPCAT 2027 (AY 2027–2028) applications and exam have concluded; results release date is Not Yet Announced."
     ],
     "pages": [
       {
-        "label": "Admissions overview",
-        "url": "https://www.upm.edu.ph/admissions/",
+        "label": "Undergraduate admissions",
+        "url": "https://www.upm.edu.ph/admissions-undergraduate/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
+      },
+      {
+        "label": "UPCAT official admissions site",
+        "url": "https://upcat.up.edu.ph/",
+        "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status"]
       },
       {
         "label": "Academic & degree programs",
@@ -26,13 +31,18 @@
   },
   {
     "name": "University of Santo Tomas",
-    "campus_location": "España Boulevard, Sampaloc, Manila, Metro Manila",
+    "campus_location": "España Boulevard, Sampaloc, Manila",
     "approved_domains": ["ust.edu.ph"],
     "pages": [
       {
         "label": "OFAD admissions & USTET",
         "url": "https://ofad.ust.edu.ph/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
+      },
+      {
+        "label": "USTET AY 2027–2028 application portal",
+        "url": "https://ustet.ust.edu.ph/",
+        "fields": ["application_deadlines", "application_status", "entrance_exam_coverage"]
       },
       {
         "label": "Undergraduate degree programs",
@@ -48,12 +58,15 @@
   },
   {
     "name": "De La Salle University",
-    "campus_location": "Taft Avenue, Malate, Manila, Metro Manila",
+    "campus_location": "Taft Avenue, Malate, Manila",
     "approved_domains": ["dlsu.edu.ph"],
+    "source_notes": [
+      "Official DLSU undergraduate first-year college application page verified on 2026-11-27 for AY 2027–2028 Term 1."
+    ],
     "pages": [
       {
-        "label": "Freshmen procedures & DCAT",
-        "url": "https://www.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/",
+        "label": "Undergraduate first-year application & DCAT",
+        "url": "https://www.dlsu.edu.ph/admission/admissions-undergraduate-first-year-college-application/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
       },
       {
@@ -70,16 +83,21 @@
   },
   {
     "name": "Adamson University",
-    "campus_location": "900 San Marcelino Street, Ermita, Manila, Metro Manila",
+    "campus_location": "900 San Marcelino Street, Ermita, Manila",
     "approved_domains": ["adamson.edu.ph"],
     "source_notes": [
-      "Official Adamson University admissions and academic program pages configured."
+      "Official Adamson University freshmen admission and AdUCET portal pages verified on 2026-11-27."
     ],
     "pages": [
       {
-        "label": "Admissions overview",
-        "url": "https://www.adamson.edu.ph/v1/?page=admission",
+        "label": "Freshmen admissions requirements",
+        "url": "https://www.adamson.edu.ph/v1/?page=freshmen",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
+      },
+      {
+        "label": "AdUCET online application portal",
+        "url": "https://www.adamson.edu.ph/aducet/",
+        "fields": ["application_deadlines", "application_status"]
       },
       {
         "label": "Colleges & degree programs",
@@ -90,7 +108,7 @@
   },
   {
     "name": "Polytechnic University of the Philippines",
-    "campus_location": "Sta. Mesa, Manila, Metro Manila",
+    "campus_location": "Sta. Mesa, Manila",
     "approved_domains": ["pup.edu.ph"],
     "source_notes": [
       "PUPCET source inspected: confirm intake applicability with PUP before publishing.",
@@ -124,16 +142,26 @@
   },
   {
     "name": "University of the East",
-    "campus_location": "2219 C.M. Recto Avenue, Sampaloc, Manila, Metro Manila",
+    "campus_location": "2219 C.M. Recto Avenue, Sampaloc, Manila",
     "approved_domains": ["ue.edu.ph"],
     "source_notes": [
       "Official UE Manila admissions, academics, and school fees pages configured."
     ],
     "pages": [
       {
-        "label": "Manila admissions",
-        "url": "https://www.ue.edu.ph/manila/admissions/",
+        "label": "Manila admissions information",
+        "url": "https://www.ue.edu.ph/mla/about-admission/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
+      },
+      {
+        "label": "Manila admission announcements",
+        "url": "https://www.ue.edu.ph/mla/admission-news-and-annoucements/",
+        "fields": ["application_deadlines", "application_status"]
+      },
+      {
+        "label": "UE Online Admission Portal",
+        "url": "https://apps.ue.edu.ph/onlineadmission/main.html",
+        "fields": ["application_status"]
       },
       {
         "label": "Manila colleges & programs",
@@ -149,15 +177,15 @@
   },
   {
     "name": "Far Eastern University",
-    "campus_location": "Nicanor Reyes Street, Sampaloc, Manila, Metro Manila",
+    "campus_location": "Nicanor Reyes Street, Sampaloc, Manila",
     "approved_domains": ["feu.edu.ph"],
     "source_notes": [
-      "Official FEU admissions, academics, and tuition pages configured."
+      "Official FEU freshmen application page verified on 2026-11-27 (page updated Oct 1, 2026)."
     ],
     "pages": [
       {
-        "label": "Admissions & FEUCAT",
-        "url": "https://www.feu.edu.ph/admissions/",
+        "label": "Freshmen application & FEUCAT",
+        "url": "https://www.feu.edu.ph/admissions/freshmen-application/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
       },
       {
@@ -174,15 +202,15 @@
   },
   {
     "name": "San Beda University",
-    "campus_location": "638 Mendiola Street, San Miguel, Manila, Metro Manila",
+    "campus_location": "638 Mendiola Street, San Miguel, Manila",
     "approved_domains": ["sanbeda.edu.ph"],
     "source_notes": [
-      "Official San Beda Manila admissions and academic program pages configured."
+      "Audited 2026-11-27: Legacy /manila/admissions route returned 404 and aims.sanbeda.edu.ph timed out; official homepage verified live."
     ],
     "pages": [
       {
-        "label": "Manila admissions",
-        "url": "https://www.sanbeda.edu.ph/manila/admissions",
+        "label": "San Beda University official site",
+        "url": "https://www.sanbeda.edu.ph/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
       },
       {
@@ -194,16 +222,21 @@
   },
   {
     "name": "Mapúa University",
-    "campus_location": "658 Muralla Street, Intramuros, Manila, Metro Manila",
+    "campus_location": "658 Muralla Street, Intramuros, Manila",
     "approved_domains": ["mapua.edu.ph"],
     "source_notes": [
-      "Official Mapúa admissions, undergraduate program, and schedules/fees pages configured."
+      "Official Mapúa undergraduate application guidelines and MPASS portal verified on 2026-11-27."
     ],
     "pages": [
       {
-        "label": "Admissions overview",
-        "url": "https://www.mapua.edu.ph/admissions/",
+        "label": "Undergraduate application guidelines & MPASS",
+        "url": "https://www.mapua.edu.ph/admissions/application-guidelines/undergraduate/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status"]
+      },
+      {
+        "label": "Mapúa online admissions portal",
+        "url": "https://admissions.mapua.edu.ph/",
+        "fields": ["application_status", "application_deadlines"]
       },
       {
         "label": "Undergraduate programs",
@@ -219,16 +252,21 @@
   },
   {
     "name": "Lyceum of the Philippines University",
-    "campus_location": "Muralla Street, Intramuros, Manila, Metro Manila",
+    "campus_location": "Muralla Street, Intramuros, Manila",
     "approved_domains": ["lpu.edu.ph"],
     "source_notes": [
-      "The Manila site may return an anti-bot response; collection failures are recorded politely without replacing last-known data."
+      "The Manila site may return an anti-bot response; apply.lpu.edu.ph verified live on 2026-11-27 accepting AY 2027–2028 rolling intakes."
     ],
     "pages": [
       {
         "label": "Manila admissions",
         "url": "https://manila.lpu.edu.ph/admissions/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
+      },
+      {
+        "label": "LPU online application portal",
+        "url": "https://apply.lpu.edu.ph/",
+        "fields": ["application_status", "application_deadlines"]
       },
       {
         "label": "Colleges & degree programs",
@@ -239,15 +277,15 @@
   },
   {
     "name": "Centro Escolar University",
-    "campus_location": "9 Mendiola Street, San Miguel, Manila, Metro Manila",
+    "campus_location": "9 Mendiola Street, San Miguel, Manila",
     "approved_domains": ["ceu.edu.ph"],
     "source_notes": [
-      "Official CEU admissions and academic program pages configured."
+      "Official CEU undergraduate admissions page verified on 2026-11-27 (explicitly advertising Manila S.Y. 2027–2028 rolling applications)."
     ],
     "pages": [
       {
-        "label": "Admissions overview",
-        "url": "https://www.ceu.edu.ph/admissions/",
+        "label": "Undergraduate admissions (Manila S.Y. 2027–2028)",
+        "url": "https://www.ceu.edu.ph/static/admission-subpages/15.html",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
       },
       {
@@ -259,16 +297,26 @@
   },
   {
     "name": "Technological University of the Philippines",
-    "campus_location": "Ayala Boulevard, Ermita, Manila, Metro Manila",
+    "campus_location": "Ayala Boulevard, Ermita, Manila",
     "approved_domains": ["tup.edu.ph"],
     "source_notes": [
-      "Official TUP admissions and academic program pages configured."
+      "Official TUP admission page and ERS Applicant Portal verified on 2026-11-27 (legacy /admissions/ returned 404)."
     ],
     "pages": [
       {
         "label": "Admissions & TUPSTAT",
-        "url": "https://www.tup.edu.ph/admissions/",
+        "url": "https://www.tup.edu.ph/page/admission",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
+      },
+      {
+        "label": "Admission procedures",
+        "url": "https://www.tup.edu.ph/pages/admission/admission-procedures",
+        "fields": ["admission_requirements", "application_deadlines"]
+      },
+      {
+        "label": "TUP ERS Applicant Portal",
+        "url": "https://ers.tup.edu.ph/aims/applicants/",
+        "fields": ["application_status"]
       },
       {
         "label": "Colleges & degree programs",
@@ -279,16 +327,21 @@
   },
   {
     "name": "Philippine Normal University",
-    "campus_location": "Taft Avenue, Ermita, Manila, Metro Manila",
+    "campus_location": "Taft Avenue, Ermita, Manila",
     "approved_domains": ["pnu.edu.ph"],
     "source_notes": [
-      "Official PNU admissions and academic program pages configured."
+      "Official PNU admissions and PWEBSS applicant portal verified on 2026-11-27."
     ],
     "pages": [
       {
         "label": "Admissions & PNUAT",
         "url": "https://www.pnu.edu.ph/admissions/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
+      },
+      {
+        "label": "PNU PWEBSS Applicant Portal",
+        "url": "https://pwebss.pnu.edu.ph/pnu/applicants/",
+        "fields": ["application_status"]
       },
       {
         "label": "Undergraduate programs",
@@ -299,16 +352,21 @@
   },
   {
     "name": "Pamantasan ng Lungsod ng Maynila",
-    "campus_location": "General Luna Street, Intramuros, Manila, Metro Manila",
-    "approved_domains": ["plm.edu.ph"],
+    "campus_location": "General Luna Street, Intramuros, Manila",
+    "approved_domains": ["plm.edu.ph", "pinnacle.edu.ph"],
     "source_notes": [
-      "Official PLM admissions and colleges pages configured."
+      "Official PLM admissions and AIMS Admission InfoSys portal audited on 2026-11-27."
     ],
     "pages": [
       {
         "label": "Admissions & PLMAT",
         "url": "https://www.plm.edu.ph/admissions/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
+      },
+      {
+        "label": "PLM AIMS Admission InfoSys",
+        "url": "https://plm.pinnacle.edu.ph/aims/",
+        "fields": ["application_status"]
       },
       {
         "label": "Colleges & degree programs",
@@ -319,16 +377,21 @@
   },
   {
     "name": "St. Paul University Manila",
-    "campus_location": "680 Pedro Gil Street, Malate, Manila, Metro Manila",
+    "campus_location": "680 Pedro Gil Street, Malate, Manila",
     "approved_domains": ["spumanila.edu.ph"],
     "source_notes": [
-      "Official SPU Manila apply and academics pages configured."
+      "Official SPU Manila college admission page verified on 2026-11-27 (currently lists 2nd Sem AY 2026–2027; no entrance exam required)."
     ],
     "pages": [
       {
-        "label": "Admissions & apply",
-        "url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/",
+        "label": "College admission guidelines",
+        "url": "https://spumanila.edu.ph/college-admission/",
         "fields": ["admission_requirements", "entrance_exam_coverage", "application_deadlines", "application_status", "tuition_estimates"]
+      },
+      {
+        "label": "Apply to SPU Manila",
+        "url": "https://spumanila.edu.ph/apply-to-st-paul-university-manila/",
+        "fields": ["application_status", "admission_requirements"]
       },
       {
         "label": "Undergraduate degree programs",

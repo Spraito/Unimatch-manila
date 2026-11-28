@@ -16,6 +16,7 @@ import {
   CRITERION_LABELS,
   DEFAULT_WEIGHTS,
   FORMULA,
+  UNKNOWN_POLICY,
   parseWeights,
 } from "./algorithms/matching.js";
 import {
@@ -47,6 +48,7 @@ import {
   getUniversityDetail,
   initStore,
   loadStructured,
+  parseNaturalMatchQuery,
   queryPrograms,
   queryUniversities,
   rankedRecommendations,
@@ -342,6 +344,8 @@ app.get("/api/programs", (req, res, next) => {
     const search = textQuery(req, "search");
     const schoolId = textQuery(req, "university_id");
     const topic = textQuery(req, "topic");
+    const sector = textQuery(req, "sector");
+    const city = textQuery(req, "city");
     const pageRaw = typeof req.query.page === "string" ? req.query.page : "1";
     const limitRaw =
       typeof req.query.limit === "string" ? req.query.limit : "12";
@@ -353,7 +357,7 @@ app.get("/api/programs", (req, res, next) => {
     if (page < 1 || page > 10000 || limit < 1 || limit > 100) {
       throw new Error("page must be 1–10000 and limit must be 1–100");
     }
-    res.json(queryPrograms(search, schoolId, topic, page, limit));
+    res.json(queryPrograms(search, schoolId, topic, page, limit, sector, city));
   } catch (err) {
     next(err);
   }
@@ -384,10 +388,8 @@ app.get("/api/recommendation-config", (_req, res) => {
   res.json({
     default_weights: DEFAULT_WEIGHTS,
     criteria: CRITERION_LABELS,
-    budget_bases: ["semester", "trimester", "year", "unit"],
     formula: FORMULA,
-    unknown_policy:
-      "Missing source data scores 0 for that criterion and is reported as unknown; it is never treated as a match.",
+    unknown_policy: UNKNOWN_POLICY,
   });
 });
 
@@ -396,17 +398,8 @@ app.get("/api/recommendations", (req, res, next) => {
     const program = textQuery(req, "program");
     const city = textQuery(req, "city");
     const sector = textQuery(req, "sector");
-    const basis = textQuery(req, "budget_basis");
-    const rawBudget =
-      typeof req.query.budget === "string" ? req.query.budget.trim() : "";
-    let budget: number | null = null;
-    if (rawBudget) {
-      const parsed = Number(rawBudget);
-      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 10_000_000) {
-        throw new Error("Budget must be between 0 and 10,000,000 PHP");
-      }
-      budget = parsed;
-    }
+    const budgetRaw = textQuery(req, "budget");
+    const budgetBasis = textQuery(req, "budget_basis");
     const rawLimit =
       typeof req.query.limit === "string" ? req.query.limit : "20";
     const limit = Number(rawLimit);
@@ -416,12 +409,37 @@ app.get("/api/recommendations", (req, res, next) => {
     const rawWeights =
       typeof req.query.weights === "string" ? req.query.weights : null;
     const weights = parseWeights(rawWeights);
-    const result = rankedRecommendations(
-      { program, city, sector, budget, budget_basis: basis },
-      weights,
-      limit,
-    );
+    const prefs: Record<string, unknown> = { program, city, sector };
+    if (budgetRaw !== "") {
+      prefs.budget = Number(budgetRaw);
+      if (budgetBasis) prefs.budget_basis = budgetBasis;
+    }
+    const result = rankedRecommendations(prefs, weights, limit);
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/nlp/parse-match", (req, res, next) => {
+  try {
+    const q = textQuery(req, "q") || textQuery(req, "query");
+    res.json(parseNaturalMatchQuery(q));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/api/nlp/parse-match", (req, res, next) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const raw =
+      typeof body.query === "string"
+        ? body.query
+        : typeof body.q === "string"
+          ? body.q
+          : "";
+    res.json(parseNaturalMatchQuery(raw));
   } catch (err) {
     next(err);
   }

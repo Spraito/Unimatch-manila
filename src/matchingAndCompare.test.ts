@@ -39,7 +39,7 @@ describe("Find My Match weighted algorithm fixes", () => {
     assert.match(itRes.items[0].program_name || "", /Information Technology/i);
   });
 
-  it("excludes unrelated degrees when program and sector are combined", () => {
+  it("strictly filters sector and excludes unrelated degrees when program and sector are combined", () => {
     const res = rankedRecommendations(
       { program: "Nursing", sector: "Public" },
       null,
@@ -51,74 +51,116 @@ describe("Find My Match weighted algorithm fixes", () => {
     assert.equal(res.items[0].sector, "Public");
     assert.match(res.items[0].program_name || "", /Nursing/i);
 
-    // Every returned program must genuinely relate to Nursing
+    // Every returned university must strictly satisfy the Public filter
     for (const item of res.items) {
-      assert.match(
-        item.program_name || "",
-        /Nursing/i,
-        `Non-nursing program should not pollute Nursing matches: ${item.program_name}`,
+      assert.equal(
+        item.sector,
+        "Public",
+        `Private university should never appear when Public is selected: ${item.university_id}`,
       );
+    }
+    // Exact Nursing matches must rank strictly above any related health programs
+    const exactNursing = res.items.filter((i) =>
+      /Nursing/i.test(i.program_name || ""),
+    );
+    assert.ok(exactNursing.length >= 2);
+    for (let i = 0; i < exactNursing.length; i++) {
+      assert.match(res.items[i].program_name || "", /Nursing/i);
     }
   });
 
-  it("matches RA 10931 free tuition across semester, trimester, year, and unit budget bases", () => {
-    for (const basis of ["semester", "trimester", "year", "unit"]) {
-      const res = rankedRecommendations(
-        { budget: 50000, budget_basis: basis },
-        null,
-        15,
-      );
-      assert.ok(
-        res.items.length >= 5,
-        `Expected all 5 public free-tuition universities to match on basis=${basis}`,
-      );
-      assert.equal(res.items[0].score, 100);
-      assert.equal(res.items[0].explanations[0].status, "matched");
-      assert.equal(res.items[0].topic, null);
-    }
+  it("uses 3-criterion default weights (program 55%, location 25%, sector 20%) and ignores legacy budget weights when no budget is supplied", () => {
+    const res = rankedRecommendations(
+      { program: "Computer Science", city: "Manila", sector: "Public" },
+      { program: 0.45, location: 0.2, budget: 0.2, sector: 0.15 },
+      15,
+    );
+    assert.ok(res.items.length > 0);
+    assert.deepEqual(res.default_weights, {
+      program: 0.55,
+      location: 0.25,
+      sector: 0.2,
+    });
+    assert.equal("budget" in res.weights, false);
+    const weightSum =
+      res.weights.program + res.weights.location + res.weights.sector;
+    assert.ok(
+      Math.abs(weightSum - 1) < 0.002,
+      `Normalized weights should sum to 1, got ${weightSum}`,
+    );
+    assert.equal(res.items[0].score, 100);
+    assert.equal(
+      res.items[0].explanations.some((exp) => exp.criterion === "budget"),
+      false,
+    );
   });
 
-  it("converts calendar-term fees transparently when basis differs (e.g., semester fee vs yearly budget)", () => {
+  it("enforces strict sector and location hard filters while ranking eligible candidates by custom weights", () => {
     const sampleCandidates: CandidateInput[] = [
       {
-        university_id: "sample-u",
-        university_name: "Sample Private University",
-        short_name: "SPU",
+        university_id: "u-public-ermita",
+        university_name: "Ermita Public University",
+        short_name: "EPU",
         campus_location: "Ermita, Manila",
+        city: "Manila",
+        sector: "Public",
+        program_count: 1,
+        program_id: "p1",
+        program_name: "BS in Computer Science",
+        topic: "Computing",
+        fees: [{ amount_min: 0, amount_max: 0, basis: "semester", raw_text: "Free tuition" }],
+      },
+      {
+        university_id: "u-private-intramuros",
+        university_name: "Intramuros Private University",
+        short_name: "IPU",
+        campus_location: "Intramuros, Manila",
         city: "Manila",
         sector: "Private",
         program_count: 1,
-        program_id: null,
-        program_name: null,
-        topic: null,
-        fees: [
-          {
-            amount_min: 40000,
-            amount_max: 50000,
-            basis: "semester",
-            raw_text: "PHP 40,000-50,000 per semester",
-          },
-        ],
+        program_id: "p2",
+        program_name: "BS in Computer Science",
+        topic: "Computing",
+        fees: [{ amount_min: 60000, amount_max: 70000, basis: "semester", raw_text: "PHP 60,000-70,000" }],
+      },
+      {
+        university_id: "u-private-manila-expensive",
+        university_name: "Malate Private University",
+        short_name: "MPU",
+        campus_location: "Malate, Manila",
+        city: "Manila",
+        sector: "Private",
+        program_count: 1,
+        program_id: "p3",
+        program_name: "BS in Computer Science",
+        topic: "Computing",
+        fees: [{ amount_min: 120000, amount_max: 140000, basis: "semester", raw_text: "PHP 120,000-140,000" }],
       },
     ];
-    const within = recommend(
-      sampleCandidates,
-      { budget: 110000, budget_basis: "year" },
-      null,
-      10,
-    );
-    assert.equal(within.items.length, 1);
-    assert.equal(within.items[0].score, 100);
-    assert.match(within.items[0].explanations[0].reason, /Estimated/i);
 
-    const straddle = recommend(
+    // Strict hard filter: sector=Private excludes Public completely
+    const privateOnly = recommend(
       sampleCandidates,
-      { budget: 90000, budget_basis: "year" },
+      { program: "Computer Science", sector: "Private", budget: 80000, budget_basis: "semester" },
+      { program: 0.4, location: 0.1, sector: 0.1, budget: 0.4 },
+      10,
+    );
+    assert.equal(privateOnly.items.length, 2);
+    assert.ok(privateOnly.items.every((item) => item.sector === "Private"));
+    // Affordable private school outranks expensive private school under budget weight
+    assert.equal(privateOnly.items[0].university_id, "u-private-intramuros");
+    assert.equal(privateOnly.items[0].score, 100);
+    assert.equal(privateOnly.items[1].university_id, "u-private-manila-expensive");
+    assert.ok(privateOnly.items[1].score < privateOnly.items[0].score);
+
+    // Combined hard filter: city=Intramuros + sector=Public yields empty set (strict exclusion)
+    const impossibleCombo = recommend(
+      sampleCandidates,
+      { program: "Computer Science", city: "Intramuros", sector: "Public" },
       null,
       10,
     );
-    assert.equal(straddle.items.length, 1);
-    assert.equal(straddle.items[0].score, 50);
+    assert.equal(impossibleCombo.items.length, 0);
   });
 
   it("matches Metro Manila campus districts like Intramuros and Ermita at 100%", () => {

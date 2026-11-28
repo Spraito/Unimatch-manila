@@ -380,20 +380,21 @@ test("Scenario 8: Unverified, TBA, and expired dates are NEVER presented as conf
   const yesterday = shiftIsoDate(today, -2);
   const inTwoDays = shiftIsoDate(today, 2);
 
-  // Baseline seeding creates honest TBA records with zero fabricated dates
+  // Baseline seeding populates audited AY 2027–2028 schedules with zero fabricated dates
   const seededCount = seedBaselineAdmissionEvents();
-  assert.ok(seededCount >= 15);
+  assert.ok(seededCount >= 30);
 
-  const baselineUp = listAdmissionEvents({
-    universityId: "up-manila",
+  // Unannounced universities (e.g. PUP) explicitly display "Not Yet Announced"
+  const baselinePup = listAdmissionEvents({
+    universityId: "pup-sta-mesa",
     todayIso: today,
   });
-  assert.ok(baselineUp.length >= 1);
-  assert.equal(baselineUp[0].verification_status, "tba");
-  assert.equal(baselineUp[0].start_date, null);
-  assert.equal(baselineUp[0].display_date, "To Be Announced");
-  assert.equal(baselineUp[0].is_confirmed, false);
-  assert.equal(baselineUp[0].is_upcoming, false);
+  assert.ok(baselinePup.length >= 1);
+  assert.equal(baselinePup[0].verification_status, "tba");
+  assert.equal(baselinePup[0].start_date, null);
+  assert.equal(baselinePup[0].display_date, "Not Yet Announced");
+  assert.equal(baselinePup[0].is_confirmed, false);
+  assert.equal(baselinePup[0].is_upcoming, false);
 
   // Verified event without a date MUST be rejected by validation
   await assert.rejects(
@@ -695,3 +696,125 @@ test("Scenario 9 (HTTP end-to-end): Students get 403 on admin schedule APIs; aut
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test("Scenario 10 (AY 2027–2028 Audit): Verified schedules for DLSU, UST, and UP Manila, Not Yet Announced for unannounced schools, and updated official URLs", () => {
+  resetAll();
+  const auditToday = "2026-11-27";
+  const seededCount = seedBaselineAdmissionEvents();
+  assert.ok(seededCount >= 35);
+
+  // 1. DLSU has updated official URL and multiple verified DCAT batches for AY 2027–2028
+  const dlsuEvents = listAdmissionEvents({
+    universityId: "dlsu-manila",
+    todayIso: auditToday,
+  });
+  const dlsuVerifiedExams = dlsuEvents.filter(
+    (e) => e.event_type === "entrance_exam" && e.verification_status === "verified",
+  );
+  assert.equal(dlsuVerifiedExams.length, 6);
+  assert.ok(
+    dlsuEvents.every(
+      (e) =>
+        e.academic_year === "AY 2027–2028" &&
+        e.official_source_url ===
+          "https://www.dlsu.edu.ph/admission/admissions-undergraduate-first-year-college-application/",
+    ),
+  );
+  const dlsuResults = dlsuEvents.find((e) => e.event_type === "results_release");
+  assert.equal(dlsuResults?.display_date, "Not Yet Announced");
+
+  // 2. UST has verified LEAPMed & Regular College deadlines + multiple Manila USTET batches
+  const ustEvents = listAdmissionEvents({
+    universityId: "ust-manila",
+    todayIso: auditToday,
+  });
+  assert.ok(
+    ustEvents.some(
+      (e) =>
+        e.event_type === "application_deadline" &&
+        e.start_date === "2026-11-27" &&
+        /LEAPMed/i.test(e.event_name),
+    ),
+  );
+  assert.ok(
+    ustEvents.some(
+      (e) =>
+        e.event_type === "application_deadline" &&
+        e.start_date === "2027-01-08" &&
+        /Regular College/i.test(e.event_name),
+    ),
+  );
+  assert.ok(
+    ustEvents.some(
+      (e) => e.event_type === "entrance_exam" && e.start_date === "2026-12-06",
+    ),
+  );
+  assert.ok(
+    ustEvents.some(
+      (e) => e.event_type === "entrance_exam" && e.start_date === "2027-01-24",
+    ),
+  );
+
+  // 3. UP Manila UPCAT 2027 verified cycle recorded (closed) + results Not Yet Announced
+  const upEvents = listAdmissionEvents({
+    universityId: "up-manila",
+    todayIso: auditToday,
+  });
+  assert.ok(
+    upEvents.some(
+      (e) =>
+        e.event_type === "entrance_exam" &&
+        e.start_date === "2026-08-01" &&
+        e.end_date === "2026-08-02" &&
+        e.is_expired === true,
+    ),
+  );
+  const upResults = upEvents.find((e) => e.event_type === "results_release");
+  assert.equal(upResults?.display_date, "Not Yet Announced");
+
+  // 4. Unannounced schools have zero fabricated dates and updated working official URLs
+  for (const uid of [
+    "pup-sta-mesa",
+    "ue-manila",
+    "sanbeda-manila",
+    "tup-manila",
+    "pnu-manila",
+    "plm-manila",
+    "spumanila",
+  ]) {
+    const events = listAdmissionEvents({ universityId: uid, todayIso: auditToday });
+    assert.ok(events.length >= 1, `Expected baseline notice for ${uid}`);
+    for (const ev of events) {
+      assert.equal(ev.verification_status, "tba", `${uid} should be Not Yet Announced`);
+      assert.equal(ev.start_date, null, `${uid} must not have fabricated start_date`);
+      assert.equal(ev.display_date, "Not Yet Announced");
+      assert.equal(ev.academic_year, "AY 2027–2028");
+      assert.ok(ev.official_source_url?.startsWith("https://"));
+    }
+  }
+
+  // 5. Saved dashboard integrates DLSU + UST + PUP cleanly without broken URLs
+  const dash = buildSavedUniversitiesDashboard(
+    ["dlsu-manila", "ust-manila", "pup-sta-mesa", "ue-manila", "tup-manila"],
+    {},
+    auditToday,
+  );
+  assert.equal(dash.length, 5);
+  assert.equal(
+    dash.find((d) => d.university_id === "dlsu-manila")?.official_admissions_url,
+    "https://www.dlsu.edu.ph/admission/admissions-undergraduate-first-year-college-application/",
+  );
+  assert.equal(
+    dash.find((d) => d.university_id === "ue-manila")?.official_admissions_url,
+    "https://www.ue.edu.ph/mla/about-admission/",
+  );
+  assert.equal(
+    dash.find((d) => d.university_id === "tup-manila")?.official_admissions_url,
+    "https://www.tup.edu.ph/page/admission",
+  );
+  assert.equal(
+    dash.find((d) => d.university_id === "ust-manila")?.admission_status,
+    "Open",
+  );
+});
+

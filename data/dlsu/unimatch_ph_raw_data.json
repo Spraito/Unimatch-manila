@@ -1559,7 +1559,7 @@
     "tuition_estimates": [
       {
         "text": "Admission Results First-Year College Admission Application Results AY 2024 – 2025 FAQs for First-Year College Confirmation and Enrollment for AY 2023-2024 Crediting Guidelines for Connect-Ed Schools Requirements for Confirmation, T1 AY 2024-2025 Schedules and Procedures Lasallian Examination for Advance Placement (LEAP) Projected Tuition and Fees of Incoming First-Year College for AY2025-2026 First-Year College Enrollment Confirmation for ID124 (TERM 3 AY 2024-2025) Transfer and Second Undergraduate Degree Enrollment Confirmation for ID124 (TERM 3 AY 2024-2025)",
-        "source_url": "https://old.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/",
+        "source_url": "https://www.dlsu.edu.ph/admission/admissions-undergraduate-first-year-college-application/",
         "extraction_method": "heuristic",
         "amounts": [],
         "currency": null,
@@ -1568,7 +1568,7 @@
       },
       {
         "text": "Projected Tuition and Fees of Incoming First-Year College for AY2025-2026",
-        "source_url": "https://old.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/",
+        "source_url": "https://www.dlsu.edu.ph/admission/admissions-undergraduate-first-year-college-application/",
         "extraction_method": "heuristic",
         "amounts": [],
         "currency": null,
@@ -1582,8 +1582,8 @@
     "application_status": [],
     "sources": [
       {
-        "requested_url": "https://www.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/",
-        "final_url": "https://old.dlsu.edu.ph/admissions/undergraduate/freshmen-procedures/",
+        "requested_url": "https://www.dlsu.edu.ph/admission/admissions-undergraduate-first-year-college-application/",
+        "final_url": "https://www.dlsu.edu.ph/admission/admissions-undergraduate-first-year-college-application/",
         "status": "fetched",
         "fields": [
           "admission_requirements",

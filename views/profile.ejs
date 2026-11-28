@@ -119,28 +119,14 @@
             <option value="Public" <%= preferences.sector === 'Public' ? 'selected' : '' %>>Public</option>
             <option value="Private" <%= preferences.sector === 'Private' ? 'selected' : '' %>>Private</option>
           </select>
-          <div class="account-split">
-            <div>
-              <label for="pref-budget">Budget (PHP)</label>
-              <input id="pref-budget" name="budget" type="number" min="0" max="10000000" step="1000" value="<%= preferences.budget !== null ? preferences.budget : '' %>" placeholder="e.g. 60000" />
-            </div>
-            <div>
-              <label for="pref-basis">Budget basis</label>
-              <select id="pref-basis" name="budget_basis">
-                <% for (const basis of ['semester', 'trimester', 'year', 'unit']) { %>
-                  <option value="<%= basis %>" <%= preferences.budget_basis === basis ? 'selected' : '' %>><%= basis.charAt(0).toUpperCase() + basis.slice(1) %></option>
-                <% } %>
-              </select>
-            </div>
-          </div>
           <fieldset class="account-weights">
             <legend>Criteria weights (%)</legend>
-            <p class="account-help">Weights are normalized automatically. Missing university data scores zero, never a match.</p>
-            <div class="account-split account-split-four">
-              <% for (const criterion of ['program', 'location', 'budget', 'sector']) { %>
+            <p class="account-help">Weights are normalized automatically. Missing university data is labeled Information Unavailable and excluded from the denominator rather than penalized.</p>
+            <div class="account-split account-split-three">
+              <% for (const criterion of ['program', 'location', 'sector']) { %>
                 <div>
-                  <label for="weight-<%= criterion %>"><%= criterion.charAt(0).toUpperCase() + criterion.slice(1) %></label>
-                  <input id="weight-<%= criterion %>" name="weight_<%= criterion %>" type="number" min="0" max="100" step="1" value="<%= Math.round(preferences.weights[criterion] * 100) %>" />
+                  <label for="weight-<%= criterion %>"><%= criterion === 'sector' ? 'School type' : criterion.charAt(0).toUpperCase() + criterion.slice(1) %></label>
+                  <input id="weight-<%= criterion %>" name="weight_<%= criterion %>" type="number" min="0" max="100" step="1" value="<%= Math.round((preferences.weights[criterion] || 0) * 100) %>" />
                 </div>
               <% } %>
             </div>
@@ -186,7 +172,7 @@
                       <summary>Why this match?</summary>
                       <ul>
                         <% for (const explanation of item.explanations) { %>
-                          <li><strong><%= explanation.label %>:</strong> <%= explanation.reason %> <span class="account-status"><%= explanation.status.replace(/_/g, ' ') %></span></li>
+                          <li><strong><%= explanation.label %>:</strong> <%= explanation.reason %> <span class="account-status"><%= explanation.status_label || explanation.status.replace(/_/g, ' ') %></span></li>
                         <% } %>
                       </ul>
                     </details>
@@ -197,7 +183,7 @@
           <% } %>
         </div>
       <% } else { %>
-        <p class="account-empty">Save at least one preference — program, city, budget or university type — to see personalised matches.</p>
+        <p class="account-empty">Save at least one preference — program, city, or university type — to see personalised matches.</p>
       <% } %>
     </section>
   <% } %>

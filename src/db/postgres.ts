@@ -137,6 +137,7 @@ export const POSTGRES_SCHEMA_STATEMENTS: readonly string[] = [
     university_id TEXT NOT NULL,
     event_name TEXT NOT NULL,
     event_type TEXT NOT NULL,
+    academic_year TEXT NOT NULL DEFAULT '',
     start_date TEXT,
     end_date TEXT,
     exam_time TEXT,
@@ -148,6 +149,7 @@ export const POSTGRES_SCHEMA_STATEMENTS: readonly string[] = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
+  `ALTER TABLE admission_events ADD COLUMN IF NOT EXISTS academic_year TEXT NOT NULL DEFAULT '';`,
   `CREATE INDEX IF NOT EXISTS idx_admission_events_university ON admission_events (university_id);`,
   `CREATE INDEX IF NOT EXISTS idx_admission_events_status_date ON admission_events (verification_status, start_date);`,
   `CREATE TABLE IF NOT EXISTS user_application_tracking (
@@ -761,6 +763,7 @@ export interface PgAdmissionEventRow {
   university_id: string;
   event_name: string;
   event_type: string;
+  academic_year: string | null;
   start_date: string | null;
   end_date: string | null;
   exam_time: string | null;
@@ -794,7 +797,7 @@ export async function dbLoadAdmissionEvents(): Promise<PgAdmissionEventRow[]> {
   const pool = getPool();
   if (!pool || !schemaReady) return [];
   const result = await pool.query(
-    `SELECT event_id, university_id, event_name, event_type,
+    `SELECT event_id, university_id, event_name, event_type, academic_year,
             start_date, end_date, exam_time, venue,
             official_source_url, description, verification_status,
             updated_by, created_at, last_updated_at
@@ -811,6 +814,10 @@ export async function dbLoadAdmissionEvents(): Promise<PgAdmissionEventRow[]> {
       university_id: String(r.university_id),
       event_name: String(r.event_name),
       event_type: String(r.event_type),
+      academic_year:
+        typeof r.academic_year === "string" && r.academic_year.trim()
+          ? r.academic_year.trim()
+          : null,
       start_date: typeof r.start_date === "string" && r.start_date ? r.start_date : null,
       end_date: typeof r.end_date === "string" && r.end_date ? r.end_date : null,
       exam_time: typeof r.exam_time === "string" && r.exam_time ? r.exam_time : null,
@@ -835,20 +842,21 @@ export async function dbUpsertAdmissionEvent(
   if (!pool || !schemaReady) return;
   await pool.query(
     `INSERT INTO admission_events (
-      event_id, university_id, event_name, event_type,
+      event_id, university_id, event_name, event_type, academic_year,
       start_date, end_date, exam_time, venue,
       official_source_url, description, verification_status,
       updated_by, created_at, last_updated_at
     ) VALUES (
-      $1, $2, $3, $4,
-      $5, $6, $7, $8,
-      $9, $10, $11,
-      $12, $13, $14
+      $1, $2, $3, $4, $5,
+      $6, $7, $8, $9,
+      $10, $11, $12,
+      $13, $14, $15
     )
     ON CONFLICT (event_id) DO UPDATE SET
       university_id = EXCLUDED.university_id,
       event_name = EXCLUDED.event_name,
       event_type = EXCLUDED.event_type,
+      academic_year = EXCLUDED.academic_year,
       start_date = EXCLUDED.start_date,
       end_date = EXCLUDED.end_date,
       exam_time = EXCLUDED.exam_time,
@@ -863,6 +871,7 @@ export async function dbUpsertAdmissionEvent(
       event.university_id,
       event.event_name,
       event.event_type,
+      event.academic_year || "",
       event.start_date,
       event.end_date,
       event.exam_time,

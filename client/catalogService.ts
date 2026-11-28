@@ -20,11 +20,19 @@ import {
   type Firestore,
 } from "firebase/firestore";
 import {
+  searchCatalogPrograms,
+  searchCatalogUniversities,
+} from "../src/algorithms/catalogQuery.js";
+import {
   parseWeights,
   recommend,
   type CandidateInput,
   type RecommendationResponse,
 } from "../src/algorithms/matching.js";
+import {
+  parseMatchSentence,
+  type ParsedMatchQuery,
+} from "../src/algorithms/nlpQueryParser.js";
 export { mergeLiveAndBaselineCatalog } from "../src/algorithms/catalogMerge.js";
 
 export enum CatalogOpType {
@@ -619,6 +627,8 @@ export function catalogRecordToExplorerDetail(docItem: CatalogUniversityRecord) 
       university_name: docItem.name,
       short_name: docItem.shortName,
       city: docItem.city,
+      campus_location: docItem.campusLocation,
+      sector: docItem.sector,
       color: docItem.color,
       name: p.name,
       topic: p.topic,
@@ -716,4 +726,61 @@ export function scoreLiveCatalogRecommendations(
       ? parseWeights(rawWeights)
       : rawWeights ?? null;
   return recommend(candidates, preferences, weights, maxItems);
+}
+
+export function queryLiveCatalogUniversities(
+  details: Array<ReturnType<typeof catalogRecordToExplorerDetail>>,
+  options: {
+    search?: string;
+    city?: string;
+    sector?: string;
+    sort?: string;
+  },
+) {
+  const byId = new Map(details.map((u) => [u.id, u]));
+  return searchCatalogUniversities(
+    details,
+    (schoolId) => byId.get(schoolId)?.programs || [],
+    options,
+  );
+}
+
+export function queryLiveCatalogPrograms(
+  details: Array<ReturnType<typeof catalogRecordToExplorerDetail>>,
+  options: {
+    search?: string;
+    university_id?: string;
+    topic?: string;
+    sector?: string;
+    city?: string;
+    page?: number;
+    limit?: number;
+  },
+) {
+  const allPrograms = details.flatMap((u) => u.programs || []);
+  return searchCatalogPrograms(allPrograms, options);
+}
+
+export function parseLiveCatalogMatchQuery(
+  records: CatalogUniversityRecord[],
+  sentence: string,
+): ParsedMatchQuery {
+  const programNames: string[] = [];
+  const campusAreas = new Set<string>();
+  for (const r of records) {
+    for (const p of r.programs || []) {
+      if (p.name) programNames.push(p.name);
+    }
+    const parts = String(r.campusLocation || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s && !/^metro manila$/i.test(s));
+    if (parts.length >= 2) {
+      campusAreas.add(parts[parts.length - 2]);
+    }
+  }
+  return parseMatchSentence(sentence, {
+    programNames,
+    campusAreas: [...campusAreas],
+  });
 }

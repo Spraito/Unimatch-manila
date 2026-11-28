@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#173e35" />
     <meta
       name="description"
-      content="Explore Metro Manila colleges, compare universities, and discover degree programs with UniMatch PH."
+      content="Explore Manila colleges, compare universities, and discover degree programs with UniMatch PH."
     />
     <meta property="og:title" content="UniMatch PH — Find your next chapter" />
     <meta
       property="og:description"
-      content="Explore Metro Manila colleges, compare universities, and discover degree programs with UniMatch PH."
+      content="Explore Manila colleges, compare universities, and discover degree programs with UniMatch PH."
     />
     <title>UniMatch PH — Find your next chapter</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
@@ -150,10 +150,10 @@
       <main id="main" tabindex="-1">
         <section class="hero" id="hero" aria-labelledby="hero-title">
           <div class="hero-copy">
-            <h1 id="hero-title">Find your college in <em>Metro Manila.</em></h1>
+            <h1 id="hero-title">Find your college in <em>Manila.</em></h1>
             <p>
-              Compare 15 universities, browse 637 degree programs, and check
-              official entrance exams and requirements in one place.
+              Compare universities, browse degree programs, and check entrance
+              exams in one place.
             </p>
             <div class="hero-actions">
               <button class="button primary" data-view="recommend">
@@ -206,8 +206,9 @@
               ><span class="sr-only">University type</span
               ><select id="sector">
                 <option value="">All types</option>
-                <option>Public</option>
-                <option>Private</option>
+                <option value="Public">Public</option>
+                <option value="Private">Private</option>
+                <option value="Public,Private">Public &amp; Private</option>
               </select></label
             >
             <label class="select-label" id="school-wrap" hidden
@@ -225,6 +226,7 @@
           </div>
 
           <div class="quick-filters" id="quick-filters" role="group" aria-label="Quick filters"></div>
+          <div class="active-filters" id="active-filters" hidden aria-label="Active filters"></div>
 
           <div class="results-meta" id="results-meta">
             <span id="results-count" role="status" aria-live="polite"
@@ -232,7 +234,7 @@
             ><label class="sort-label" id="sort-wrap"
               >Sort
               <select id="sort" aria-label="Sort universities">
-                <option value="featured">Most programs</option>
+                <option value="featured">Best match / most programs</option>
                 <option value="name">Name, A–Z</option>
               </select></label
             >

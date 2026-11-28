@@ -1376,5 +1376,54 @@
   color: #9ad4ad;
 }
 
+/* Opt-in Classical Offline NLP Match Assistant --------------------------- */
+:root[data-theme="dark"] .nlp-panel {
+  background: #13201a;
+  border-color: var(--line);
+}
+
+:root[data-theme="dark"] .nlp-panel > summary {
+  color: #a6d6b5;
+}
+
+:root[data-theme="dark"] .nlp-textarea {
+  background: #0f1914;
+  border-color: #33453a;
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .nlp-example-btn {
+  border-color: #2f4236;
+  color: #b7ccb6;
+}
+
+:root[data-theme="dark"] .nlp-example-btn:hover {
+  background: #1c2e24;
+  border-color: #46624f;
+}
+
+:root[data-theme="dark"] .nlp-fill-only-btn {
+  color: #9ad4ad;
+}
+
+:root[data-theme="dark"] .nlp-feedback-ok {
+  background: #162a20;
+  border-color: #2b4e3c;
+  color: #cbe5d0;
+}
+
+:root[data-theme="dark"] .nlp-feedback-empty {
+  background: #282315;
+  border-color: #4a3f23;
+  color: #e4c986;
+}
+
+:root[data-theme="dark"] .nlp-feedback-error {
+  background: #2d1917;
+  border-color: #5b2e28;
+  color: #e9aaa2;
+}
+
+
 
 

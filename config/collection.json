@@ -5,6 +5,7 @@
   "timeout_seconds": 25,
   "approved_domains": [
     "upm.edu.ph",
+    "up.edu.ph",
     "ust.edu.ph",
     "dlsu.edu.ph",
     "adamson.edu.ph",
@@ -18,6 +19,7 @@
     "tup.edu.ph",
     "pnu.edu.ph",
     "plm.edu.ph",
+    "pinnacle.edu.ph",
     "spumanila.edu.ph",
     "example.test"
   ],

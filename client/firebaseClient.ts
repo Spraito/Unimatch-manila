@@ -33,6 +33,9 @@ import {
   catalogRecordToExplorerDetail,
   loadPublishedCatalogUniversities,
   mergeLiveAndBaselineCatalog,
+  parseLiveCatalogMatchQuery,
+  queryLiveCatalogPrograms,
+  queryLiveCatalogUniversities,
   scoreLiveCatalogRecommendations,
   verifyAdminAccess,
   type CatalogUniversityRecord,
@@ -144,10 +147,10 @@ interface CloudProfile {
 }
 
 const DEFAULT_WEIGHTS = {
-  program: 0.45,
-  location: 0.2,
-  budget: 0.2,
-  sector: 0.15,
+  program: 0.55,
+  location: 0.25,
+  budget: 0,
+  sector: 0.2,
 };
 
 function sanitizeDisplayName(value: unknown, fallback = "Student"): string {
@@ -576,7 +579,10 @@ declare global {
     __unimatchLiveCatalog?: {
       records: CatalogUniversityRecord[];
       detailsById: Map<string, ReturnType<typeof catalogRecordToExplorerDetail>>;
+      queryUniversities: typeof queryLiveCatalogUniversities;
+      queryPrograms: typeof queryLiveCatalogPrograms;
       scoreRecommendations: typeof scoreLiveCatalogRecommendations;
+      parseMatchQuery: typeof parseLiveCatalogMatchQuery;
     };
   }
 }
@@ -610,7 +616,10 @@ async function hydratePublishedCatalog(): Promise<void> {
     window.__unimatchLiveCatalog = {
       records,
       detailsById,
+      queryUniversities: queryLiveCatalogUniversities,
+      queryPrograms: queryLiveCatalogPrograms,
       scoreRecommendations: scoreLiveCatalogRecommendations,
+      parseMatchQuery: parseLiveCatalogMatchQuery,
     };
     window.dispatchEvent(
       new CustomEvent("unimatch:catalog-updated", {
@@ -630,10 +639,15 @@ interface RecommendationItem {
   program_name: string;
   topic: string;
   score: number;
+  search_match?: {
+    category: string;
+    tier: number;
+  } | null;
   explanations: Array<{
     label: string;
     reason: string;
     status: string;
+    status_label?: string;
   }>;
 }
 
@@ -767,7 +781,7 @@ async function refreshCloudRecommendations(
                     ${(item.explanations || [])
                       .map(
                         (ex) =>
-                          `<li><strong>${escapeHTML(ex.label)}:</strong> ${escapeHTML(ex.reason)} <span class="account-status">${escapeHTML(String(ex.status || "").replace(/_/g, " "))}</span></li>`,
+                          `<li><strong>${escapeHTML(ex.label)}:</strong> ${escapeHTML(ex.reason)} <span class="account-status">${escapeHTML(ex.status_label || String(ex.status || "").replace(/_/g, " "))}</span></li>`,
                       )
                       .join("")}
                   </ul>

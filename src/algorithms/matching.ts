@@ -1,210 +1,76 @@
 /**
- * Algorithm 2 — rule-based matching with weighted criteria.
+ * Algorithm 2 — Transparent rule-based recommendation engine with strict
+ * separation between:
+ *   1. Hard university filtering (universityFilter.ts) — excludes non-matching
+ *      universities BEFORE scoring (e.g., Private filter strictly excludes Public).
+ *   2. Academic program search relevance (programSearch.ts) — exact degree matches
+ *      always rank above specializations, partial matches, and related programs.
+ *   3. Weighted compatibility scoring — mathematically exact over supplied criteria
+ *      with available data. Missing/unavailable university data is labeled
+ *      "Information Unavailable" and excluded from the denominator rather than
+ *      penalized as a 0% mismatch.
  *
  * Ranks candidates via our hand-written stable merge sort (mergeSort.ts).
  */
-import { cleanText, normalizeKey } from "./extraction.js";
+import { cleanText } from "./extraction.js";
 import { mergeSort, mergeSortByScore } from "./mergeSort.js";
+import {
+  deduplicatePrograms,
+  evaluateProgramMatch,
+  normalizeProgramText,
+  type MatchCategory,
+  type ProgramSearchMatch,
+} from "./programSearch.js";
+import {
+  applyUniversityHardFilters,
+  normalizeUniversitySector,
+  parseSectorFilter,
+  type AppliedFilters,
+  type ValidSector,
+} from "./universityFilter.js";
 
-export const CRITERIA = ["program", "location", "budget", "sector"] as const;
+export const CRITERIA = ["program", "location", "sector"] as const;
 export type Criterion = (typeof CRITERIA)[number];
+export type ExtendedCriterion = Criterion | "budget";
 
-export const CRITERION_LABELS: Record<Criterion, string> = {
+export const CRITERION_LABELS: Record<ExtendedCriterion, string> = {
   program: "Preferred program",
   location: "Preferred location",
-  budget: "Budget fit",
   sector: "University type",
+  budget: "Tuition & budget",
 };
 
 export const DEFAULT_WEIGHTS: Record<Criterion, number> = {
-  program: 0.45,
-  location: 0.2,
-  budget: 0.2,
-  sector: 0.15,
+  program: 0.55,
+  location: 0.25,
+  sector: 0.2,
 };
 
-export const BUDGET_BASES = ["semester", "trimester", "year", "unit"] as const;
+export const DEFAULT_BUDGET_WEIGHT = 0.2;
 
 export const FORMULA =
-  "score = 100 × Σ(weight[c] × points[c]) / Σ(weight[c]) over the criteria the student supplied. Missing data scores 0 and is labelled unknown.";
+  "score = 100 × Σ(effective_weight[c] × points[c]) over supplied criteria with available data. Missing university data is labeled 'Information Unavailable' and excluded from the denominator rather than penalized as a mismatch.";
 
-/**
- * Only grammatical filler words — discipline words like "science" and "arts"
- * are intentionally NOT stripped because degree prefixes ("Bachelor of Science in")
- * are removed separately before tokenization.
- */
-const STOP_WORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "bachelor",
-  "bs",
-  "ba",
-  "ab",
-  "degree",
-  "for",
-  "in",
-  "major",
-  "of",
-  "program",
-  "the",
-  "with",
-]);
+export const UNKNOWN_POLICY =
+  "Missing or unavailable university data (such as unpublished private tuition) is labeled 'Information Unavailable' and excluded from the score denominator rather than penalized as a mismatch.";
 
-/**
- * Common Philippine undergraduate degree abbreviations & aliases mapped to
- * canonical discipline names so student queries match official catalog titles.
- */
-const PROGRAM_ALIASES: Record<string, string> = {
-  cs: "computer science",
-  compsci: "computer science",
-  "comp sci": "computer science",
-  bscs: "computer science",
-  it: "information technology",
-  bsit: "information technology",
-  is: "information systems",
-  bsis: "information systems",
-  ce: "civil engineering",
-  bsce: "civil engineering",
-  cpe: "computer engineering",
-  bscpe: "computer engineering",
-  ee: "electrical engineering",
-  bsee: "electrical engineering",
-  ece: "electronics engineering",
-  bsece: "electronics engineering",
-  me: "mechanical engineering",
-  bsme: "mechanical engineering",
-  ie: "industrial engineering",
-  bsie: "industrial engineering",
-  che: "chemical engineering",
-  bsche: "chemical engineering",
-  bsa: "accountancy",
-  accounting: "accountancy",
-  bsn: "nursing",
-  medtech: "medical technology",
-  "med tech": "medical technology",
-  bsmt: "medical technology",
-  psych: "psychology",
-  archi: "architecture",
-  bsarch: "architecture",
-  pharma: "pharmacy",
-  dentistry: "dental medicine",
-  dmd: "dental medicine",
-  polsci: "political science",
-  "pol sci": "political science",
-  bio: "biology",
-  chem: "chemistry",
-  econ: "economics",
-  educ: "education",
-  beed: "elementary education",
-  bsed: "secondary education",
-  hrm: "hospitality management",
-  hm: "hospitality management",
-  bshm: "hospitality management",
-  tm: "tourism management",
-  bstm: "tourism management",
-  bsba: "business administration",
-  crim: "criminology",
-  comm: "communication",
-  masscomm: "communication",
-  "mass comm": "communication",
-  pt: "physical therapy",
-  ot: "occupational therapy",
-  slp: "speech language pathology",
-  "fine arts": "fine arts",
-  mma: "multimedia arts",
-};
+export type ExplanationStatus =
+  | "matched"
+  | "partial"
+  | "not_matched"
+  | "unavailable"
+  | "not_applicable";
 
-const DEGREE_PREFIX_PATTERNS: RegExp[] = [
-  /^bachelor\s+of\s+science\s+in\s+/,
-  /^bachelor\s+of\s+arts\s+in\s+/,
-  /^bachelor\s+of\s+fine\s+arts\s+in\s+/,
-  /^bachelor\s+of\s+music\s+in\s+/,
-  /^bachelor\s+of\s+laws\s+in\s+/,
-  /^bachelor\s+of\s+[a-z]+\s+in\s+/,
-  /^bachelor\s+of\s+/,
-  /^doctor\s+of\s+/,
-  /^bs\s+in\s+/,
-  /^ba\s+in\s+/,
-  /^ab\s+in\s+/,
-  /^bfa\s+in\s+/,
-  /^bs\s+/,
-  /^ba\s+/,
-  /^ab\s+/,
-  /^bfa\s+/,
-];
-
-const TERMS_PER_YEAR: Record<string, number> = {
-  year: 1,
-  semester: 2,
-  trimester: 3,
-  quarter: 4,
+export const STATUS_LABELS: Record<ExplanationStatus, string> = {
+  matched: "Match",
+  partial: "Partial Match",
+  not_matched: "No Match",
+  unavailable: "Information Unavailable",
+  not_applicable: "Not Applicable",
 };
 
 function textOf(value: unknown): string {
   return typeof value === "string" ? cleanText(value) : "";
-}
-
-function stripDegreePrefix(normalized: string): string {
-  let current = normalized.trim();
-  for (const pattern of DEGREE_PREFIX_PATTERNS) {
-    if (pattern.test(current)) {
-      const stripped = current.replace(pattern, "").trim();
-      if (stripped.length > 0) {
-        current = stripped;
-        break;
-      }
-    }
-  }
-  return current;
-}
-
-function expandProgramPreference(preference: string): string {
-  const key = normalizeKey(preference);
-  if (PROGRAM_ALIASES[key]) {
-    return PROGRAM_ALIASES[key];
-  }
-  const stripped = stripDegreePrefix(key);
-  if (PROGRAM_ALIASES[stripped]) {
-    return PROGRAM_ALIASES[stripped];
-  }
-  return stripped || key;
-}
-
-function tokensOf(value: string): Set<string> {
-  const words = normalizeKey(value).split(/\s+/).filter(Boolean);
-  const meaningful = new Set(words.filter((w) => !STOP_WORDS.has(w)));
-  return meaningful.size > 0 ? meaningful : new Set(words);
-}
-
-function stemMatches(wantedWord: string, availableWord: string): boolean {
-  if (wantedWord === availableWord) return true;
-  if (wantedWord.length < 4 || availableWord.length < 4) return false;
-  // Simple plural/inflection tolerance without false positives on short words
-  if (
-    wantedWord + "s" === availableWord ||
-    availableWord + "s" === wantedWord ||
-    wantedWord + "es" === availableWord ||
-    availableWord + "es" === wantedWord
-  ) {
-    return true;
-  }
-  const minLen = Math.min(wantedWord.length, availableWord.length);
-  if (minLen >= 5) {
-    const prefixLen = Math.min(minLen, 6);
-    if (
-      wantedWord.startsWith(availableWord.slice(0, prefixLen)) &&
-      availableWord.startsWith(wantedWord.slice(0, prefixLen))
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function hasWholePhrase(haystack: string, needle: string): boolean {
-  if (!haystack || !needle) return false;
-  return ` ${haystack} `.includes(` ${needle} `);
 }
 
 function roundTo(value: number, decimals: number): number {
@@ -212,12 +78,18 @@ function roundTo(value: number, decimals: number): number {
   return Math.round(value * factor) / factor;
 }
 
+const VALID_BUDGET_BASES = new Set(["semester", "trimester", "year", "unit"]);
+
 export function normalizeWeights(
   weights?: Record<string, unknown> | null,
 ): Record<Criterion, number> {
   const merged: Record<Criterion, number> = { ...DEFAULT_WEIGHTS };
   if (weights) {
     for (const [name, value] of Object.entries(weights)) {
+      if (name === "budget") {
+        // Core 3-criterion weights ignore budget unless budget preference is supplied
+        continue;
+      }
       if (!(name in DEFAULT_WEIGHTS)) {
         throw new Error(`Unknown weight criterion: ${name}`);
       }
@@ -236,14 +108,88 @@ export function normalizeWeights(
   return {
     program: roundTo(merged.program / total, 4),
     location: roundTo(merged.location / total, 4),
-    budget: roundTo(merged.budget / total, 4),
     sector: roundTo(merged.sector / total, 4),
+  };
+}
+
+function resolveScoringWeights(
+  rawWeights: Record<string, unknown> | null | undefined,
+  includeBudget: boolean,
+): {
+  coreWeights: Record<Criterion, number>;
+  activeWeights: Record<ExtendedCriterion, number>;
+} {
+  const coreWeights = normalizeWeights(rawWeights);
+  if (!includeBudget) {
+    return {
+      coreWeights,
+      activeWeights: {
+        program: coreWeights.program,
+        location: coreWeights.location,
+        sector: coreWeights.sector,
+        budget: 0,
+      },
+    };
+  }
+
+  // Budget preference supplied: honor explicit budget weight if given, else 0.20
+  let budgetRaw = DEFAULT_BUDGET_WEIGHT;
+  if (
+    rawWeights &&
+    typeof rawWeights.budget === "number" &&
+    Number.isFinite(rawWeights.budget) &&
+    rawWeights.budget >= 0
+  ) {
+    budgetRaw = rawWeights.budget;
+  }
+  const baseProgram =
+    rawWeights &&
+    typeof rawWeights.program === "number" &&
+    Number.isFinite(rawWeights.program) &&
+    rawWeights.program >= 0
+      ? rawWeights.program
+      : coreWeights.program * (1 - DEFAULT_BUDGET_WEIGHT);
+  const baseLocation =
+    rawWeights &&
+    typeof rawWeights.location === "number" &&
+    Number.isFinite(rawWeights.location) &&
+    rawWeights.location >= 0
+      ? rawWeights.location
+      : coreWeights.location * (1 - DEFAULT_BUDGET_WEIGHT);
+  const baseSector =
+    rawWeights &&
+    typeof rawWeights.sector === "number" &&
+    Number.isFinite(rawWeights.sector) &&
+    rawWeights.sector >= 0
+      ? rawWeights.sector
+      : coreWeights.sector * (1 - DEFAULT_BUDGET_WEIGHT);
+
+  const sum = baseProgram + baseLocation + baseSector + budgetRaw;
+  if (sum <= 0) {
+    return {
+      coreWeights,
+      activeWeights: {
+        program: 0.44,
+        location: 0.2,
+        sector: 0.16,
+        budget: 0.2,
+      },
+    };
+  }
+  return {
+    coreWeights,
+    activeWeights: {
+      program: roundTo(baseProgram / sum, 4),
+      location: roundTo(baseLocation / sum, 4),
+      sector: roundTo(baseSector / sum, 4),
+      budget: roundTo(budgetRaw / sum, 4),
+    },
   };
 }
 
 export function parseWeights(
   value?: string | null,
-): Record<Criterion, number> | null {
+): Record<string, number> | null {
   if (!value) return null;
   const parsed: Record<string, number> = {};
   for (const part of value.split(",")) {
@@ -258,17 +204,28 @@ export function parseWeights(
     if (!raw || Number.isNaN(num)) {
       throw new Error(`Invalid weight value for ${name}`);
     }
+    if (name !== "budget" && !(name in DEFAULT_WEIGHTS)) {
+      throw new Error(`Unknown weight criterion: ${name}`);
+    }
+    if (!Number.isFinite(num) || num < 0) {
+      throw new Error(
+        `Weight for ${name} must be a finite non-negative number`,
+      );
+    }
     parsed[name] = num;
   }
-  return normalizeWeights(parsed);
+  // Validate core weights are well-formed
+  normalizeWeights(parsed);
+  return parsed;
 }
 
 export interface CleanedPreferences {
   program: string | null;
   city: string | null;
   sector: string | null;
+  sectors: ValidSector[];
   budget: number | null;
-  budget_basis: string | null;
+  budget_basis: "semester" | "trimester" | "year" | "unit" | null;
 }
 
 export function validatePreferences(
@@ -277,189 +234,71 @@ export function validatePreferences(
   const raw = preferences ?? {};
   const program = textOf(raw.program);
   const city = textOf(raw.city ?? raw.location);
-  const sector = textOf(raw.sector);
+  const sectors = parseSectorFilter(raw.sectors ?? raw.sector);
+  const sector =
+    sectors.length === 1
+      ? sectors[0]
+      : sectors.length > 1
+        ? sectors.join(",")
+        : null;
 
   if (program.length > 200 || city.length > 200) {
     throw new Error(
       "Program and location preferences must be at most 200 characters",
     );
   }
-  if (sector && sector !== "Public" && sector !== "Private") {
-    throw new Error("Sector must be Public or Private");
-  }
 
-  const budgetRaw = raw.budget;
   let budget: number | null = null;
-  if (budgetRaw !== undefined && budgetRaw !== null && budgetRaw !== "") {
-    if (typeof budgetRaw === "boolean") {
-      throw new Error("Budget must be a number");
+  if (
+    raw.budget !== null &&
+    raw.budget !== undefined &&
+    String(raw.budget).trim() !== ""
+  ) {
+    const parsedBudget = Number(raw.budget);
+    if (
+      !Number.isFinite(parsedBudget) ||
+      parsedBudget < 0 ||
+      parsedBudget > 10_000_000
+    ) {
+      throw new Error("Budget must be a number between 0 and 10,000,000 PHP");
     }
-    const num = Number(budgetRaw);
-    if (!Number.isFinite(num)) {
-      throw new Error("Budget must be a number");
-    }
-    if (num < 0 || num > 10_000_000) {
-      throw new Error("Budget must be between 0 and 10,000,000 PHP");
-    }
-    budget = num;
+    budget = roundTo(parsedBudget, 2);
   }
 
-  const rawBasis = textOf(raw.budget_basis);
-  const basis = rawBasis || "semester";
-  if (!(BUDGET_BASES as readonly string[]).includes(basis)) {
-    throw new Error("Budget basis must be semester, trimester, year or unit");
-  }
-  if (budget === null && rawBasis) {
-    throw new Error("Provide a budget when choosing a budget basis");
-  }
+  const rawBasis = textOf(raw.budget_basis ?? raw.budgetBasis).toLowerCase();
+  const budget_basis =
+    budget !== null
+      ? ((VALID_BUDGET_BASES.has(rawBasis)
+          ? rawBasis
+          : "semester") as CleanedPreferences["budget_basis"])
+      : null;
 
   const cleaned: CleanedPreferences = {
     program: program || null,
     city: city || null,
-    sector: sector || null,
+    sector,
+    sectors,
     budget,
-    budget_basis: budget !== null ? basis : null,
+    budget_basis,
   };
 
-  if (!cleaned.program && !cleaned.city && !cleaned.sector && budget === null) {
+  if (
+    !cleaned.program &&
+    !cleaned.city &&
+    cleaned.sectors.length === 0 &&
+    cleaned.budget === null
+  ) {
     throw new Error(
-      "Provide at least one preference: program, location, budget or sector",
+      "Provide at least one preference: program, location, university type, or budget",
     );
   }
   return cleaned;
 }
 
 interface CriterionResult {
-  points: number;
-  unknown: boolean;
+  points: number | null;
+  unavailable: boolean;
   reason: string;
-}
-
-const GENERIC_DISCIPLINE_SUFFIXES = new Set([
-  "science",
-  "sciences",
-  "arts",
-  "studies",
-]);
-
-function programMatch(
-  preference: string,
-  programName: unknown,
-  topic?: unknown,
-): CriterionResult {
-  const name = textOf(programName);
-  if (!name) {
-    return {
-      points: 0,
-      unknown: true,
-      reason: "No program information is available.",
-    };
-  }
-  const prefKey = normalizeKey(preference);
-  const nameKey = normalizeKey(name);
-  const prefCore = expandProgramPreference(preference);
-  const nameCore = stripDegreePrefix(nameKey);
-
-  // 1. Exact program title or exact core discipline match (e.g. "Nursing" == "BS in Nursing")
-  if (prefKey === nameKey || (prefCore && prefCore === nameCore)) {
-    return {
-      points: 1,
-      unknown: false,
-      reason: `Exact program match: ${name}.`,
-    };
-  }
-
-  // 2. Exact core discipline as a contiguous phrase inside a major/track/double degree
-  if (prefCore && prefCore.length >= 3 && hasWholePhrase(nameCore, prefCore)) {
-    const isSpecialization =
-      nameCore.startsWith(prefCore + " major") ||
-      nameCore.startsWith(prefCore + " specialization") ||
-      nameCore.startsWith(prefCore + " with") ||
-      nameCore.startsWith(prefCore + " track") ||
-      nameCore.startsWith(prefCore + " minor");
-    const points = isSpecialization ? 0.94 : 0.9;
-    return {
-      points,
-      unknown: false,
-      reason: `Strong program match in '${name}'.`,
-    };
-  }
-
-  // 3. Token & stem matching against the core program name (degree prefix already stripped)
-  const wanted = tokensOf(prefCore || preference);
-  const availableArr = Array.from(tokensOf(nameCore || name));
-  const exactMatched: string[] = [];
-  const fuzzyMatched: string[] = [];
-
-  for (const w of wanted) {
-    if (availableArr.includes(w)) {
-      exactMatched.push(w);
-    } else if (availableArr.some((a) => stemMatches(w, a))) {
-      fuzzyMatched.push(w);
-    }
-  }
-
-  const totalMatched = exactMatched.length + fuzzyMatched.length;
-  if (wanted.size > 0 && exactMatched.length === wanted.size) {
-    return {
-      points: 0.88,
-      unknown: false,
-      reason: `All preferred keywords appear in '${name}'.`,
-    };
-  }
-  if (wanted.size > 0 && totalMatched === wanted.size) {
-    return {
-      points: 0.82,
-      unknown: false,
-      reason: `Closely related program match in '${name}'.`,
-    };
-  }
-  if (totalMatched > 0) {
-    const matchedLabels = [...exactMatched, ...fuzzyMatched];
-    // For multi-word queries (e.g. "Computer Science"), matching ONLY a generic
-    // suffix like "science" or "arts" in an unrelated degree (e.g. "Political Science")
-    // is not a genuine match.
-    const hasNonGenericMatch =
-      wanted.size === 1 ||
-      matchedLabels.some((word) => !GENERIC_DISCIPLINE_SUFFIXES.has(word));
-    if (hasNonGenericMatch) {
-      const weightedMatch = exactMatched.length + fuzzyMatched.length * 0.85;
-      const ratio = weightedMatch / wanted.size;
-      const points = roundTo(Math.min(0.75, 0.75 * ratio), 3);
-      return {
-        points,
-        unknown: false,
-        reason: `Partial program match in '${name}' (${matchedLabels.sort().join(", ")} of ${Array.from(wanted).sort().join(", ")}).`,
-      };
-    }
-  }
-
-  // 4. Fallback: check broad topic field (e.g., "Computing", "Business", "Health")
-  const topicText = textOf(topic);
-  if (topicText && wanted.size > 0) {
-    const topicTokens = Array.from(tokensOf(topicText));
-    const topicHit = Array.from(wanted).filter((w) =>
-      topicTokens.some((t) => stemMatches(w, t)),
-    );
-    const meaningfulTopicHit =
-      topicHit.length === wanted.size ||
-      (wanted.size === 1 && topicHit.length > 0);
-    if (meaningfulTopicHit) {
-      const ratio = topicHit.length / wanted.size;
-      const points = roundTo(Math.min(0.55, 0.55 * ratio), 3);
-      return {
-        points,
-        unknown: false,
-        reason: `Matches the '${topicText}' field (${name}).`,
-      };
-    }
-  }
-
-  return {
-    points: 0,
-    unknown: false,
-    reason: `The program name '${name}' does not match the preferred field.`,
-  };
 }
 
 function locationMatch(
@@ -469,18 +308,15 @@ function locationMatch(
 ): CriterionResult {
   const cityText = textOf(city);
   const campusText = textOf(campus);
-  if (!cityText && !campusText) {
+  if (
+    (!cityText && !campusText) ||
+    `${cityText} ${campusText}`.toLowerCase().includes("not specified")
+  ) {
     return {
-      points: 0,
-      unknown: true,
-      reason: "No campus location is available.",
-    };
-  }
-  if (`${cityText} ${campusText}`.toLowerCase().includes("not specified")) {
-    return {
-      points: 0,
-      unknown: true,
-      reason: "No campus location is available.",
+      points: null,
+      unavailable: true,
+      reason:
+        "Campus location information is unavailable for this university; excluded from score denominator.",
     };
   }
   let campusFocus = campusText;
@@ -490,211 +326,169 @@ function locationMatch(
   const available = [cityText, cleanText(campusFocus)]
     .filter(Boolean)
     .join(" ");
-  const prefKey = normalizeKey(preference);
-  const cityKey = normalizeKey(cityText);
-  const campusKey = normalizeKey(campusFocus);
+  const prefKey = normalizeProgramText(preference);
+  const cityKey = normalizeProgramText(cityText);
+  const campusKey = normalizeProgramText(campusFocus);
   const campusSegments = campusFocus
     .split(",")
-    .map((segment) => normalizeKey(segment))
+    .map((segment) => normalizeProgramText(segment))
     .filter(Boolean);
 
   if (prefKey && (prefKey === cityKey || campusSegments.includes(prefKey))) {
     return {
       points: 1,
-      unknown: false,
+      unavailable: false,
       reason: `Campus location matches ${preference} (${campusText || cityText}).`,
+    };
+  }
+  if (
+    prefKey &&
+    (` ${cityKey} `.includes(` ${prefKey} `) ||
+      ` ${campusKey} `.includes(` ${prefKey} `))
+  ) {
+    return {
+      points: 1,
+      unavailable: false,
+      reason: `Campus is located in ${preference} (${campusText || available}).`,
     };
   }
   if (prefKey && (cityKey.includes(prefKey) || campusKey.includes(prefKey))) {
     return {
       points: 0.85,
-      unknown: false,
+      unavailable: false,
       reason: `Preferred location appears in '${campusText || available}'.`,
-    };
-  }
-  const wanted = tokensOf(preference);
-  const availTokens = tokensOf(available);
-  const matched = Array.from(wanted).filter((w) => availTokens.has(w));
-  if (matched.length > 0) {
-    return {
-      points: 0.5,
-      unknown: false,
-      reason: `Partial location match in '${campusText || available}'.`,
     };
   }
   return {
     points: 0,
-    unknown: false,
-    reason: `'${campusText || available}' is outside the preferred location.`,
+    unavailable: false,
+    reason: `'${campusText || available}' is outside the preferred location (${preference}).`,
   };
 }
 
-function formatPhp(n: number): string {
-  return Math.round(n).toLocaleString("en-US");
+function sectorMatch(
+  allowedSectors: ValidSector[],
+  sector: unknown,
+): CriterionResult {
+  const actual = normalizeUniversitySector(sector);
+  if (!actual) {
+    return {
+      points: null,
+      unavailable: true,
+      reason:
+        "University type information is unavailable; excluded from score denominator.",
+    };
+  }
+  if (allowedSectors.length === 0 || allowedSectors.includes(actual)) {
+    return {
+      points: 1,
+      unavailable: false,
+      reason:
+        allowedSectors.length === 1
+          ? `Confirmed ${actual} university (matches selected filter).`
+          : `Confirmed ${actual} university.`,
+    };
+  }
+  return {
+    points: 0,
+    unavailable: false,
+    reason: `University is ${actual}, not ${allowedSectors.join(" or ")}.`,
+  };
 }
 
-function formatFeeRange(min: number, max: number, basis: string): string {
-  if (min === 0 && max === 0) {
-    return "Free tuition (RA 10931)";
-  }
-  if (min === max) {
-    return `PHP ${formatPhp(min)} per ${basis}`;
-  }
-  return `PHP ${formatPhp(min)}–${formatPhp(max)} per ${basis}`;
+function convertToAnnualPhp(amount: number, basis: string): number | null {
+  const b = basis.trim().toLowerCase();
+  if (b === "year" || b === "annual") return amount;
+  if (b === "semester" || b === "sem") return amount * 2;
+  if (b === "trimester" || b === "term") return amount * 3;
+  if (b === "unit") return amount * 36; // typical ~18 units × 2 semesters
+  return null;
 }
 
 function budgetMatch(
   budget: number,
   basis: string,
-  fees: Array<{
-    amount_min?: number | null;
-    amount_max?: number | null;
-    basis?: string;
-  }>,
+  fees: CandidateInput["fees"],
 ): CriterionResult {
-  // 1. Free tuition (PHP 0, e.g., RA 10931) is PHP 0 regardless of billing basis.
-  const hasFreeTuition = fees.some(
-    (fee) =>
-      fee &&
-      typeof fee.amount_min === "number" &&
-      typeof fee.amount_max === "number" &&
-      fee.amount_min === 0 &&
-      fee.amount_max === 0,
+  const safeFees = Array.isArray(fees) ? fees : [];
+  const isFree = safeFees.some(
+    (f) => f.amount_min === 0 && f.amount_max === 0,
   );
-  if (hasFreeTuition) {
+  if (isFree) {
     return {
       points: 1,
-      unknown: false,
-      reason: "Free tuition (RA 10931) is within your budget.",
+      unavailable: false,
+      reason: `Free undergraduate tuition under RA 10931 fits within your PHP ${budget.toLocaleString("en-PH")} / ${basis} budget.`,
     };
   }
 
-  // 2. Exact billing basis comparison
-  const exactComparable: Array<{ min: number; max: number }> = [];
-  for (const fee of fees) {
-    if (!fee || fee.basis !== basis) continue;
-    const low = fee.amount_min;
-    const high = fee.amount_max;
-    if (typeof low !== "number" || typeof high !== "number") continue;
-    if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high < low)
-      continue;
-    exactComparable.push({ min: low, max: high });
-  }
-  if (exactComparable.length > 0) {
-    exactComparable.sort((a, b) => a.min - b.min || a.max - b.max);
-    const cheapest = exactComparable[0];
-    const amount = formatFeeRange(cheapest.min, cheapest.max, basis);
-    if (cheapest.max <= budget) {
-      return {
-        points: 1,
-        unknown: false,
-        reason: `Published tuition (${amount}) is within the budget.`,
-      };
-    }
-    if (cheapest.min <= budget) {
-      return {
-        points: 0.5,
-        unknown: false,
-        reason: `Published tuition (${amount}) straddles the budget.`,
-      };
-    }
+  const numericFees = safeFees.filter(
+    (f) =>
+      (typeof f.amount_min === "number" && Number.isFinite(f.amount_min)) ||
+      (typeof f.amount_max === "number" && Number.isFinite(f.amount_max)),
+  );
+  if (numericFees.length === 0) {
     return {
-      points: 0,
-      unknown: false,
-      reason: `Published tuition (${amount}) exceeds the budget.`,
+      points: null,
+      unavailable: true,
+      reason:
+        "Official tuition rates are not published in our dataset; not penalized in your match score.",
     };
   }
 
-  // 3. Transparent calendar-term conversion (semester <-> trimester <-> quarter <-> year)
-  const targetTermsPerYear = TERMS_PER_YEAR[basis];
-  if (targetTermsPerYear) {
-    const converted: Array<{
-      min: number;
-      max: number;
-      sourceBasis: string;
-      origMin: number;
-      origMax: number;
-    }> = [];
-    for (const fee of fees) {
-      if (!fee || !fee.basis) continue;
-      const sourceTermsPerYear = TERMS_PER_YEAR[fee.basis];
-      if (!sourceTermsPerYear) continue;
-      const low = fee.amount_min;
-      const high = fee.amount_max;
-      if (typeof low !== "number" || typeof high !== "number") continue;
-      if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high < low)
-        continue;
-      const factor = sourceTermsPerYear / targetTermsPerYear;
-      converted.push({
-        min: Math.round(low * factor),
-        max: Math.round(high * factor),
-        sourceBasis: fee.basis,
-        origMin: low,
-        origMax: high,
-      });
+  const budgetAnnual = convertToAnnualPhp(budget, basis);
+  let bestPoints = -1;
+  let bestReason = "";
+
+  for (const fee of numericFees) {
+    const minAmt =
+      typeof fee.amount_min === "number" ? fee.amount_min : (fee.amount_max ?? 0);
+    const maxAmt =
+      typeof fee.amount_max === "number" ? fee.amount_max : minAmt;
+    const feeBasis = (fee.basis || "semester").toLowerCase();
+
+    let compMin = minAmt;
+    let compMax = maxAmt;
+    let compBudget = budget;
+
+    if (feeBasis !== basis && budgetAnnual !== null) {
+      const feeMinAnnual = convertToAnnualPhp(minAmt, feeBasis);
+      const feeMaxAnnual = convertToAnnualPhp(maxAmt, feeBasis);
+      if (feeMinAnnual !== null && feeMaxAnnual !== null) {
+        compMin = feeMinAnnual;
+        compMax = feeMaxAnnual;
+        compBudget = budgetAnnual;
+      }
     }
-    if (converted.length > 0) {
-      converted.sort((a, b) => a.min - b.min || a.max - b.max);
-      const cheapest = converted[0];
-      const est = formatFeeRange(cheapest.min, cheapest.max, basis);
-      const orig = formatFeeRange(
-        cheapest.origMin,
-        cheapest.origMax,
-        cheapest.sourceBasis,
-      );
-      if (cheapest.max <= budget) {
-        return {
-          points: 1,
-          unknown: false,
-          reason: `Estimated ${est} (from ${orig}) is within the budget.`,
-        };
-      }
-      if (cheapest.min <= budget) {
-        return {
-          points: 0.5,
-          unknown: false,
-          reason: `Estimated ${est} (from ${orig}) straddles the budget.`,
-        };
-      }
-      return {
-        points: 0,
-        unknown: false,
-        reason: `Estimated ${est} (from ${orig}) exceeds the budget.`,
-      };
+
+    let pts = 0;
+    let reason = "";
+    if (compMax <= compBudget) {
+      pts = 1;
+      reason = `Published tuition (PHP ${minAmt.toLocaleString("en-PH")}–${maxAmt.toLocaleString("en-PH")} / ${feeBasis}) fits within your budget.`;
+    } else if (compMin <= compBudget) {
+      pts = 0.8;
+      reason = `Lower tuition estimate (PHP ${minAmt.toLocaleString("en-PH")} / ${feeBasis}) fits within your budget; upper range may exceed it.`;
+    } else if (compBudget > 0 && compMin <= compBudget * 1.2) {
+      pts = 0.5;
+      reason = `Published tuition starts slightly above your budget (within 20%).`;
+    } else {
+      pts = 0;
+      reason = `Published tuition (PHP ${minAmt.toLocaleString("en-PH")} / ${feeBasis}) exceeds your PHP ${budget.toLocaleString("en-PH")} / ${basis} budget.`;
+    }
+
+    if (pts > bestPoints) {
+      bestPoints = pts;
+      bestReason = reason;
     }
   }
 
   return {
-    points: 0,
-    unknown: true,
-    reason: `No published tuition amount with a '${basis}' basis is available; budget fit cannot be confirmed.`,
-  };
-}
-
-function sectorMatch(preference: string, sector: unknown): CriterionResult {
-  const value = textOf(sector);
-  if (
-    !value ||
-    value.toLowerCase() === "not specified" ||
-    value.toLowerCase() === "unknown"
-  ) {
-    return {
-      points: 0,
-      unknown: true,
-      reason: "University type is not available.",
-    };
-  }
-  if (value.toLowerCase() === preference.toLowerCase()) {
-    return {
-      points: 1,
-      unknown: false,
-      reason: `Confirmed ${value} university.`,
-    };
-  }
-  return {
-    points: 0,
-    unknown: false,
-    reason: `University is ${value}, not ${preference}.`,
+    points: bestPoints >= 0 ? bestPoints : null,
+    unavailable: bestPoints < 0,
+    reason:
+      bestReason ||
+      "Official tuition rates are unavailable; not penalized in your match score.",
   };
 }
 
@@ -718,11 +512,21 @@ export interface CandidateInput {
 }
 
 export interface ExplanationItem {
-  criterion: Criterion;
+  criterion: ExtendedCriterion;
   label: string;
   weight: number;
-  points: number;
-  status: "unknown" | "matched" | "partial" | "not_matched";
+  effective_weight: number;
+  points: number | null;
+  status: ExplanationStatus;
+  status_label: string;
+  reason: string;
+}
+
+export interface SearchMatchSummary {
+  tier: ProgramSearchMatch["tier"];
+  category: MatchCategory;
+  relevance_score: number;
+  matched_via: ProgramSearchMatch["matchedVia"];
   reason: string;
 }
 
@@ -737,6 +541,7 @@ export interface ScoredCandidate {
   program_name: string | null;
   topic: string | null;
   score: number;
+  search_match: SearchMatchSummary | null;
   explanations: ExplanationItem[];
   missing: string[];
   unknown: boolean;
@@ -745,74 +550,161 @@ export interface ScoredCandidate {
 export function scoreCandidate(
   candidate: CandidateInput,
   preferences: CleanedPreferences,
-  weights: Record<Criterion, number>,
+  weights: Record<ExtendedCriterion, number>,
+  precomputedProgramMatch?: ProgramSearchMatch | null,
 ): ScoredCandidate {
-  const explanations: ExplanationItem[] = [];
-  let numerator = 0;
-  let denominator = 0;
+  const evaluatedEntries: Array<{
+    criterion: ExtendedCriterion;
+    weight: number;
+    result: CriterionResult;
+    status: ExplanationStatus;
+  }> = [];
+  const notApplicableEntries: ExplanationItem[] = [];
   const missing: string[] = [];
 
-  for (const criterion of CRITERIA) {
-    const preference =
+  const criteriaToCheck: ExtendedCriterion[] =
+    preferences.budget !== null
+      ? ["program", "location", "sector", "budget"]
+      : ["program", "location", "sector"];
+
+  for (const criterion of criteriaToCheck) {
+    const isSupplied =
       criterion === "program"
-        ? preferences.program
+        ? Boolean(preferences.program)
         : criterion === "location"
-          ? preferences.city
-          : criterion === "budget"
-            ? preferences.budget
-            : preferences.sector;
-    if (preference === null || preference === undefined || preference === "") {
+          ? Boolean(preferences.city)
+          : criterion === "sector"
+            ? preferences.sectors.length > 0
+            : preferences.budget !== null;
+
+    if (!isSupplied) {
+      notApplicableEntries.push({
+        criterion,
+        label: CRITERION_LABELS[criterion],
+        weight: roundTo(weights[criterion] ?? 0, 4),
+        effective_weight: 0,
+        points: null,
+        status: "not_applicable",
+        status_label: STATUS_LABELS.not_applicable,
+        reason: "Not specified in your preferences.",
+      });
       continue;
     }
 
     let result: CriterionResult;
     if (criterion === "program") {
-      result = programMatch(
-        String(preference),
-        candidate.program_name,
-        candidate.topic,
-      );
+      if (!candidate.program_name) {
+        result = {
+          points: null,
+          unavailable: true,
+          reason: "No program catalog is available for this university.",
+        };
+      } else {
+        const pm =
+          precomputedProgramMatch !== undefined
+            ? precomputedProgramMatch
+            : evaluateProgramMatch(
+                preferences.program!,
+                candidate.program_name,
+                candidate.topic,
+              );
+        if (pm) {
+          result = {
+            points: pm.programPoints,
+            unavailable: false,
+            reason: pm.reason,
+          };
+        } else {
+          result = {
+            points: 0,
+            unavailable: false,
+            reason: `'${candidate.program_name}' does not match '${preferences.program}'.`,
+          };
+        }
+      }
     } else if (criterion === "location") {
       result = locationMatch(
-        String(preference),
+        preferences.city!,
         candidate.city,
         candidate.campus_location,
       );
-    } else if (criterion === "budget") {
-      result = budgetMatch(
-        Number(preference),
-        preferences.budget_basis || "semester",
-        candidate.fees || [],
-      );
+    } else if (criterion === "sector") {
+      result = sectorMatch(preferences.sectors, candidate.sector);
     } else {
-      result = sectorMatch(String(preference), candidate.sector);
+      result = budgetMatch(
+        preferences.budget!,
+        preferences.budget_basis || "semester",
+        candidate.fees,
+      );
     }
 
     const weight = weights[criterion] ?? 0;
-    const points = result.points;
-    const status: ExplanationItem["status"] = result.unknown
-      ? "unknown"
-      : points >= 1
-        ? "matched"
-        : points > 0
-          ? "partial"
-          : "not_matched";
-    if (result.unknown) {
+    let status: ExplanationStatus;
+    if (result.unavailable || result.points === null) {
+      status = "unavailable";
       missing.push(CRITERION_LABELS[criterion]);
+    } else if (result.points >= 1) {
+      status = "matched";
+    } else if (result.points > 0) {
+      status = "partial";
+    } else {
+      status = "not_matched";
     }
-    numerator += weight * points;
-    denominator += weight;
+
+    evaluatedEntries.push({ criterion, weight, result, status });
+  }
+
+  // Denominator includes ONLY supplied criteria with available data so missing
+  // data (e.g. unpublished private tuition) is NEVER penalized as a 0% mismatch.
+  const availableWeightSum = evaluatedEntries.reduce(
+    (sum, entry) =>
+      entry.status !== "unavailable" ? sum + entry.weight : sum,
+    0,
+  );
+
+  let numerator = 0;
+  const explanations: ExplanationItem[] = [];
+
+  for (const entry of evaluatedEntries) {
+    const isAvailable =
+      entry.status !== "unavailable" && entry.result.points !== null;
+    const effectiveWeight =
+      isAvailable && availableWeightSum > 0
+        ? entry.weight / availableWeightSum
+        : 0;
+    if (isAvailable && entry.result.points !== null) {
+      numerator += effectiveWeight * entry.result.points;
+    }
     explanations.push({
-      criterion,
-      label: CRITERION_LABELS[criterion],
-      weight: roundTo(weight, 4),
-      points: roundTo(points, 3),
-      status,
-      reason: result.reason,
+      criterion: entry.criterion,
+      label: CRITERION_LABELS[entry.criterion],
+      weight: roundTo(entry.weight, 4),
+      effective_weight: roundTo(effectiveWeight, 4),
+      points:
+        entry.result.points !== null ? roundTo(entry.result.points, 3) : null,
+      status: entry.status,
+      status_label: STATUS_LABELS[entry.status],
+      reason: entry.result.reason,
     });
   }
 
-  const score = denominator > 0 ? roundTo((100 * numerator) / denominator, 1) : 0;
+  // Append not-applicable criteria AFTER evaluated criteria for full transparency
+  explanations.push(...notApplicableEntries);
+
+  const score =
+    availableWeightSum > 0 ? roundTo(100 * numerator, 1) : 0;
+
+  const searchMatchSummary: SearchMatchSummary | null =
+    precomputedProgramMatch
+      ? {
+          tier: precomputedProgramMatch.tier,
+          category: precomputedProgramMatch.category,
+          relevance_score: precomputedProgramMatch.relevanceScore,
+          matched_via: precomputedProgramMatch.matchedVia,
+          reason: precomputedProgramMatch.reason,
+        }
+      : null;
+
   return {
     university_id: candidate.university_id,
     university_name: candidate.university_name,
@@ -824,6 +716,7 @@ export function scoreCandidate(
     program_name: candidate.program_name,
     topic: candidate.topic,
     score,
+    search_match: searchMatchSummary,
     explanations,
     missing,
     unknown: missing.length > 0,
@@ -833,10 +726,19 @@ export function scoreCandidate(
 export interface RecommendationResponse {
   items: ScoredCandidate[];
   total: number;
+  exact_match_count: number;
+  related_match_count: number;
+  excluded_by_filters: number;
+  applied_filters: AppliedFilters & {
+    program: string | null;
+    budget: number | null;
+    budget_basis: string | null;
+  };
   preferences: CleanedPreferences;
   weights: Record<Criterion, number>;
+  active_weights: Record<ExtendedCriterion, number>;
   default_weights: Record<Criterion, number>;
-  criteria: Record<Criterion, string>;
+  criteria: Record<ExtendedCriterion, string>;
   formula: string;
   algorithm: string;
   unknown_policy: string;
@@ -844,10 +746,9 @@ export interface RecommendationResponse {
 }
 
 /**
- * Selects up to `limit` items while preventing a single large catalog
- * (e.g. a university with 250+ double degrees) from crowding out all other
- * matching universities. Always preserves strict descending score order
- * via our hand-written stable merge sort.
+ * Selects up to `limit` items while preventing a single university with many
+ * tracks/double degrees from crowding out other matching universities.
+ * STRICTLY preserves tier-first (Exact before Related), then score-descending!
  */
 function selectDiverseTopMatches(
   ranked: ScoredCandidate[],
@@ -874,7 +775,9 @@ function selectDiverseTopMatches(
     picked.push(item);
   }
 
-  return mergeSortByScore(picked);
+  // Preserve strict tier-first, then score-descending order
+  const byScore = mergeSortByScore(picked);
+  return mergeSort(byScore, (item) => item.search_match?.tier ?? 99, false);
 }
 
 export function recommend(
@@ -884,43 +787,131 @@ export function recommend(
   limit = 20,
 ): RecommendationResponse {
   const cleanedPreferences = validatePreferences(preferences);
-  const normalizedWeights = normalizeWeights(weights);
+  const { coreWeights, activeWeights } = resolveScoringWeights(
+    weights,
+    cleanedPreferences.budget !== null,
+  );
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new Error("limit must be an integer between 1 and 100");
   }
 
-  const scored = candidates
-    .map((candidate) =>
-      scoreCandidate(candidate, cleanedPreferences, normalizedWeights),
-    )
-    .filter((item) => {
-      // Never return 0-score non-matches
-      if (item.score <= 0) return false;
-      // When the student explicitly requested a program, exclude unrelated degrees
-      if (cleanedPreferences.program) {
-        const progExp = item.explanations.find(
-          (exp) => exp.criterion === "program",
-        );
-        if (!progExp || progExp.points <= 0) return false;
-      }
-      return true;
-    });
+  // -------------------------------------------------------------------------
+  // STAGE 1: Hard university filters (strictly exclude violating universities
+  // BEFORE recommendation scoring — e.g. Private strictly excludes Public)
+  // -------------------------------------------------------------------------
+  const { eligible, excludedCount, applied } = applyUniversityHardFilters(
+    candidates,
+    {
+      sector: cleanedPreferences.sectors,
+      city: cleanedPreferences.city,
+    },
+  );
 
-  // Stable multi-key ranking using our hand-written top-down merge sort:
-  // 1) Fewer unknown criteria first (higher data confidence)
-  // 2) Stronger program fit first (when program preference is supplied)
-  // 3) Primary key: overall weighted score descending
-  const byCompleteness = mergeSort(scored, (item) => item.missing.length, false);
-  const byProgramFit = cleanedPreferences.program
+  // Deduplicate identical (university_id, normalized_program_name) candidates
+  const dedupedEligible = cleanedPreferences.program
+    ? deduplicatePrograms(
+        eligible
+          .filter((c) => Boolean(c.program_name))
+          .map((c) => ({ ...c, name: c.program_name || "" })),
+      ).map(({ name: _ignored, ...rest }) => rest as CandidateInput)
+    : (() => {
+        // When browsing without a program query, keep one university-level row per school
+        const seenUni = new Set<string>();
+        const uniRows: CandidateInput[] = [];
+        for (const c of eligible) {
+          if (seenUni.has(c.university_id)) continue;
+          seenUni.add(c.university_id);
+          uniRows.push({
+            ...c,
+            program_id: null,
+            program_name: null,
+            topic: null,
+          });
+        }
+        return uniRows;
+      })();
+
+  // -------------------------------------------------------------------------
+  // STAGE 2 & 3: Evaluate program search relevance + compute independent
+  // recommendation score over eligible candidates
+  // -------------------------------------------------------------------------
+  const scored: ScoredCandidate[] = [];
+  for (const candidate of dedupedEligible) {
+    let progMatch: ProgramSearchMatch | null = null;
+    if (cleanedPreferences.program) {
+      progMatch = evaluateProgramMatch(
+        cleanedPreferences.program,
+        candidate.program_name || "",
+        candidate.topic,
+      );
+      if (!progMatch) continue; // Exclude unrelated programs
+    }
+
+    const result = scoreCandidate(
+      candidate,
+      cleanedPreferences,
+      activeWeights,
+      cleanedPreferences.program ? progMatch : undefined,
+    );
+
+    // Exclude genuine 0-score mismatches unless every supplied criterion was unavailable
+    const allSuppliedUnavailable =
+      result.explanations.some((ex) => ex.status === "unavailable") &&
+      !result.explanations.some(
+        (ex) =>
+          ex.status === "matched" ||
+          ex.status === "partial" ||
+          ex.status === "not_matched",
+      );
+    if (result.score <= 0 && !allSuppliedUnavailable) continue;
+
+    scored.push(result);
+  }
+
+  // -------------------------------------------------------------------------
+  // STAGE 4: Ranking (Strictly separate search relevance from preference score)
+  // When a program is searched:
+  //   1) Search match tier ASC (Exact > Very Close > Partial > Related > Broad)
+  //      — a Related Match NEVER outranks an Exact Match!
+  //   2) Recommendation compatibility score DESC (via stable merge sort)
+  //   3) Search relevance score DESC
+  //   4) Data completeness (fewer unavailable fields first)
+  //   5) University / program name alphabetically
+  // When no program is searched:
+  //   1) Recommendation compatibility score DESC
+  //   2) Fewer unavailable fields first
+  //   3) University name alphabetically
+  // -------------------------------------------------------------------------
+  const byName = [...scored].sort(
+    (a, b) =>
+      a.university_name.localeCompare(b.university_name) ||
+      String(a.program_name || "").localeCompare(String(b.program_name || "")),
+  );
+  const byCompleteness = mergeSort(byName, (item) => item.missing.length, false);
+  const byRelevance = cleanedPreferences.program
     ? mergeSort(
         byCompleteness,
-        (item) =>
-          item.explanations.find((exp) => exp.criterion === "program")
-            ?.points ?? 0,
+        (item) => item.search_match?.relevance_score ?? 0,
         true,
       )
     : byCompleteness;
-  const ranked = mergeSortByScore(byProgramFit);
+  const byScore = mergeSortByScore(byRelevance);
+  const ranked = cleanedPreferences.program
+    ? mergeSort(byScore, (item) => item.search_match?.tier ?? 99, false)
+    : byScore;
+
+  const exactMatchCount = ranked.filter(
+    (item) =>
+      item.search_match &&
+      (item.search_match.category === "Exact Match" ||
+        item.search_match.category === "Very Close Match"),
+  ).length;
+  const relatedMatchCount = ranked.filter(
+    (item) =>
+      item.search_match &&
+      (item.search_match.category === "Related Match" ||
+        item.search_match.category === "Broad Match"),
+  ).length;
 
   const items = cleanedPreferences.program
     ? selectDiverseTopMatches(ranked, limit, 3)
@@ -929,14 +920,25 @@ export function recommend(
   return {
     items,
     total: ranked.length,
+    exact_match_count: exactMatchCount,
+    related_match_count: relatedMatchCount,
+    excluded_by_filters: excludedCount,
+    applied_filters: {
+      sectors: applied.sectors,
+      city: applied.city,
+      program: cleanedPreferences.program,
+      budget: cleanedPreferences.budget,
+      budget_basis: cleanedPreferences.budget_basis,
+    },
     preferences: cleanedPreferences,
-    weights: normalizedWeights,
+    weights: coreWeights,
+    active_weights: activeWeights,
     default_weights: { ...DEFAULT_WEIGHTS },
     criteria: { ...CRITERION_LABELS },
     formula: FORMULA,
-    algorithm: "Hand-written stable merge sort (src/algorithms/mergeSort.ts)",
-    unknown_policy:
-      "Missing source data scores 0 for that criterion and is reported as unknown; it is never treated as a match.",
+    algorithm:
+      "Hard-filter -> hybrid program search relevance -> independent weighted compatibility scoring (stable merge sort)",
+    unknown_policy: UNKNOWN_POLICY,
     limit,
   };
 }
